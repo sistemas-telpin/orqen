@@ -1,0 +1,11 @@
+{
+  "name": "orqen",
+  "owner": { "name": "Telpin" },
+  "plugins": [
+    {
+      "name": "orqen",
+      "source": "./orqen",
+      "description": "Proceso REC: análisis con grilling, carril (directo/liviano/completo), SIS y registro en factory/"
+    }
+  ]
+}

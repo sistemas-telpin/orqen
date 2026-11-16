@@ -1,7 +1,13 @@
-# orqen — Software Factory AI kit
+# orqen — AI Software Factory KIT
 
-Kit para que **cualquier agente de código** (Claude Code, Codex, Cursor, Copilot, Gemini CLI, OpenCode…) lleve un
-requerimiento del cliente (REC) desde Jira hasta la entrega, usando **OpenSpec** como capa de especificación.
+**orqen** es una plataforma de orquestación multiagente y automatización del desarrollo de software, diseñada para coordinar el ciclo de vida de los proyectos desde la definición de requerimientos hasta su implementación y despliegue.
+
+Construida como una capa superior a OpenSpec, propone integrar agentes especializados de inteligencia artificial, repositorios de código, herramientas de desarrollo, reglas de ingeniería y bases de conocimiento en un ecosistema unificado.
+
+Su arquitectura busca permitir que múltiples agentes colaboren de manera coordinada en actividades de análisis, planificación, desarrollo, pruebas, validación y mantenimiento, bajo mecanismos de gobernanza, supervisión y trazabilidad.
+
+Uno de sus pilares es el aprendizaje continuo a partir de la experiencia: aprovechar los resultados de desarrollos anteriores para enriquecer una base de conocimiento reutilizable y mejorar progresivamente los procesos de trabajo.
+
 El análisis lo conduce un **analista** con el agente (`/orqen:analizar REC-1234`); el resto lo lleva el agente con aprobaciones humanas.
 
 - **`AGENTS.md`**: lo que el agente lee. Explica el proceso y las reglas, y le dice que use la CLI `rec`.

@@ -15,9 +15,9 @@ El análisis lo conduce un **analista** con el agente (`/orqen:analyze REC-1234`
 | Analista           | `/orqen:analyze REC-1234`: analiza el REC, elige el carril, escribe la spec si hace falta y crea el SIS en Jira   |
 | Agente             | `/orqen:implement SIS-442`: implementa la spec o el plan aprobado · `/orqen:pr SIS-442`: abre el PR a desarrollo |
 | Diseñador de e2e   | `/orqen:e2e-review SIS-442`: valida visualmente los tests e2e                                                     |
-| Senior             | `/orqen:code-review SIS-442`: revisa el PR con el agente antes de dar `/approve` o `/reject`                      |
+| Senior             | `/orqen:code-review SIS-442`: revisa el PR con el agente y después aprueba o pide cambios en GitHub               |
 | Modo desatendido   | `orqen cycle --loop`: avanza los gates y lanza las etapas de agente pendientes                                   |
-| Aprobadores (Jira) | `/approve` o `/reject <motivo>` en el issue                                                                      |
+| Aprobadores (Jira) | `/approve` o `/reject <motivo>` en el issue (conformidad del cliente, carril operativo, destrabar un BLOCKED)    |
 
 ## Componentes
 
@@ -157,7 +157,7 @@ Si el repo no está en la rama del REC, `orqen pr` falla antes de escribir, comm
 
 Lo corre el **senior** con el REC en `CODE_REVIEW` y el PR a desarrollo ya abierto. El agente revisa el diff del PR contra lo pedido
 (análisis, spec o plan, Scenarios / criterios de aceptación, explicación del PR y convenciones del repo) y le devuelve un informe para decidir.
-No mueve el estado: el `/approve` o `/reject` lo sigue dando el senior en Jira.
+No mueve el estado: la decisión la toma el senior con un review en el PR de GitHub (ver más abajo).
 
 ```mermaid
 flowchart TD
@@ -168,17 +168,32 @@ flowchart TD
     D --> E["Informe: veredicto · hallazgos con severidad, archivo:línea,<br/>qué pasa, por qué importa y posibles soluciones"]
     E --> R["orqen review SIS-32 informe.md --verdict …<br/>guarda code-review-n.md · lo comenta en el SIS"]
     R --> F{"Senior"}
-    F -->|"/approve en Jira"| G(["DELIVERY"])
-    F -->|"/reject con el texto que dejó listo el agente"| H(["DEVELOPMENT<br/>(los hallazgos llegan como feedback)"])
+    F -->|"Approve en el PR de GitHub"| G(["DELIVERY"])
+    F -->|"Request changes con el texto que dejó listo el agente"| H(["DEVELOPMENT<br/>(los hallazgos llegan como feedback)"])
 ```
 
 Es **solo lectura**: el agente no corrige código, no comenta ni aprueba el PR (solo `gh pr view` / `gh pr diff`) y no escribe en Jira.
 Cada hallazgo tiene severidad (`blocking`, `important`, `minor` o `to verify`) y una a tres soluciones posibles, con la recomendada primero.
-Si el veredicto no es aprobable, el agente deja redactado el texto del `/reject`.
+Si el veredicto no es aprobable, el agente deja redactado el texto del pedido de cambios.
 
 Cuando el senior da el informe por cerrado, el agente lo registra con `orqen review <KEY> <informe.md> --verdict <approve|minor|reject>`
 (solo en `CODE_REVIEW` y con el PR abierto). Queda en `orqen/work/<KEY>/round-N/code-review-<n>.md` (numerado: un segundo review después
-de un `/reject` no pisa al primero), se commitea si el repo está en la rama del REC (viaja con el próximo push) y se comenta en el SIS.
+de un pedido de cambios no pisa al primero), se commitea si el repo está en la rama del REC (viaja con el próximo push) y se comenta en el SIS.
+
+### Cómo se decide el gate: review en GitHub
+
+Con `CODE_REVIEW_GATE=github` (el valor por defecto) el senior **no necesita comentar nada en Jira**: aprueba o pide cambios con un review en el PR,
+y `orqen` lo lee con `gh` en cada `orqen pending` / `orqen cycle`:
+
+- **Approve** → el REC pasa a DELIVERY y se comenta en el REC y el SIS.
+- **Request changes** → vuelve a DEVELOPMENT y el texto del review llega al agente como feedback (si no tiene texto, se le indica el PR).
+- Si hay un approve y un request changes a la vez, **gana el pedido de cambios**.
+- Solo cuentan los reviews hechos sobre el **commit actual del PR**: si después del review alguien empuja (por ejemplo `/orqen:pr` con ajustes de e2e), hace falta un review nuevo. Es lo mismo que "dismiss stale approvals" de GitHub, y conviene activarlo también en la protección de rama.
+- Cada review se aplica **una sola vez**, así que un pedido de cambios viejo no devuelve el REC a DEVELOPMENT por segunda vez.
+- Con `GITHUB_REVIEWERS` definido (usuarios de GitHub, separados por coma), solo cuentan los reviews de esos usuarios; vacío = cualquiera. Para que además nadie más pueda mergear, usá la protección de rama de GitHub. `APPROVERS_CODE` (cuentas de Jira) sigue sirviendo para destrabar un REC BLOCKED.
+- Sin PR todavía, el REC espera. Si `gh` falla o no hay red, también espera (no se bloquea).
+
+Con `CODE_REVIEW_GATE=jira` el senior decide con `/approve` o `/reject <motivo>` en el issue, como antes (ahí `APPROVERS_CODE` limita quién puede decidir).
 
 ## Flujo completo
 
@@ -203,8 +218,8 @@ flowchart LR
     ANALYSIS -->|"OK analista: carril + SIS"| DESA
     DESA <-->|tests fallan / pasan| TEST
     TEST -->|"/orqen:pr abre el PR"| REV
-    REV -->|/approve| DELIVERY
-    REV -.->|/reject| DESA
+    REV -->|"approve en el PR"| DELIVERY
+    REV -.->|"changes requested"| DESA
     DELIVERY --> CONF
     CONF -->|/approve| CLOSED
     CONF -.->|"/reject: ronda 2"| ANALYSIS
@@ -222,7 +237,7 @@ Jira, git, PR y `openspec archive` los ejecuta solo `orqen`; el agente produce c
 | WAITING_CLIENT | cliente           | responde en Jira (máx. 3 rondas)                                                                              | —                                                                                                                                                             |
 | DEVELOPMENT    | agente            | implementa con el entorno levantado; con spec tilda `tasks.md`, en directo sigue el `plan`                    | flujo _apply_; `orqen` rechaza si queda alguna tarea sin tildar                                                                                               |
 | TESTING        | `orqen` + agente  | `orqen` corre la suite y el agente mapea test ↔ **cada Scenario** (directo: cada **criterio de aceptación**). No abre PR | si falta alguno, se rechaza                                                                                                                         |
-| CODE_REVIEW    | senior            | revisa el PR a desarrollo (`/orqen:pr`) con el informe de `/orqen:code-review`                                | —                                                                                                                                                             |
+| CODE_REVIEW    | senior            | revisa el PR a desarrollo (`/orqen:pr`) con el informe de `/orqen:code-review` y decide con un review en GitHub | —                                                                                                                                                             |
 | DELIVERY       | `orqen` + agente  | `orqen` archiva (si hubo spec) y el agente escribe notas y mensaje al cliente                                 | `openspec archive` fusiona los deltas en `openspec/specs` y se empuja a la rama del PR                                                                       |
 | ACCEPTANCE     | cliente           | `/approve` cierra; `/reject` abre la ronda 2 (vuelve a ANALYSIS: nuevo carril, change y SIS)                  | nuevo change `…-r2`                                                                                                                                           |
 
@@ -292,7 +307,8 @@ actualizan solos; para los editados elegís conservar, reemplazar o dejar una co
 | `REC_JQL`                                                    | Qué REC procesa `orqen`                                                                    |
 | `SIS_PROJECT`, `SIS_TYPE`, `SIS_LINK`, `SIS_TYPE_OPERATIONAL` | Cómo se crea y vincula el SIS                                                              |
 | `JIRA_TRANSITIONS`, `SIS_TRANSITIONS`                        | Transiciones de Jira por estado                                                            |
-| `APPROVERS_ANALYSIS`, `APPROVERS_CODE`, `APPROVERS_CLIENT`, `APPROVERS_EXECUTION` | Quién puede dar `/approve` y `/reject` en cada gate (vacío = cualquiera) |
+| `APPROVERS_ANALYSIS`, `APPROVERS_CODE`, `APPROVERS_CLIENT`, `APPROVERS_EXECUTION` | Quién puede decidir en cada gate de Jira, con cuentas de Jira (vacío = cualquiera). `APPROVERS_CODE` también destraba un BLOCKED |
+| `CODE_REVIEW_GATE`, `GITHUB_REVIEWERS`                       | Quién decide en CODE_REVIEW: `github` (review en el PR, por defecto) o `jira` (`/approve` y `/reject`). `GITHUB_REVIEWERS`: usuarios de GitHub cuyos reviews cuentan (vacío = cualquiera) |
 | `BASE_BRANCH`, `TEST_COMMAND`                                | Rama base de las ramas de REC y suite por defecto (si `config.yaml` no define tests)       |
 | `DEVEL_BRANCH`, `DEVEL_PR_COMMAND`                           | Rama de integración y comando que abre el PR (`orqen pr`)                                  |
 | `AGENT_CMD`, `REC_INTERVAL_SEC`, `REC_LOCK_MIN`              | Agente del modo desatendido, intervalo del ciclo y vencimiento del lock por REC            |
@@ -373,7 +389,7 @@ orqen cycle [--loop]                   Modo desatendido
 - Jira, git, PR y archive los ejecuta **solo** `orqen`. El agente tiene esa prohibición en `AGENTS.md`, pero
   al ser agnóstico **no hay un hook que lo impida a la fuerza**. Hay que reforzarlo con el sandbox o los permisos de
   cada herramienta (por ejemplo, denegar `git push` en `.claude/settings.json`, o permitir del MCP de Jira solo las herramientas de lectura).
-- Nada obliga a abrir el PR antes del code review: el gate de CODE_REVIEW acepta `/approve` aunque no se haya corrido `/orqen:pr`.
+- Con `CODE_REVIEW_GATE=github`, sin PR abierto el REC espera en CODE_REVIEW: no avanza hasta que se corra `/orqen:pr` y el senior revise. La aprobación sale de GitHub, así que `orqen` necesita `gh` autenticado; con `jira` el gate sigue aceptando `/approve` aunque no exista el PR.
 - El estado vive en `orqen/state/` (ignorado por git, sobrevive a los cambios de rama) y en labels de Jira `rec-state-*`; `orqen/work/<KEY>/` es su proyección versionada.
 - Usa un solo checkout, así que procesa un REC por vez por clon. Para trabajar en paralelo: un clon o worktree por agente.
 

@@ -229,6 +229,60 @@ test("review: records the code review in CODE_REVIEW with an open PR, numbered p
   assert.equal(store.get("REC-1")!.state, "CODE_REVIEW");   // does not move the state
 });
 
+test("CODE_REVIEW decided by the review on the GitHub PR: stale, unauthorized and handled reviews do not count", async () => {
+  const { jira, cfg } = setup();
+  assert.equal(cfg.codeReviewGate, "github");   // default
+  jira.issues["SIS-9"] = { title: "SIS" }; jira.coms["SIS-9"] = [];
+  let snap: { head: string; reviews: Array<{ id: string; author: string; state: string; commit: string; body: string }> } = { head: "h1", reviews: [] };
+  let fail = false;
+  const ws: Workspace = { ...failingTests, prReviews: () => { if (fail) throw new Error("gh down"); return snap; } };
+  const store = new Store(cfg.stateDir);
+  const flow = new Process({ ...cfg, githubReviewers: ["senior"] }, jira, store, ws, fakeOs);
+  const rec = { ...newRec("REC-1"), state: "CODE_REVIEW" as const, branch: "rec/rec-1", sis: "SIS-9" };
+  const state = () => store.get("REC-1")!.state;
+  const rv = (id: string, author: string, state: string, commit = "h1", body = "") => ({ id, author, state, commit, body });
+
+  store.save({ ...rec });                       // no PR yet: it waits
+  await flow.review();
+  assert.equal(state(), "CODE_REVIEW");
+
+  store.save({ ...rec, artifacts: { devel_pr: "https://example.test/pr/7" } });
+  fail = true; await flow.review(); assert.equal(state(), "CODE_REVIEW");   // gh fails: waits, does not block
+  fail = false;
+  snap = { head: "h1", reviews: [rv("1", "intruso", "APPROVED"), rv("2", "senior", "APPROVED", "h0"), rv("3", "senior", "COMMENTED")] };
+  await flow.review(); assert.equal(state(), "CODE_REVIEW");   // not authorized / stale head / not decisive
+
+  snap = { head: "h1", reviews: [rv("4", "senior", "CHANGES_REQUESTED", "h1", "Validar el rango de fechas")] };
+  await flow.review();
+  assert.equal(state(), "DEVELOPMENT");
+  assert.deepEqual(store.get("REC-1")!.feedback, [{ from: "senior", rejection: "Validar el rango de fechas" }]);
+  assert.match(jira.last("SIS-9"), /Changes requested on the PR by senior/);
+
+  // back in CODE_REVIEW on the same head: the already handled review is not applied again; a new approval is
+  store.save({ ...store.get("REC-1")!, state: "CODE_REVIEW" });
+  await flow.review(); assert.equal(state(), "CODE_REVIEW");
+  snap = { head: "h2", reviews: [rv("4", "senior", "CHANGES_REQUESTED", "h1"), rv("5", "senior", "APPROVED", "h2")] };
+  await flow.review();
+  assert.equal(state(), "DELIVERY");
+  assert.match(jira.last("SIS-9"), /PR approved by senior/);
+});
+
+test("CODE_REVIEW: changes requested win over approvals and an empty APPROVERS_CODE accepts any reviewer", async () => {
+  const { jira, cfg } = setup();
+  jira.issues["SIS-9"] = { title: "SIS" }; jira.coms["SIS-9"] = [];
+  const reviews = [
+    { id: "1", author: "ana", state: "APPROVED", commit: "h", body: "" },
+    { id: "2", author: "beto", state: "CHANGES_REQUESTED", commit: "h", body: "" },
+  ];
+  const ws: Workspace = { ...failingTests, prReviews: () => ({ head: "h", reviews }) };
+  const store = new Store(cfg.stateDir);
+  const flow = new Process({ ...cfg, githubReviewers: [] }, jira, store, ws, fakeOs);
+  store.save({ ...newRec("REC-1"), state: "CODE_REVIEW", branch: "rec/rec-1", sis: "SIS-9", artifacts: { devel_pr: "https://example.test/pr/7" } });
+  await flow.review();
+  assert.equal(store.get("REC-1")!.state, "DEVELOPMENT");
+  assert.match(store.get("REC-1")!.feedback[0].rejection!, /Changes requested on the PR/);   // empty body: points to the PR
+});
+
 test("pr: sends the branch to the devel branch, records the explanation and is idempotent", async () => {
   const { p, jira, cfg } = setup();
   jira.issues["SIS-9"] = { title: "SIS" };

@@ -66,5 +66,5 @@ npm run dev -- --help
 npm test
 npm run typecheck
 npm run build
-npm run link:local  # Build and link the local CLI as orqen
+npm run setup  # Build and link the local CLI as orqen
 ```

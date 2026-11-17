@@ -132,4 +132,4 @@ npm run typecheck
 npm run build
 ```
 
-Run `npm run link:local` from `cli/` to link the local build as `orqen`. The published `orqen` package includes the templates. The release workflow publishes from `cli/` when a version tag is pushed.
+Run `npm run setup` from `cli/` to link the local build as `orqen`. The published `orqen` package includes the templates. The release workflow publishes from `cli/` when a version tag is pushed.

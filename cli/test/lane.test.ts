@@ -21,7 +21,7 @@ const fakeOs: OpenSpecApi = {
 function setup(over: Partial<Parameters<typeof loadConfig>[0]> = {}) {
   let branches = 0;
   const ws: Workspace = {
-    prepareBranch: () => { branches++; return "rec/rec-1"; }, commit: () => true, push: () => {}, openPr: () => "",
+    prepareBranch: () => { branches++; return "rec/rec-1"; }, currentBranch: () => "rec/rec-1", commit: () => true, push: () => {}, openPr: () => "",
     runTests: () => ({ ok: true, output: "" }),
   };
   const dir = mkdtempSync(join(tmpdir(), "rec-c-"));

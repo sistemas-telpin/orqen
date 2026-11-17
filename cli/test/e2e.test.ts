@@ -37,7 +37,7 @@ test("full REC with real OpenSpec", { skip: !existsSync(OPENSPEC) && "openspec m
   const { dir, git } = tempRepo();
   const cfg = loadConfig({
     repoPath: dir, stateDir: join(dir, "..", `state-${Date.now()}`), openspecCmd: OPENSPEC,
-    testCommand: "node test.mjs", prCommand: "", jql: "x",
+    testCommand: "node test.mjs",jql: "x",
     approvers: { analysis: ["analyst"], code: ["senior"], client: ["client"] }, jiraTransitions: {},
   });
   const jira = new FakeJira({ "REC-7": { title: "Exportar facturas a CSV" } });

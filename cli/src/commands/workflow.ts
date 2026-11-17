@@ -12,7 +12,7 @@ import { Process } from "../workflow/process.ts";
 import { Store } from "../workflow/store.ts";
 import { GitWorkspace } from "../workflow/workspace.ts";
 
-export const WORKFLOW_COMMANDS = ["pending", "analyze", "lane", "take", "complete", "pr", "schema", "block", "release", "search", "status", "cycle"];
+export const WORKFLOW_COMMANDS = ["pending", "analyze", "lane", "take", "complete", "pr", "review", "schema", "block", "release", "search", "status", "cycle"];
 
 export const WORKFLOW_HELP = `Customer request workflow:
   pending [--json]                      List pending analyst and agent work
@@ -21,6 +21,7 @@ export const WORKFLOW_HELP = `Customer request workflow:
   take <KEY> [--agent NAME]             Claim an agent stage
   complete <KEY> <output.json|->       Validate output and advance the workflow
   pr <KEY> [<explanation.md>]          Inspect or open the integration PR
+  review <KEY> <report.md|-> --verdict <approve|minor|reject>   Record the code review report (CODE_REVIEW)
   schema <STAGE> · block <KEY> <reason> · release <KEY> · search <JQL>
   status [KEY] · cycle [--loop]`;
 
@@ -174,6 +175,20 @@ export async function runWorkflow(cmd: string, rest: string[]) {
           const body = rest[1] === "-" ? readFileSync(0, "utf8") : readFileSync(rest[1], "utf8");
           const r = await flow.pr(key, body, flag("title"), agent);
           console.log(r.created ? `✔ PR → ${r.base}: ${r.url}` : `✔ branch updated; the PR already existed: ${r.url}`);
+        } catch (e) {
+          console.error(`✘ ${(e as Error).message}`);
+          process.exitCode = 1;
+        }
+        return;
+      }
+      case "review": {
+        try {
+          const verdict = flag("verdict") ?? "";
+          const key = toRec(rest[0]);
+          if (!rest[1]) throw new Error("Usage: orqen review <KEY> <report.md|-> --verdict <approve|minor|reject>");
+          const body = rest[1] === "-" ? readFileSync(0, "utf8") : readFileSync(rest[1], "utf8");
+          const r = await flow.codeReview(key, body, verdict, agent);
+          console.log(`✔ code review #${r.n} (${r.verdict}) → ${r.path}${r.committed ? " (committed)" : " (not committed: not on the REC branch; it goes with the next commit of the branch)"}; ${r.commentedOn ? `commented on ${r.commentedOn}` : "NOT commented on Jira (see the warning): paste it by hand"}`);
         } catch (e) {
           console.error(`✘ ${(e as Error).message}`);
           process.exitCode = 1;

@@ -19,13 +19,14 @@ export interface EnvironmentResult {
 
 export interface Workspace {
   prepareBranch(key: string): string;
+  currentBranch(): string;
   /** `path` limits the commit to that path; `branch` commits only if it is the active branch (avoids committing on another REC's branch). */
   commit(key: string, message: string, opts?: { path?: string; branch?: string }): boolean;
   startEnvironment?(apps: boolean): EnvironmentResult;
   stopEnvironment?(): void;
   runTests(): { ok: boolean; output: string };
   push(branch: string): void;
-  openPr(vars: Record<string, string>, command?: string): string;
+  openPr(vars: Record<string, string>, command: string): string;
 }
 
 export class GitWorkspace implements Workspace {
@@ -33,9 +34,11 @@ export class GitWorkspace implements Workspace {
   private git = (...args: string[]) =>
     execFileSync("git", args, { cwd: this.cfg.repoPath, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
 
+  currentBranch() { return this.git("rev-parse", "--abbrev-ref", "HEAD"); }
+
   prepareBranch(key: string) {
     const branch = `rec/${key.toLowerCase()}`;
-    if (this.git("rev-parse", "--abbrev-ref", "HEAD") === branch) return branch;
+    if (this.currentBranch() === branch) return branch;
     if (this.git("status", "--porcelain", "--untracked-files=no", ...this.excludeFactory()))
       throw new Error("The repo has uncommitted changes; cannot switch branches");
     try { this.git("fetch", "--all", "--prune"); } catch { /* no remote */ }
@@ -60,7 +63,7 @@ export class GitWorkspace implements Workspace {
   }
 
   commit(key: string, message: string, opts: { path?: string; branch?: string } = {}) {
-    if (opts.branch && this.git("rev-parse", "--abbrev-ref", "HEAD") !== opts.branch) return false;
+    if (opts.branch && this.currentBranch() !== opts.branch) return false;
     const path = opts.path ? this.relativePath(opts.path) : undefined;
     if (opts.path && path === undefined) return false;
     const scope = path ? ["--", path] : [];
@@ -137,7 +140,7 @@ export class GitWorkspace implements Workspace {
 
   push(branch: string) { this.git("push", "-u", "origin", branch); }
 
-  openPr(vars: Record<string, string>, command = this.cfg.prCommand) {
+  openPr(vars: Record<string, string>, command: string) {
     if (!command) return "";
     // values come from Jira: they are sanitized so they cannot inject shell
     const cmd = command.replace(/\{(\w+)\}/g, (_, k) => (vars[k] ?? "").replace(/["'`$\\;|&<>]/g, ""));

@@ -10,6 +10,7 @@
  *
  * Text posted to Jira, the SIS descriptions and the generated analysis.md stay in Spanish: they are read by people.
  */
+import { join } from "node:path";
 import type { Config } from "./config.ts";
 import { SCHEMAS } from "./schemas.ts";
 import {
@@ -23,6 +24,9 @@ import { type Rec, Store, newRec } from "./store.ts";
 import type { EnvironmentResult, Workspace } from "./workspace.ts";
 
 const CMD = /^\s*\/(approve|reject)\b\s*([\s\S]*)/i;
+/** Verdicts of `orqen review` (code review report for the senior) and how they read in Jira. */
+export const VERDICTS = { approve: "Approvable", minor: "Approvable with minor changes", reject: "Reject" } as const;
+const JIRA_MAX = 30_000;   // Jira rejects comments over 32767 characters
 
 /** `for` says who has to act: the analyst (NEW/ANALYSIS) or an unattended agent. */
 export interface Pending { key: string; state: AgentState | "NEW"; for: "analyst" | "agent"; takenBy?: string }
@@ -179,6 +183,10 @@ export class Process {
     const info = this.prInfo(key);
     const rec = this.store.get(key)!;
     if (body.trim().length < 80) throw new Error("The explanation is too short: describe what changed, why and how to verify it.");
+    // fail before writing anything: otherwise devel-pr.md and the pending changes would stay out of the pushed branch
+    const current = this.ws.currentBranch();
+    if (current !== rec.branch)
+      throw new Error(`The repo is on "${current}", not on the REC branch "${rec.branch}": switch to it (git checkout ${rec.branch}) and run again.`);
     const bodyFile = `orqen/work/${key}/round-${rec.round}/devel-pr.md`;
     this.fac.write(rec, "devel-pr.md", body.trim() + "\n");
     this.ws.commit(key, `PR explanation for ${info.base}`, { branch: rec.branch });
@@ -196,6 +204,44 @@ export class Process {
     await this.commentWithSis(rec, `PR to *${info.base}* opened from branch \`${rec.branch}\`: ${url}`);
     this.store.log(key, { ts: new Date().toISOString(), from: rec.state, to: rec.state, detail: `PR to ${info.base}: ${url}`, agent });
     return { url, created: true, base: info.base };
+  }
+
+  // ================================================================ code review
+  /**
+   * Records the code review report (written by the agent for the senior) without moving the state: saves it in
+   * round-N/code-review-<n>.md, comments it on the SIS and logs it. The /approve or /reject is still given by the senior in Jira.
+   */
+  async codeReview(key: string, body: string, verdict: string, agent = "agent") {
+    const rec = this.store.get(key);
+    if (!rec) throw new Error(`${key} is unknown to orqen.`);
+    if (rec.route === "operational") throw new Error(`${key} is operational (no code): there is nothing to review.`);
+    if (rec.state !== "CODE_REVIEW") throw new Error(`${key} is in ${rec.state}: the code review is recorded in CODE_REVIEW.`);
+    if (!rec.artifacts.devel_pr) throw new Error(`${key} has no PR to ${this.cfg.develBranch} yet: open it first with \`orqen pr ${key} <explanation.md>\`.`);
+    if (!(verdict in VERDICTS)) throw new Error(`Invalid verdict "${verdict}". Options: ${Object.keys(VERDICTS).join(", ")}`);
+    if (body.trim().length < 80) throw new Error("The report is too short: include the verdict, the findings and their possible solutions.");
+
+    const reviews: { round: number; n: number; verdict: string; file: string; ts: string }[] = (rec.artifacts.code_reviews ??= []);
+    const n = reviews.filter((r) => r.round === rec.round).length + 1;
+    const file = `code-review-${n}.md`;
+    const path = `orqen/work/${key}/round-${rec.round}/${file}`;
+    this.fac.write(rec, file, body.trim() + "\n");
+    reviews.push({ round: rec.round, n, verdict, file: path, ts: new Date().toISOString() });
+    this.store.save(rec);
+    // only commits the report, and only on the REC branch (no push: it travels with the next push of the branch)
+    const committed = this.ws.commit(key, `code review #${n}`, { branch: rec.branch, path: join(this.cfg.factoryDir, key) });
+
+    const label = VERDICTS[verdict as keyof typeof VERDICTS];
+    const text = `*Code review #${n}* (round ${rec.round}) — verdict: *${label}*\nPR: ${rec.artifacts.devel_pr}\n\n${body.trim()}`;
+    // the report is already saved: a Jira failure must not abort (retrying would duplicate it as #n+1)
+    let commentedOn: string | undefined = rec.sis ?? key;
+    try {
+      await this.jira.comment(commentedOn, text.length > JIRA_MAX ? text.slice(0, JIRA_MAX) + `\n\n… (truncated; full report in \`${path}\`)` : text);
+    } catch (e) {
+      console.error(`[orqen] warning: could not comment the code review on ${commentedOn}: ${(e as Error).message}`);
+      commentedOn = undefined;
+    }
+    this.store.log(key, { ts: new Date().toISOString(), from: rec.state, to: rec.state, detail: `code review #${n}: ${verdict}`, agent });
+    return { n, path, verdict, committed, commentedOn };
   }
 
   // ================================================================ complete
@@ -346,15 +392,9 @@ export class Process {
         const rt = rec.artifacts.test_result;
         const table = s.scenarios.map((e: any) => `- ${e.covered ? "✔" : "✘"} ${e.requirement} › ${e.scenario}${e.test ? ` (${e.test})` : ""}`).join("\n");
         if (s.approved) {
-          if (!rec.artifacts.pr) {
-            this.attempt(() => this.ws.push(rec.branch));
-            rec.artifacts.pr = this.attempt(() => this.ws.openPr({
-              key: k, branch: rec.branch, base: this.cfg.baseBranch, change: rec.change, change_dir: rec.change ? `openspec/changes/${rec.change}` : `orqen/work/${k}/round-${rec.round}`,
-              body: rec.change ? `openspec/changes/${rec.change}/proposal.md` : `orqen/work/${k}/round-${rec.round}/analysis.md`,
-              title: rec.artifacts.ANALYSIS?.summary?.slice(0, 80) ?? rec.change,
-            })) ?? "";
-          }
-          return this.commentWithSis(rec, `Tests passed and all scenarios are covered:\n${table}\n\nPR: ${rec.artifacts.pr || rec.branch}\nCode review: comment */approve* or */reject <reason>*.`);
+          // testing does not open the PR: the senior reviews the PR to the devel branch (`orqen pr`)
+          const pr = rec.artifacts.devel_pr ? `PR to *${this.cfg.develBranch}*: ${rec.artifacts.devel_pr}` : `Branch \`${rec.branch}\` (the PR to *${this.cfg.develBranch}* is opened with /orqen:pr)`;
+          return this.commentWithSis(rec, `Tests passed and all scenarios are covered:\n${table}\n\n${pr}\nCode review: comment */approve* or */reject <reason>*.`);
         }
         return this.commentWithSis(rec, `Testing failed (attempt ${rec.testingAttempts}). Suite: ${rt?.ok ? "OK" : "FAILED"}\n${table}\n\nDiagnosis: ${s.failure_diagnosis}` +
           (next === "BLOCKED" ? "\nRetries are exhausted. Human review is needed." : "\nReturning to development."));
@@ -432,7 +472,7 @@ export class Process {
       if (rec.state === "ACCEPTANCE" && action === "reject") {
         // new round: the previous change is already archived → the analyst re-analyzes (new lane, change and SIS)
         rec.round++; rec.change = ""; rec.questionRounds = 0; rec.testingAttempts = 0; delete rec.lane;
-        delete rec.artifacts.archive; delete rec.artifacts.pr; delete rec.artifacts.sis_linked;
+        delete rec.artifacts.archive; delete rec.artifacts.devel_pr; delete rec.artifacts.sis_linked;
         if (rec.sis) { (rec.artifacts.previous_sis ??= []).push(rec.sis); delete rec.sis; }  // the new round gets its own SIS
       }
       return this.move(rec, gate[action === "approve" ? "approve" : "reject"], `/${action} by ${c.authorName} ${reason}`.trim());

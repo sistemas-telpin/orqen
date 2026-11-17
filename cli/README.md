@@ -17,23 +17,25 @@ orqen init               # Run from the repository you want to initialize
 6. Collects Jira connection settings, REC and SIS projects, and approvers in the ignored `orqen/.env`. With `--yes`, it uses example values for a new file.
 7. Writes the environment configuration (no Docker in between), agent instructions, plugin, stage guides, and manifest. It merges the OpenSpec workflow rules with the repository's existing configuration.
 
-On first use, setup asks for your GitHub stack repository (for example `@company/tools`). Git clones it into `cli/tools/` beside this CLI installation using your own HTTPS credential helper or SSH key. You need access to that repository. The clone is reused, ignored by Git and excluded from the npm package; no catalog is bundled. Each stack has `<id>/tool.yaml` and its scaffold, with shared scripts in `_shared/`.
-
-For non-interactive first use, pass `--tools-repo @company/tools` or set `ORQEN_TOOLS_REPO`. HTTPS and SSH GitHub URLs are also accepted. To refresh it, use `git -C tools pull --ff-only` from the CLI installation directory. To select a different repository, move the existing clone aside first.
+`init` configures an existing project without requesting, cloning or reading the external stack catalog. It reuses any database scripts already installed in the project; new service scripts come from `bootstrap`.
 
 Other options include `--agent "<command>"`, `--tools claude,codex`, and `--no-openspec`. Non-interactive runs use the defaults. If a managed file conflicts, `--yes` writes the proposed version alongside the original.
 
 ## Create a new project
 
 ```sh
-orqen create project "Payments Platform" [--tools-repo @company/tools] [--stack <id>] [--dir ./payments] [--yes]
-orqen create stacks
+orqen bootstrap "Payments Platform" [--tools-repo @company/tools] [--stack <id>] [--dir ./payments] [--yes]
+orqen bootstrap --list
 ```
 
 Asks the name, folder and stack; checks the stack requirements and asks its parameters (ports, Java package); creates the
 folder and Git repository; generates the code (official generators plus the stack skeleton); copies the environment scripts
 to `orqen/tools/` (e.g. `orqen/tools/db.mjs`, the database in Docker); runs `orqen init` with the stack and environments already known;
-and offers the initial commit. Stacks come from your GitHub catalog, cloned on first use by `init`, `create project` or `create stacks`.
+and offers the initial commit.
+
+On first use, `bootstrap` asks for your GitHub stack repository (for example `@company/stacks`); its name can be anything. Git clones it into `cli/tools/` beside this CLI installation using your own HTTPS credential helper or SSH key. You need access to that repository. The clone is reused, ignored by Git and excluded from the npm package; no catalog is bundled. Each stack has `<id>/tool.yaml` and its scaffold, with shared scripts in `_shared/`.
+
+For non-interactive first use of `bootstrap`, pass `--tools-repo @company/tools` or set `ORQEN_TOOLS_REPO`. HTTPS and SSH GitHub URLs are also accepted. To refresh it, use `git -C tools pull --ff-only` from the CLI installation directory. To select a different repository, move the existing clone aside first.
 
 ## Update an installation
 
@@ -89,6 +91,7 @@ From this directory:
 ```sh
 npm ci
 npm run dev -- --help
+npm run test:e2e # Complete CLI journeys through CLOSED; local external-service fixtures
 npm test
 npm run typecheck
 npm run build

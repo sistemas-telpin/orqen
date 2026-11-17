@@ -40,9 +40,12 @@ export async function runWorkflow(cmd: string, rest: string[]) {
 
   /** Accepts the REC key or its SIS key (the REC's current SIS) and always returns the REC key. */
   function toRec(key?: string): string {
-    if (!key || /^REC-\d+$/i.test(key)) return key as string;
-    const rec = store.all().find((r) => r.sis?.toUpperCase() === key.toUpperCase());
-    if (!rec) throw new Error(`${key} is neither a REC nor the current SIS of any known REC (if it belongs to a previous round, use the REC key).`);
+    if (!key || store.get(key)) return key as string;
+    const rec = store.all().find((r) => r.key.toUpperCase() === key.toUpperCase() || r.sis?.toUpperCase() === key.toUpperCase());
+    if (!rec) {
+      if (/^REC-\d+$/i.test(key)) return key;
+      throw new Error(`${key} is neither a REC nor the current SIS of any known REC (if it belongs to a previous round, use the REC key).`);
+    }
     return rec.key;
   }
 

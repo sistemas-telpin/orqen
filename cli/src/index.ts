@@ -2,7 +2,7 @@
 /** ORQEN command-line entry point. */
 import { parseArgs } from "node:util";
 import { entorno } from "./commands/environment.ts";
-import { crear } from "./commands/create.ts";
+import { bootstrap } from "./commands/bootstrap.ts";
 import { init } from "./commands/init.ts";
 import { WORKFLOW_HELP, WORKFLOW_COMMANDS, runWorkflow } from "./commands/workflow.ts";
 import { update } from "./commands/update.ts";
@@ -22,11 +22,12 @@ Commands:
       --deep              Let the agent explore the repository in depth
       --no-animation      Show the static logo
       --agent "<cmd>"     Headless agent command (e.g. "claude -p --permission-mode acceptEdits")
-      --tools-repo <repo> GitHub stack catalog (e.g. @company/tools), cloned inside cli/tools
       --tools a,b         Tools for \`openspec init\` (claude,codex,cursor,github-copilot...)
       --no-openspec       Skip OpenSpec installation and initialization
-  create project [name]   Create a new project from a stack (code, tools to run it, and orqen ready)
-      --stack <id>        Stack from your private catalog (orqen create stacks lists them)
+  bootstrap [name]        Create a new project from a stack (code, tools to run it, and orqen ready)
+      --tools-repo <repo> GitHub stack catalog (any repo name), cloned inside cli/tools
+      --list              List the stacks from your catalog
+      --stack <id>        Stack from your private catalog (orqen bootstrap --list lists them)
       --dir <folder>      Where to create it (default: ./<name>)
   update [dir]            Update the CLI, OpenSpec, and kit
       --yes, -y  --no-cli  --no-openspec  --no-kit
@@ -67,6 +68,7 @@ async function main() {
       all: { type: "boolean" },
       dir: { type: "string" },
       stack: { type: "string" },
+      list: { type: "boolean" },
     },
   });
   const [cmd, ...resto] = positionals;
@@ -77,17 +79,18 @@ async function main() {
     return;
   }
 
+  if (v["tools-repo"] && cmd !== "bootstrap") throw new Error("--tools-repo is only supported by orqen bootstrap.");
+
   switch (cmd) {
     case "init":
       return init({
         dir: (v.dir as string) ?? resto[0], yes: !!v.yes, sinIa: !!v["no-ai"], profundo: !!v.deep, sinAnimacion: !!v["no-animation"], agente: v.agent as string | undefined,
         sinOpenspec: !!v["no-openspec"],
-        toolsRepo: v["tools-repo"] as string | undefined,
         herramientas: typeof v.tools === "string" ? v.tools.split(",").map((s) => s.trim()).filter(Boolean) : undefined,
       });
-    case "create":
-      return crear(resto[0], {
-        nombre: resto.slice(1).join(" ") || undefined, stack: v.stack as string | undefined, dir: v.dir as string | undefined,
+    case "bootstrap":
+      return bootstrap({
+        nombre: resto.join(" ") || undefined, listar: !!v.list, stack: v.stack as string | undefined, dir: v.dir as string | undefined,
         yes: !!v.yes, sinAnimacion: !!v["no-animation"], sinOpenspec: !!v["no-openspec"],
         toolsRepo: v["tools-repo"] as string | undefined,
         herramientas: typeof v.tools === "string" ? v.tools.split(",").map((x) => x.trim()).filter(Boolean) : undefined,

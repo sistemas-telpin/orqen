@@ -69,6 +69,7 @@ export class Process {
     const rec = this.store.get(key) ?? newRec(key);
     if (rec.state !== "NEW" && rec.state !== "SUPPORT")
       throw new Error(`${key} is not waiting for support (state: ${rec.state}).${rec.state === "ANALYSIS" ? " It was escalated to the analyst: use `orqen analyze`." : ""}`);
+    this.assertClaimable(rec, agent);
     if (rec.state === "NEW") {
       rec.supporter = person;
       await this.jira.comment(key, `${person} (support) is handling this request.`);
@@ -87,10 +88,7 @@ export class Process {
       throw new Error(`${key} is waiting for client answers in Jira. When they reply it goes back to ANALYSIS (\`orqen pending\`).`);
     if (rec.state !== "NEW" && rec.state !== "SUPPORT" && rec.state !== "ANALYSIS")
       throw new Error(`${key} already went through the analysis (state: ${rec.state}). If it must be redone, a rejection or an escalation sends it back to ANALYSIS.`);
-    if (rec.state === "SUPPORT") {   // the analyst takes it over before support finished: do not steal a session in progress
-      const held = this.activeLock(rec);
-      if (held && held.agent !== agent) throw new Error(`${key} is being handled by support ("${held.agent}" since ${held.since}). Wait for them to finish or escalate it.`);
-    }
+    this.assertClaimable(rec, agent);
     if (rec.state === "NEW" || rec.state === "SUPPORT") {
       const from = rec.state;
       rec.analyst = analyst;
@@ -133,8 +131,7 @@ export class Process {
       throw new Error(`The analysis of ${key} is driven by an analyst: use /orqen:analyze ${key} (or \`orqen analyze ${key}\`).`);
     if (rec.state === "SUPPORT" && !fromAnalyze)
       throw new Error(`Support for ${key} is driven by a person: use /orqen:support ${key} (or \`orqen support ${key}\`).`);
-    const lock = this.activeLock(rec);
-    if (lock && lock.agent !== agent) throw new Error(`${key} was already taken by "${lock.agent}" since ${lock.since}.`);
+    this.assertClaimable(rec, agent);
     rec.lock = { agent, since: new Date().toISOString() };
     this.store.save(rec);
 
@@ -637,6 +634,11 @@ export class Process {
   release(key: string) {
     const rec = this.store.get(key);
     if (rec) { delete rec.lock; this.store.save(rec); }
+  }
+
+  private assertClaimable(rec: Rec, agent: string) {
+    const lock = this.activeLock(rec);
+    if (lock && lock.agent !== agent) throw new Error(`${rec.key} was already taken by "${lock.agent}" since ${lock.since}.`);
   }
 
   private activeLock(rec: Rec) {

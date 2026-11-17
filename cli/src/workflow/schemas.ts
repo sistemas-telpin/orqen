@@ -44,8 +44,12 @@ export const SCHEMAS = {
       assumptions: list,
     }).optional().describe("Mandatory in the light and full lanes"),
   }).superRefine((s, ctx) => {
-    if (!s.ready) return;
     const missing = (path: string, message: string) => ctx.addIssue({ code: "custom", path: [path], message });
+    if (!s.ready) {
+      if (!s.open_questions.length) missing("open_questions", "With ready=false, provide the questions that prevent completing analysis");
+      return;
+    }
+    if (s.open_questions.length) missing("open_questions", "Resolve the open questions before marking analysis ready");
     if (!s.analyst_ok) missing("analyst_ok", "With ready=true the analyst must have given an explicit OK (analyst_ok=true)");
     if (!s.lane) return missing("lane", "With ready=true choose the lane: direct | light | full");
     if (!s.lane_rationale || s.lane_rationale.length < 10) missing("lane_rationale", "Justify the chosen lane");

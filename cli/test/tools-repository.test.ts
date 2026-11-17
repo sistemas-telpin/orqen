@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -37,7 +38,8 @@ test("first use requires a repository in unattended mode and creates no destinat
   });
 });
 
-test("clone, reuse offline, environment selection and reject a different origin", async () => {
+test("clone, pull, reuse offline and reject a different origin with an arbitrary repository name", async () => {
+  const source = catalogoTemporal();
   await conRemoto(async () => {
     const dir = join(repoTemporal(), "tools");
     process.env.ORQEN_TOOLS_REPO = "@example/catalog";
@@ -47,8 +49,14 @@ test("clone, reuse offline, environment selection and reject a different origin"
     writeFileSync(join(dir, "personal.txt"), "keep my edits");
     await prepararTools(undefined, true, dir);
     assert.equal(readFileSync(join(dir, "personal.txt"), "utf8"), "keep my edits");
+    writeFileSync(join(source, "catalog-version.txt"), "updated");
+    execFileSync("git", ["add", "catalog-version.txt"], { cwd: source });
+    execFileSync("git", ["-c", "user.name=test", "-c", "user.email=test@example.com", "commit", "-qm", "Update catalog"], { cwd: source });
+    execFileSync("git", ["pull", "--ff-only"], { cwd: dir, stdio: "pipe" });
+    assert.equal(readFileSync(join(dir, "catalog-version.txt"), "utf8"), "updated");
+    assert.equal(readFileSync(join(dir, "personal.txt"), "utf8"), "keep my edits");
     await assert.rejects(prepararTools("@other/tools", true, dir), /belongs to example\/catalog/);
-  });
+  }, source);
 });
 
 test("refuse existing plain directories without changing their content", async () => {
@@ -82,7 +90,7 @@ test("repositories without a stack are rejected and the temporary clone is clean
   }, empty);
 });
 
-test("init CLI clones the chosen GitHub catalog and explicit flags override the environment", async () => {
+test("only bootstrap clones the catalog, accepts any repository name and lets flags override the environment", async () => {
   await conRemoto(async () => {
     const { spawnSync } = await import("node:child_process");
     const { fileURLToPath } = await import("node:url");
@@ -91,13 +99,14 @@ test("init CLI clones the chosen GitHub catalog and explicit flags override the 
     const parent = repoTemporal();
     const catalog = join(parent, "personal-tools");
     const env = { ...process.env, NO_COLOR: "1", ORQEN_TOOLS_DIR: catalog, ORQEN_TOOLS_REPO: "@other/catalog" };
-    const r = spawnSync(process.execPath, [tsx, cli, "init", "--dir", parent, "--yes", "--no-ai", "--no-openspec", "--tools-repo", "@example/catalog"], { env, encoding: "utf8" });
+    const r = spawnSync(process.execPath, [tsx, cli, "init", "--dir", parent, "--yes", "--no-ai", "--no-openspec"], { env, encoding: "utf8" });
     assert.equal(r.status, 0, r.stdout + r.stderr);
-    assert.ok(existsSync(join(catalog, "example/tool.yaml")));
+    assert.equal(existsSync(catalog), false, "init must not inspect or clone the external catalog");
     assert.ok(existsSync(join(parent, "orqen/config.yaml")));
     const createDir = join(parent, "new-project");
-    const create = spawnSync(process.execPath, [tsx, cli, "create", "project", "Example", "--dir", createDir, "--stack", "example", "--yes", "--no-openspec", "--tools-repo", "@example/catalog"], { env, encoding: "utf8" });
+    const create = spawnSync(process.execPath, [tsx, cli, "bootstrap", "Example", "--dir", createDir, "--stack", "example", "--yes", "--no-openspec", "--tools-repo", "@example/catalog"], { env, encoding: "utf8" });
     assert.equal(create.status, 0, create.stdout + create.stderr);
+    assert.ok(existsSync(join(catalog, "example/tool.yaml")));
     assert.ok(existsSync(join(createDir, "orqen/config.yaml")));
   });
 });

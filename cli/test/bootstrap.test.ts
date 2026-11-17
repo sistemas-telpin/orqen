@@ -45,9 +45,9 @@ test("requirements report missing commands and versions below the minimum", () =
   assert.equal(r[1].detalle, "not found");
 });
 
-test("create project uses the personal catalog for scaffold, scripts and configuration", () => {
+test("bootstrap uses the personal catalog for scaffold, scripts and configuration", () => {
   const dir = join(repoTemporal(), "project");
-  const r = cli("create", "project", "Payments", "--dir", dir, "--stack", "example", "--yes", "--no-openspec");
+  const r = cli("bootstrap", "Payments", "--dir", dir, "--stack", "example", "--yes", "--no-openspec");
   assert.equal(r.code, 0, r.output);
   assert.match(readFileSync(join(dir, "README.md"), "utf8"), /# Payments\r?\nPort: 4567/);
   assert.ok(existsSync(join(dir, "orqen/tools/db.mjs")));
@@ -59,14 +59,17 @@ test("create project uses the personal catalog for scaffold, scripts and configu
   assert.match(readFileSync(join(dir, ".gitignore"), "utf8"), /orqen\/\.env/);
 });
 
-test("create refuses non-empty destinations and unknown stacks, and lists custom stacks", () => {
+test("bootstrap refuses non-empty destinations and unknown stacks, and lists custom stacks", () => {
   const dir = repoTemporal();
   writeFileSync(join(dir, "x.txt"), "x");
-  const r1 = cli("create", "project", "Example", "--dir", dir, "--yes", "--stack", "example");
+  const r1 = cli("bootstrap", "Example", "--dir", dir, "--yes", "--stack", "example");
   assert.equal(r1.code, 1);
   assert.match(r1.output, /not empty/);
-  const r2 = cli("create", "project", "Example", "--dir", join(dir, "new"), "--yes", "--stack", "missing");
+  const r2 = cli("bootstrap", "Example", "--dir", join(dir, "new"), "--yes", "--stack", "missing");
   assert.equal(r2.code, 1);
   assert.match(r2.output, /Unknown stack "missing". Available: example/);
-  assert.match(cli("create", "stacks").output, /example\s+Example stack/);
+  assert.match(cli("bootstrap", "--list").output, /example\s+Example stack/);
+  const old = cli("create", "project", "Example");
+  assert.equal(old.code, 1);
+  assert.match(old.output, /Unknown command: create/);
 });

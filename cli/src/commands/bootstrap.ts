@@ -1,5 +1,5 @@
 /**
- * orqen create project: bootstrap a new project from a tool of the catalog.
+ * orqen bootstrap: bootstrap a new project from a tool of the catalog.
  *
  *  1. Ask the project name, the folder and the stack (tool).
  *  2. Check the stack requirements (node, mvn, docker…) and ask its parameters (ports, Java package…).
@@ -23,7 +23,7 @@ import { azul, confirmar, elegir, gris, interactivo, magenta, p, pc, textoValida
 import { init } from "./init.ts";
 import { spawn } from "node:child_process";
 
-export interface OpcionesCreate {
+export interface OpcionesBootstrap {
   nombre?: string;
   stack?: string;
   dir?: string;
@@ -32,6 +32,7 @@ export interface OpcionesCreate {
   sinOpenspec?: boolean;
   herramientas?: string[];
   toolsRepo?: string;
+  listar?: boolean;
   /** Skip running generators and installs (tests). */
   sinComandos?: boolean;
 }
@@ -56,26 +57,32 @@ function correr(cmd: string, cwd: string): Promise<{ ok: boolean; cola: string }
   });
 }
 
-export async function crearProyecto(o: OpcionesCreate) {
-  let yes = !!o.yes;
-  await mostrarLogo({
-    animar: !o.sinAnimacion && !o.yes, esperarTecla: true,
-    bienvenida: [
-      "Create project will:",
-      "  • Ask the name and the stack, and generate the code with the official generators",
-      "  • Add the tools that start its environments (database in Docker, servers…)",
-      "  • Leave the repository ready for agents (orqen init, OpenSpec, Jira)",
-    ],
-  });
-  p.intro(`${azul("orqen")} ${magenta("create project")} ${gris(`v${VERSION_CLI}`)}`);
-  if (!yes && !interactivo()) { p.log.warn("Non-interactive terminal. Using defaults as with --yes."); yes = true; }
+export async function bootstrap(o: OpcionesBootstrap) {
+  const yes = !!o.yes || !interactivo();
+  if (!o.listar) {
+    await mostrarLogo({
+      animar: !o.sinAnimacion && !o.yes, esperarTecla: true,
+      bienvenida: [
+        "Bootstrap will:",
+        "  • Ask the name and the stack, and generate the code with the official generators",
+        "  • Add the tools that start its environments (database in Docker, servers…)",
+        "  • Leave the repository ready for agents (orqen init, OpenSpec, Jira)",
+      ],
+    });
+    p.intro(`${azul("orqen")} ${magenta("bootstrap")} ${gris(`v${VERSION_CLI}`)}`);
+    if (!o.yes && !interactivo()) p.log.warn("Non-interactive terminal. Using defaults as with --yes.");
+  }
 
   // 1. Name, folder and stack.
   await prepararTools(o.toolsRepo, yes);
   const tools = listarTools();
   if (!tools.length) { p.cancel(`No tools found in ${TOOLS_DIR}.`); process.exitCode = 1; return; }
+  if (o.listar) {
+    for (const t of tools) console.log(`${pc.bold(t.id.padEnd(24))} ${t.nombre}\n${" ".repeat(25)}${gris(t.descripcion)}`);
+    return;
+  }
   const nombre = o.nombre ?? (yes ? "" : await textoValidado("Project name", "", (v) => (/^[\p{L}\p{N}][\p{L}\p{N} _.-]*$/u.test(v) ? undefined : "Use letters, numbers, spaces, dots, dashes or underscores"), "Plataforma de Pagos"));
-  if (!nombre) { p.cancel("A project name is required (orqen create project <name>)."); process.exitCode = 1; return; }
+  if (!nombre) { p.cancel("A project name is required (orqen bootstrap <name>)."); process.exitCode = 1; return; }
   const base = variablesBase(nombre);
   const dir = resolve(o.dir ?? (yes ? base.PROYECTO_ID : await textoValidado("Folder", base.PROYECTO_ID, (v) => (v ? undefined : "Required"))));
   if (!vacio(dir)) { p.cancel(`${dir} already exists and is not empty. Choose another folder (--dir).`); process.exitCode = 1; return; }
@@ -160,7 +167,7 @@ export async function crearProyecto(o: OpcionesCreate) {
   // 4. orqen init with the known stack and environments.
   p.log.step("Preparing the repository for agents (orqen init)…");
   await init({
-    dir, yes, sinAnimacion: true, sinLogo: true, sinOpenspec: o.sinOpenspec, herramientas: o.herramientas, toolsRepo: o.toolsRepo,
+    dir, yes, sinAnimacion: true, sinLogo: true, sinOpenspec: o.sinOpenspec, herramientas: o.herramientas,
     predefinido: { stack: tool.stack, entornos: tool.entornos },
   });
   if (process.exitCode) return;
@@ -182,14 +189,3 @@ export async function crearProyecto(o: OpcionesCreate) {
   p.outro(`${magenta("//")} ${pc.bold(`${vars.PROYECTO} is ready.`)}`);
 }
 
-/** `orqen create <what>`: today only `project`. */
-export async function crear(que: string | undefined, o: OpcionesCreate) {
-  if (!que || ["project", "proyecto", "proyect"].includes(que)) return crearProyecto(o);
-  if (que === "list" || que === "stacks") {
-    await prepararTools(o.toolsRepo, !!o.yes || !interactivo());
-    for (const t of listarTools()) console.log(`${pc.bold(t.id.padEnd(24))} ${t.nombre}\n${" ".repeat(25)}${gris(t.descripcion)}`);
-    return;
-  }
-  console.error(`Unknown: orqen create ${que}. Use: orqen create project [name] [--stack <id>] [--dir <folder>]  ·  orqen create stacks`);
-  process.exitCode = 1;
-}

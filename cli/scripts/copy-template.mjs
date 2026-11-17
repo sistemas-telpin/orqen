@@ -11,3 +11,6 @@ for (const path of ["AGENTS.md", ".agents", "env.example", "openspec", "orqen", 
 
 // Remove catalogs left by older builds; private stacks must never enter the package.
 rmSync(new URL("../dist/tools/", import.meta.url), { recursive: true, force: true });
+
+// The project creation command was renamed to bootstrap.
+rmSync(new URL("../dist/commands/create.js", import.meta.url), { force: true });

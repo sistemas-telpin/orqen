@@ -331,14 +331,14 @@ y la verificación; una persona de `APPROVERS_EXECUTION` autoriza y aplica, y el
 que la causa es de código, el REC vuelve a ANALYSIS y nace un SIS de desarrollo.
 
 
-## Crear un proyecto nuevo: `orqen create project`
+## Crear un proyecto nuevo: `orqen bootstrap`
 
 Arma un repo desde cero, con el código base, los scripts que levantan sus entornos y orqen ya listo para los agentes:
 
 ```sh
-orqen create project "Plataforma de Pagos"                          # pregunta el stack y los datos
-orqen create project "Facturación" --stack java-tomcat-sqlserver --dir ./facturacion
-orqen create stacks                                                 # lista los stacks disponibles
+orqen bootstrap "Plataforma de Pagos"                          # pregunta el stack y los datos
+orqen bootstrap "Facturación" --stack java-tomcat-sqlserver --dir ./facturacion
+orqen bootstrap --list                                                 # lista los stacks disponibles
 ```
 
 1. Pide el repositorio de GitHub del equipo si todavía no está clonado, y pregunta el nombre, la carpeta y el **stack** disponible en ese catálogo.
@@ -351,16 +351,16 @@ orqen create stacks                                                 # lista los 
 5. Ofrece el commit inicial.
 
 Después: `cd <carpeta>`, `orqen env up` (base + backend + migraciones; `--all` también el front) y `orqen env test`.
-Los stacks viven en un repositorio de GitHub de cada equipo, que puede ser privado. En el primer `init` o `create project` se pide su ruta (por ejemplo `@telpin-sistemas/tools`) y se clona dentro de `cli/tools/`, junto a la instalación del CLI. Cada stack mantiene `<id>/tool.yaml` y su esqueleto; los scripts compartidos van en `_shared/`. El catálogo se reutiliza en las siguientes ejecuciones, se ignora en Git y no se incluye en el paquete npm.
+Los stacks viven en un repositorio de GitHub de cada equipo, que puede ser privado. Solo `orqen bootstrap` pide su ruta (por ejemplo `@telpin-sistemas/tools`) y se clona dentro de `cli/tools/`, junto a la instalación del CLI. El repositorio puede tener cualquier nombre; `cli/tools/` es solo el destino local del clon. Cada stack mantiene `<id>/tool.yaml` y su esqueleto; los scripts compartidos van en `_shared/`. El catálogo se reutiliza en las siguientes ejecuciones, se ignora en Git y no se incluye en el paquete npm.
 
-Quien ejecuta el comando necesita acceso al repositorio mediante sus credenciales de Git (HTTPS con un credential helper, o SSH). No se guardan tokens en la configuración. Para automatizar el primer uso:
+Quien ejecuta el comando necesita acceso al repositorio mediante sus credenciales de Git (HTTPS con un credential helper, o SSH). No se guardan tokens en la configuración. Para automatizar el primer `bootstrap`, se requiere `--tools-repo` o `ORQEN_TOOLS_REPO` si el catálogo todavía no está clonado:
 
 ```sh
-orqen init --yes --tools-repo @telpin-sistemas/tools
+orqen bootstrap "Mi proyecto" --yes --tools-repo @telpin-sistemas/stacks
 # También: ORQEN_TOOLS_REPO=@telpin-sistemas/tools
 ```
 
-Para actualizar el catálogo se usa `git -C cli/tools pull --ff-only` desde la carpeta de instalación de ORQEN. Para cambiar de repositorio, mover el clon anterior y ejecutar con otro `--tools-repo`. Los stacks anteriores a esta separación quedan localmente en `cli/tools-backup/` (ignorado), listos para trasladarlos al repo privado.
+Para actualizar el catálogo se usa `git -C cli/tools pull --ff-only` desde la carpeta de instalación de ORQEN. Para cambiar de repositorio, mover el clon anterior y ejecutar con otro `--tools-repo`. Los stacks anteriores a esta separación quedan localmente en `cli/tools-backup/` (ignorado). ORQEN no usa esa carpeta: se puede borrar cuando sus archivos ya estén trasladados al repo privado o respaldados.
 
 `/orqen:implement SIS-32` ejecuta internamente `orqen swarm` con el contexto y el plan aprobado del ticket. Verifica el resultado y lo integra en la rama del REC; la persona ve el avance y los resultados de la implementación sin tener que ejecutar otro comando.
 
@@ -374,7 +374,7 @@ orqen init
 
 `orqen init`:
 
-1. Verifica Node, git y el gestor de paquetes, y pide el repositorio de stacks si todavía no está clonado.
+1. Verifica Node, git y el gestor de paquetes. No consulta ni clona el repositorio externo de stacks.
 2. Detecta componentes, cómo se levanta cada uno y qué servicios necesita (`package.json`, `pom.xml`, `pyproject.toml`, Prisma, `.env.example`) y,
    si hay un agente de IA instalado, le pide que revise un resumen del repo (`--deep` para que lo explore entero, `--no-ai` para solo detección automática).
 3. Te deja confirmar o editar componentes, el comando que levanta cada parte (`npm run dev`, `npm start`…), tests, migraciones y seeds.
@@ -383,7 +383,7 @@ orqen init
 6. Escribe la configuración del entorno (sin Docker de por medio), `AGENTS.md` / `CLAUDE.md`, el plugin, las guías de etapa y el manifiesto,
    y fusiona las reglas del proceso con el `openspec/config.yaml` existente.
 
-Opciones: `--tools-repo @organizacion/tools` (obligatorio en el primer uso con `--yes`; alternativa: `ORQEN_TOOLS_REPO`), `--yes` (no interactivo), `--agent "<comando>"`, `--tools claude,codex`, `--no-openspec`.
+Opciones: `--yes` (no interactivo), `--agent "<comando>"`, `--tools claude,codex`, `--no-openspec`.
 
 **Plugin para Claude Code** (da los comandos `/orqen:*` y el skill de grilling), una vez por usuario:
 
@@ -549,7 +549,7 @@ Los REC nuevos no se toman solos: quedan en NEW hasta que soporte corre `support
 orqen init [dir]                       Inicializa un repo
 orqen update [dir]                     Actualiza la CLI, OpenSpec y el kit
 
-orqen create project [nombre] [--stack <id>] [--dir <carpeta>] · orqen create stacks
+orqen bootstrap [nombre] [--stack <id>] [--dir <carpeta>] · orqen bootstrap --list
 orqen env setup | up [--all] | test [tipo] | status | down
 orqen tutorial [paso] [--step <n|id>] [--list] [--lang es|en]   Tutorial paso a paso · orqen lang: idioma detectado
 orqen swarm "<tarea>" [--parallel N] [--plan-only | --plan plan.json] [--small C] [--large C] [--yes]
@@ -595,7 +595,8 @@ orqen cycle [--loop]                   Modo desatendido
 cd cli
 npm ci
 npm run dev -- --help
-npm test          # e2e con OpenSpec y git reales + gates, carriles, SIS y kit con fakes
+npm run test:e2e  # comandos completos hasta CLOSED, Git/OpenSpec reales y servicios externos simulados
+npm test          # suite completa de regresion (incluye e2e)
 npm run typecheck
 npm run build
 npm run setup     # compila y linkea la CLI local como `orqen`

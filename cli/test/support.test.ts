@@ -134,9 +134,24 @@ test("an analyst can take a NEW request directly, or one in SUPPORT that nobody 
 
   const b = setup();
   await b.p.support("REC-1", "codex", "Sofi");
-  await assert.rejects(b.p.analyze("REC-1", "claude", "Ana"), /being handled by support/);
+  await assert.rejects(b.p.analyze("REC-1", "claude", "Ana"), /already taken by "codex"/);
   b.p.release("REC-1");
   await b.p.analyze("REC-1", "claude", "Ana");
   assert.equal(b.est().state, "ANALYSIS");
   assert.equal(b.est().analyst, "Ana");
+});
+
+test("denied support and analysis claims preserve the responsible person and lock", async () => {
+  const { p, est } = setup();
+  await p.support("REC-1", "owner", "Original support");
+  const support = structuredClone(est());
+  await assert.rejects(p.support("REC-1", "other", "Replacement support"), /already taken/);
+  assert.deepEqual(est(), support);
+  await assert.rejects(p.analyze("REC-1", "other", "Replacement analyst"), /already taken/);
+  assert.deepEqual(est(), support);
+  p.release("REC-1");
+  await p.analyze("REC-1", "owner", "Original analyst");
+  const analysis = structuredClone(est());
+  await assert.rejects(p.analyze("REC-1", "other", "Replacement analyst"), /already taken/);
+  assert.deepEqual(est(), analysis);
 });

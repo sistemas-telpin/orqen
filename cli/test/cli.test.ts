@@ -7,15 +7,16 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { parse, stringify } from "yaml";
 import { hash } from "../src/lib/kit.ts";
-import { catalogoTemporal, MONOREPO, repoTemporal } from "./helpers.ts";
+import { MONOREPO, repoTemporal } from "./helpers.ts";
 
 const CLI = fileURLToPath(new URL("../src/index.ts", import.meta.url));
 const TSX = fileURLToPath(new URL("../node_modules/tsx/dist/cli.mjs", import.meta.url));
 
-const catalogo = catalogoTemporal();
+// An unavailable and invalid catalog must have no effect on init or update.
+const catalogo = join(repoTemporal(), "unavailable-catalog");
 
 function orqen(cwd: string, ...args: string[]) {
-  const r = spawnSync(process.execPath, [TSX, CLI, ...args], { cwd, encoding: "utf8", env: { ...process.env, NO_COLOR: "1", ORQEN_TOOLS_DIR: catalogo, ORQEN_TOOLS_REPO: "@example/catalog" } });
+  const r = spawnSync(process.execPath, [TSX, CLI, ...args], { cwd, encoding: "utf8", env: { ...process.env, NO_COLOR: "1", ORQEN_TOOLS_DIR: catalogo, ORQEN_TOOLS_REPO: "not-a-github-repository" } });
   return { codigo: r.status, salida: r.stdout + r.stderr };
 }
 
@@ -35,11 +36,9 @@ test("orqen init --yes writes the repository configuration", () => {
   const cfg = parse(readFileSync(join(repo, "orqen/config.yaml"), "utf8"));
   assert.equal(cfg.version, 1);
   assert.equal(cfg.proyecto.rama_base, "main");
-  assert.deepEqual(cfg.entornos.procesos.map((x: any) => `${x.nombre}:${x.comando}:${x.cuando}`).sort(), ["api:pnpm start:siempre", "db:node orqen/tools/db.mjs up:siempre", "web:pnpm dev:e2e"]);
-  // The database runs with orqen/tools/db.mjs (inside orqen/, never a root tools/ folder), stopped cleanly.
-  assert.equal(cfg.entornos.procesos.find((x: any) => x.nombre === "db").detener, "node orqen/tools/db.mjs down");
-  assert.equal(JSON.parse(readFileSync(join(repo, "orqen/tools/db.json"), "utf8")).engine, "postgres");
-  assert.ok(existsSync(join(repo, "orqen/tools/db.mjs")) && !existsSync(join(repo, "tools")));
+  assert.deepEqual(cfg.entornos.procesos.map((x: any) => `${x.nombre}:${x.comando}:${x.cuando}`).sort(), ["api:pnpm start:siempre", "web:pnpm dev:e2e"]);
+  assert.equal(existsSync(catalogo), false, "init must leave the external catalog untouched");
+  assert.equal(existsSync(join(repo, "orqen/tools/db.mjs")), false, "init does not scaffold services from a catalog");
   // Claude Code loads the /orqen:* commands from the committed project settings once the folder is trusted.
   const claude = JSON.parse(readFileSync(join(repo, ".claude/settings.json"), "utf8"));
   assert.deepEqual(claude.extraKnownMarketplaces.orqen.source, { source: "directory", path: "./" });
@@ -105,4 +104,21 @@ test("orqen env test uses variables from orqen/config.yaml", () => {
   const mal = orqen(repo, "env", "test");
   assert.equal(mal.codigo, 1);
   assert.match(mal.salida, /✘ e2e/);
+});
+
+
+test("init reuses project-local database scripts without a stack repository", () => {
+  const repo = repoTemporal(MONOREPO);
+  mkdirSync(join(repo, "orqen/tools"), { recursive: true });
+  const script = "// Existing project-local database script\n";
+  writeFileSync(join(repo, "orqen/tools/db.mjs"), script);
+  writeFileSync(join(repo, "orqen/tools/db.json"), JSON.stringify({ engine: "postgres", port: 5432 }));
+  const result = orqen(repo, "init", "--yes", "--no-ai", "--no-openspec");
+  assert.equal(result.codigo, 0, result.salida);
+  const cfg = parse(readFileSync(join(repo, "orqen/config.yaml"), "utf8"));
+  const databases = cfg.entornos.procesos.filter((p: any) => p.nombre === "db");
+  assert.equal(databases.length, 1);
+  assert.equal(databases[0].comando, "node orqen/tools/db.mjs up");
+  assert.equal(databases[0].detener, "node orqen/tools/db.mjs down");
+  assert.equal(readFileSync(join(repo, "orqen/tools/db.mjs"), "utf8"), script);
 });

@@ -17,8 +17,7 @@ import {
 import { chequearSistema, ramaBase, VERSION_CLI } from "../lib/system.ts";
 import { resumenStack, type Stack } from "../lib/stack.ts";
 import { ProcesoEntorno } from "../lib/processes.ts";
-import { dbParaServicio, instalarTools, PROCESO_DB, variablesBase, type DbTool } from "../lib/tools.ts";
-import { prepararTools } from "../lib/tools-repository.ts";
+import { PROCESO_DB } from "../lib/tools.ts";
 import { mostrarLogo } from "../ui/logo.ts";
 import {
   azul, confirmar, diffColoreado, elegir, elegirVarios, gris, interactivo, magenta, p, pc, salirSiCancela, secreto, texto, textoValidado, tick,
@@ -36,8 +35,7 @@ export interface OpcionesInit {
   agente?: string;
   sinOpenspec?: boolean;
   herramientas?: string[];
-  toolsRepo?: string;
-  /** Called from `orqen create project`: the logo was already shown. */
+  /** Called from `orqen bootstrap`: the logo was already shown. */
   sinLogo?: boolean;
   /** Stack and environments already known (from a tool): skip detection, AI analysis and review. */
   predefinido?: { stack: Stack; entornos: Config["entornos"] };
@@ -89,8 +87,6 @@ export async function init(o: OpcionesInit) {
       return;
     }
   }
-
-  await prepararTools(o.toolsRepo, yes);
 
   // 2. Detect the stack and analyze it with AI when requested (unless it comes from a tool).
   const s = p.spinner();
@@ -174,8 +170,8 @@ export async function init(o: OpcionesInit) {
   const vars = { RESUMEN_STACK: resumenStack(stack), BASE_BRANCH: config.proyecto.rama_base, AGENT_CMD: comandoAgente ? `${comandoAgente}` : "claude -p --permission-mode acceptEdits" };
   // Review how each part of the project starts before writing anything.
   if (!pre) config.entornos = await revisarProcesos(config.entornos, yes);
-  // The database the project needs runs in Docker through orqen/tools/db.mjs (orqen starts and stops it).
-  const db = pre ? undefined : await proponerDb(repo, nombre, config, yes);
+  // Existing project-local scripts can be reused without consulting a stack catalog.
+  if (!pre) reutilizarDb(repo, config);
 
   const plan = planificar(repo, vars);
   p.note(resumenPlan(plan, config), "Files to write");
@@ -183,10 +179,6 @@ export async function init(o: OpcionesInit) {
 
   escribirConfig(repo, config);
   const res = await aplicar(repo, plan, (c) => resolverConflicto(c, yes));
-  if (db) {
-    instalarTools(repo, { id: "db", tools: ["_shared/db.mjs"], db }, variablesBase(nombre));
-    p.log.success(`orqen/tools/db.mjs ${gris(`(${db.engine === "postgres" ? "PostgreSQL" : "SQL Server"} in Docker on port ${db.port}; settings in orqen/tools/db.json)`)}`);
-  }
   if (datosEnv) {
     escribirEnv(repo, readFileSync(join(repo, "orqen", ".env.example"), "utf8"), datosEnv);
     p.log.success(`${RUTA_ENV} created ${gris("(ignored by Git)")}`);
@@ -206,7 +198,7 @@ export async function init(o: OpcionesInit) {
       gris(`(type /orqen: to list them; check with /plugin → orqen@${mk})`),
     `Commit the changes (orqen/, .claude/, .claude-plugin/, AGENTS.md, CLAUDE.md, openspec/) so the team gets the same commands.`,
   ];
-  if (o.sinLogo) return;   // `orqen create project` shows its own next steps
+  if (o.sinLogo) return;   // `orqen bootstrap` shows its own next steps
   p.note(pasos.map((x, i) => `${pc.bold(`${i + 1}.`)} ${x}`).join("\n"), "Next steps");
   p.outro(`${magenta("//")} ${pc.bold("From request to production.")}`);
 }
@@ -380,21 +372,11 @@ export async function resolverConflicto(c: Cambio, yes: boolean): Promise<Decisi
   }));
 }
 
-/**
- * When the stack needs PostgreSQL or SQL Server and nothing starts it yet, offer to run it in Docker with
- * orqen/tools/db.mjs and add the `db` process (with a clean stop). An existing orqen/tools/db.json is kept.
- */
-async function proponerDb(repo: string, nombre: string, config: Config, yes: boolean): Promise<DbTool | undefined> {
+/** Reuse database scripts already installed in the project; init never reads the external catalog. */
+function reutilizarDb(repo: string, config: Config): void {
   const procesos = config.entornos.procesos;
-  const agregar = () => { config.entornos.procesos = [ProcesoEntorno.parse(PROCESO_DB), ...procesos]; };
-  if (procesos.some((x) => x.nombre === "db" || /orqen\/tools\/db\.mjs/.test(x.comando))) return undefined;
-  if (existsSync(join(repo, "orqen", "tools", "db.json"))) { agregar(); return undefined; }   // Installed by an earlier init.
-  const svc = config.stack.servicios.find((s) => s.tipo === "postgres" || s.tipo === "sqlserver");
-  if (!svc || (svc.puerto && procesos.some((x) => x.puerto === svc.puerto))) return undefined;
-  const db = dbParaServicio(svc, variablesBase(nombre).PROYECTO_ID);
-  if (!db) return undefined;
-  const motor = db.engine === "postgres" ? "PostgreSQL" : "SQL Server";
-  if (!(await confirmar(`The project needs ${motor} (port ${db.port}). Run it in Docker with ${pc.cyan("orqen/tools/db.mjs")}? ${gris("(orqen starts and stops it on its own)")}`, true, yes))) return undefined;
-  agregar();
-  return db;
+  if (procesos.some((x) => x.nombre === "db" || /orqen\/tools\/db\.mjs/.test(x.comando))) return;
+  if (existsSync(join(repo, "orqen", "tools", "db.json")) && existsSync(join(repo, "orqen", "tools", "db.mjs"))) {
+    config.entornos.procesos = [ProcesoEntorno.parse(PROCESO_DB), ...procesos];
+  }
 }

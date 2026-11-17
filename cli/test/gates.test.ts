@@ -322,3 +322,14 @@ test("pr: sends the branch to the devel branch, records the explanation and is i
   assert.equal(again.created, false);
   assert.deepEqual(calls, ["commit", "push", "pr", "commit", "push"]);
 });
+
+test("analysis cannot advance when not ready or while customer questions remain", async () => {
+  for (const output of [ANALYSIS_OK({ ready: false, analyst_ok: false }), ANALYSIS_OK({ open_questions: ["Which format?"] })]) {
+    const { p, est, jira } = setup();
+    await p.analyze("REC-1", "agent", "Analyst");
+    const result = await p.complete("REC-1", output, "agent");
+    assert.equal(result.ok, false);
+    assert.equal(est().state, "ANALYSIS");
+    assert.equal(jira.created.length, 0);
+  }
+});

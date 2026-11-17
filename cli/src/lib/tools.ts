@@ -3,7 +3,7 @@
  *
  * Each tool has a `tool.yaml` with:
  *   - requisitos   commands it needs (node, mvn, docker…), with an optional minimum version
- *   - parametros   extra questions for `orqen create project` (ports, Java package…)
+ *   - parametros   extra questions for `orqen bootstrap` (ports, Java package…)
  *   - scaffold     steps to create the code: copy files (`copiar`), run official generators (`correr`), write files (`archivo`)
  *   - tools        scripts copied to the project's `orqen/tools/` folder (e.g. the database script)
  *   - db           database settings written to `orqen/tools/db.json`
@@ -20,7 +20,7 @@ import { parse } from "yaml";
 import { z } from "zod";
 import { ProcesoEntorno } from "./processes.ts";
 import { version } from "./proc.ts";
-import { Stack, type Servicio } from "./stack.ts";
+import { Stack } from "./stack.ts";
 
 // Source and compiled modules have the same depth beneath the CLI installation.
 export const TOOLS_DIR = resolve(process.env.ORQEN_TOOLS_DIR || fileURLToPath(new URL("../../tools/", import.meta.url)));
@@ -189,24 +189,6 @@ export function instalarTools(proyecto: string, tool: Pick<Tool, "id" | "tools" 
   ].join("\n"));
   escritos.push("orqen/tools/README.md");
   return escritos;
-}
-
-/** The database settings `orqen init` proposes for a service the existing project needs (postgres or sqlserver). */
-export type DbTool = NonNullable<Tool["db"]>;
-export function dbParaServicio(s: Servicio, proyectoId: string): DbTool | undefined {
-  const v = s.variables ?? {};
-  if (s.tipo === "postgres") return {
-    engine: "postgres", port: s.puerto ?? 5432,
-    database: v.POSTGRES_DB ?? proyectoId, user: v.POSTGRES_USER ?? "app", password: v.POSTGRES_PASSWORD ?? "app",
-    image: s.imagen ?? undefined,
-  };
-  if (s.tipo === "sqlserver") return {
-    engine: "sqlserver", port: s.puerto ?? 1433,
-    database: v.MSSQL_DB ?? v.DB_NAME ?? proyectoId.replace(/-/g, "_"), user: "sa",
-    password: v.MSSQL_SA_PASSWORD ?? v.SA_PASSWORD ?? variablesBase(proyectoId).DB_PASSWORD,
-    image: s.imagen ?? undefined,
-  };
-  return undefined;
 }
 
 /** The orqen process that runs the database tool (orqen starts it and stops the container cleanly). */

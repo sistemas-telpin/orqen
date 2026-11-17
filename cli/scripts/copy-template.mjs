@@ -9,8 +9,5 @@ for (const path of ["AGENTS.md", ".agents", "env.example", "openspec", "orqen", 
   cpSync(new URL(path, source), new URL(path, destination), { recursive: true });
 }
 
-// Stack catalog for `orqen create project`.
-const tools = new URL("../../tools/", import.meta.url);
-const toolsDestination = new URL("../dist/tools/", import.meta.url);
-rmSync(toolsDestination, { recursive: true, force: true });
-cpSync(tools, toolsDestination, { recursive: true });
+// Remove catalogs left by older builds; private stacks must never enter the package.
+rmSync(new URL("../dist/tools/", import.meta.url), { recursive: true, force: true });

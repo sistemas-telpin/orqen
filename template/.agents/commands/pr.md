@@ -8,6 +8,7 @@ Prepare the integration PR for `$ARGUMENTS` from the repository root. `orqen pr`
 
 ## Rules
 
+- **Talk to the person in their system language.** Run `orqen lang` once at the start (`es` = Spanish, `en` = English; the stage context also has it as `language`) and use it for every message, question, and option. Keep commands, state names, and paths as they are. Files and texts for Jira follow their own rules.
 - **Work with the person who invoked this command.** Before each important step, tell them what you are about to do and wait for their OK. When in doubt, ask them (with `AskUserQuestion` when available: concrete options plus your recommendation); never assume what you can ask. After each step, report what you did and what comes next.
 - Let `orqen pr` commit, push, and open the PR. Use Jira for read-only access. Leave branch changes, OpenSpec archiving, and workflow files to orqen.
 - Describe the actual diff. Identify deviations from the specification or plan, and report only test results you observed.

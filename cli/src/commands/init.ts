@@ -18,6 +18,7 @@ import { chequearSistema, ramaBase, VERSION_CLI } from "../lib/system.ts";
 import { resumenStack, type Stack } from "../lib/stack.ts";
 import { ProcesoEntorno } from "../lib/processes.ts";
 import { dbParaServicio, instalarTools, PROCESO_DB, variablesBase, type DbTool } from "../lib/tools.ts";
+import { prepararTools } from "../lib/tools-repository.ts";
 import { mostrarLogo } from "../ui/logo.ts";
 import {
   azul, confirmar, diffColoreado, elegir, elegirVarios, gris, interactivo, magenta, p, pc, salirSiCancela, secreto, texto, textoValidado, tick,
@@ -35,6 +36,7 @@ export interface OpcionesInit {
   agente?: string;
   sinOpenspec?: boolean;
   herramientas?: string[];
+  toolsRepo?: string;
   /** Called from `orqen create project`: the logo was already shown. */
   sinLogo?: boolean;
   /** Stack and environments already known (from a tool): skip detection, AI analysis and review. */
@@ -87,6 +89,8 @@ export async function init(o: OpcionesInit) {
       return;
     }
   }
+
+  await prepararTools(o.toolsRepo, yes);
 
   // 2. Detect the stack and analyze it with AI when requested (unless it comes from a tool).
   const s = p.spinner();

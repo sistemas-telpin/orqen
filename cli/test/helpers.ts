@@ -2,6 +2,7 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { stringify } from "yaml";
 
 /** Create a temporary repository from a path-to-content map. Serialize objects as JSON. */
 export function repoTemporal(archivos: Record<string, string | object> = {}, git = true): string {
@@ -27,3 +28,25 @@ export const MONOREPO = {
   "e2e/visual.spec.ts": "test('home', async ({ page }) => { await expect(page).toHaveScreenshot(); });\n",
   "README.md": "# Plataforma de Pagos\n",
 };
+
+/** A synthetic catalog: public CLI tests never depend on an organization's stacks. */
+export function catalogoTemporal(): string {
+  const tool = {
+    id: "example", nombre: "Example stack", descripcion: "Synthetic test catalog",
+    parametros: [{ id: "PORT", pregunta: "Port", tipo: "puerto", defecto: 4567 }],
+    scaffold: [{ copiar: "scaffold" }], tools: ["_shared/db.mjs"],
+    db: { engine: "postgres", port: 5432, database: "{{PROYECTO_ID}}", user: "app", password: "{{DB_PASSWORD}}" },
+    stack: { resumen: "Example {{PROYECTO}}", componentes: [], servicios: [] },
+    entornos: { procesos: [], tests: { unitarios: "node --test" } },
+  };
+  const dir = repoTemporal({
+    "example/tool.yaml": stringify(tool),
+    "example/scaffold/README.md": "# {{PROYECTO}}\nPort: {{PORT}}\n",
+    "example/scaffold/gitignore": "node_modules/\n",
+    "_shared/db.mjs": "// Synthetic database script for CLI installation tests.\n",
+  });
+  execFileSync("git", ["-c", "core.autocrlf=false", "add", "."], { cwd: dir });
+  execFileSync("git", ["-c", "user.name=orqen-test", "-c", "user.email=test@example.com", "commit", "-qm", "Synthetic catalog"], { cwd: dir });
+  execFileSync("git", ["remote", "add", "origin", "https://github.com/example/catalog.git"], { cwd: dir });
+  return dir;
+}

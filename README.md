@@ -12,7 +12,7 @@ Opcionalmente, una persona de **soporte** atiende primero el reclamo con el agen
 
 | Quién              | Qué corre                                                                                                        |
 | ------------------ | ---------------------------------------------------------------------------------------------------------------- |
-| Persona nueva      | `/orqen:tutorial`: recorrido guiado paso a paso por orqen en este repo (qué correr en cada etapa, cómo avanza un pedido, cómo mirar al agente y los entornos) |
+| Persona nueva      | `/orqen:tutorial` (o `orqen tutorial` en la terminal): 12 pasos cortos, en el idioma del sistema, con qué correr en cada etapa, cómo avanza un pedido y cómo mirar al agente y los entornos |
 | Soporte (opcional) | `/orqen:support REC-1234`: busca la respuesta, la redacta para el cliente y, si no se puede resolver, escala al analista con un resumen |
 | Analista           | `/orqen:analyze REC-1234`: analiza el REC, elige el carril, escribe la spec si hace falta y crea el SIS en Jira   |
 | Agente             | `/orqen:implement SIS-442`: implementa la spec o el plan aprobado · `/orqen:pr SIS-442`: abre el PR a desarrollo |
@@ -33,25 +33,32 @@ Opcionalmente, una persona de **soporte** atiende primero el reclamo con el agen
 
 ## Tutorial para personas nuevas: `/orqen:tutorial`
 
-Con el repo ya inicializado (`orqen init`), quien recién llega abre Claude Code en la carpeta y corre `/orqen:tutorial`
-(o `/orqen:tutorial <tema>` para ir directo a uno: `map`, `pending`, `support`, `analysis`, `implement`, `testing`, `pr`, `review`,
-`delivery`, `watch`, `env`, `unattended`, `cheatsheet`). El agente arma un recorrido **paso a paso** con los datos reales del repo
-(procesos y puertos de `orqen/config.yaml`, proyectos de Jira, tipo de gate de code review) y, en cada paso, muestra el comando exacto,
-qué hace `orqen` por detrás, qué se va a ver y **cómo se pasa a la etapa siguiente**; después pregunta si seguir, probarlo o profundizar.
+Con el repo ya inicializado (`orqen init`), quien recién llega abre Claude Code en la carpeta y escribe `/orqen:tutorial`
+(o `/orqen:tutorial env`, `/orqen:tutorial 4`… para ir directo a un paso). También anda sin Claude Code, en la terminal: `orqen tutorial`.
 
-1. **Bienvenida**: chequea que el repo esté inicializado, resume la configuración (sin mostrar secretos de `orqen/.env`) y pregunta el rol
-   (soporte, analista, desarrollo, diseño de e2e, senior o "todo") para proponer el camino.
-2. **El mapa**: estados, REC vs SIS, carriles y la idea clave: una etapa termina cuando `orqen complete` acepta la salida o una persona decide en un gate.
-3. **Qué hay pendiente**: `orqen pending`, `orqen status`, `orqen status <KEY>`.
-4. **Cada etapa**: `/orqen:support`, `/orqen:analyze`, `/orqen:implement`, testing, `/orqen:pr`, `/orqen:e2e-review`, `/orqen:code-review`, entrega, conformidad y BLOCKED.
-5. **Cómo mirar al agente**: en Claude Code (`Ctrl+O` muestra el detalle, `Esc` lo interrumpe), `orqen status <KEY>`, `orqen/work/<KEY>/log.md`,
-   `git status` / `git diff`, `tasks.md`, la salida de `orqen cycle` y `orqen/state/swarm/<run>/`.
-6. **Los entornos que levanta**: `orqen env status`, logs en `orqen/state/logs/<proceso>.log` (con el comando para seguirlos en PowerShell o bash),
-   URLs, `orqen/tools/db.mjs status`, `orqen env up | test | down`.
-7. **Machete** por rol (opcional, en `orqen/tmp/cheatsheet.md`, ignorado por git) y el comando para arrancar a trabajar.
+Son 12 pasos cortos, en palabras simples: bienvenida · 5 palabras que vas a escuchar · el camino de un pedido · **cómo se pasa a la etapa
+siguiente** · ver qué hay para hacer · analizar · implementar · testing, PR y revisión · **mirar qué está haciendo el agente** ·
+**mirar los entornos que levantó** · si algo sale mal · machete. Cada paso dice dónde se escribe cada cosa (`[Terminal]` o
+`[Claude Code]`), qué va a pasar y cómo te das cuenta de que terminó.
 
-Es seguro: solo corre comandos de lectura (`status`, `pending`, `schema`, `env status`, `git status`…); `orqen env up/test/down` solo con el OK
-de la persona, y **nunca** toma ni completa un REC, ni escribe en Jira, git o GitHub: esos comandos los muestra y explica.
+- **El texto lo escribe orqen, no el agente**: está en la CLI (`cli/src/tutorial/content.ts`), así que es siempre el mismo y se puede corregir
+  en un solo lugar. El comando de Claude Code corre `orqen tutorial --step <n> --json`, muestra el paso tal cual y ofrece los botones
+  (siguiente, probalo, otro tema, salir). Si la persona pregunta algo, el agente contesta corto y vuelve al tutorial.
+- **Con los datos del repo**: procesos, puertos y URLs de `orqen/config.yaml`, prefijos de los proyectos de Jira (`REC_JQL`, `SIS_PROJECT`), si hay soporte,
+  cómo se decide el code review y el comando para seguir un log en PowerShell (Windows) o bash. Nunca muestra secretos de `orqen/.env`.
+- **"Probalo ahora"** solo corre comandos de lectura (`orqen status`, `orqen pending`, `orqen env status`, `git status`). Nunca toma ni cambia un pedido.
+
+`orqen tutorial --list` lista los pasos y `orqen tutorial --step <n|id>` imprime uno.
+
+## Idioma
+
+orqen toma el idioma del sistema operativo: **español** si está en español, **inglés** para cualquier otro (en Windows, el idioma de
+pantalla, `Get-UICulture`; en macOS, `AppleLanguages`; en Linux, `LC_ALL` / `LANG`). Se fuerza con `ORQEN_LANG=es` o `ORQEN_LANG=en`.
+
+- El tutorial se muestra entero en ese idioma.
+- Los agentes le hablan a la persona en ese idioma en todos los comandos `/orqen:*` (`orqen lang` lo imprime y el contexto de cada etapa lo trae
+  como `language`). Comandos, estados y rutas quedan como están, y los artefactos (specs, salidas) siguen sus propias reglas.
+- Los mensajes del resto de la CLI siguen en inglés.
 
 ## Soporte (opcional): `/orqen:support REC-1234`
 
@@ -334,8 +341,7 @@ orqen create project "Facturación" --stack java-tomcat-sqlserver --dir ./factur
 orqen create stacks                                                 # lista los stacks disponibles
 ```
 
-1. Pregunta el nombre, la carpeta y el **stack**: `vue-node-postgres` (Vue 3 + API Node/Express + PostgreSQL) o
-   `java-tomcat-sqlserver` (Java 17 en Tomcat 10 + SQL Server).
+1. Pide el repositorio de GitHub del equipo si todavía no está clonado, y pregunta el nombre, la carpeta y el **stack** disponible en ese catálogo.
 2. Revisa los requisitos (Node, Maven, Docker…) y pide los parámetros del stack (puertos, paquete Java); si un puerto está
    ocupado propone el siguiente libre.
 3. Crea la carpeta y el repo git, genera el código (generadores oficiales, como `create-vue`, más un esqueleto propio con
@@ -345,7 +351,18 @@ orqen create stacks                                                 # lista los 
 5. Ofrece el commit inicial.
 
 Después: `cd <carpeta>`, `orqen env up` (base + backend + migraciones; `--all` también el front) y `orqen env test`.
-Los stacks viven en [`tools/`](tools/README.md): cada uno es una carpeta con su `tool.yaml` y su esqueleto, y se pueden agregar más.
+Los stacks viven en un repositorio de GitHub de cada equipo, que puede ser privado. En el primer `init` o `create project` se pide su ruta (por ejemplo `@telpin-sistemas/tools`) y se clona dentro de `cli/tools/`, junto a la instalación del CLI. Cada stack mantiene `<id>/tool.yaml` y su esqueleto; los scripts compartidos van en `_shared/`. El catálogo se reutiliza en las siguientes ejecuciones, se ignora en Git y no se incluye en el paquete npm.
+
+Quien ejecuta el comando necesita acceso al repositorio mediante sus credenciales de Git (HTTPS con un credential helper, o SSH). No se guardan tokens en la configuración. Para automatizar el primer uso:
+
+```sh
+orqen init --yes --tools-repo @telpin-sistemas/tools
+# También: ORQEN_TOOLS_REPO=@telpin-sistemas/tools
+```
+
+Para actualizar el catálogo se usa `git -C cli/tools pull --ff-only` desde la carpeta de instalación de ORQEN. Para cambiar de repositorio, mover el clon anterior y ejecutar con otro `--tools-repo`. Los stacks anteriores a esta separación quedan localmente en `cli/tools-backup/` (ignorado), listos para trasladarlos al repo privado.
+
+`/orqen:implement SIS-32` ejecuta internamente `orqen swarm` con el contexto y el plan aprobado del ticket. Verifica el resultado y lo integra en la rama del REC; la persona ve el avance y los resultados de la implementación sin tener que ejecutar otro comando.
 
 ## Instalación en un repo
 
@@ -357,7 +374,7 @@ orqen init
 
 `orqen init`:
 
-1. Verifica Node, git y el gestor de paquetes.
+1. Verifica Node, git y el gestor de paquetes, y pide el repositorio de stacks si todavía no está clonado.
 2. Detecta componentes, cómo se levanta cada uno y qué servicios necesita (`package.json`, `pom.xml`, `pyproject.toml`, Prisma, `.env.example`) y,
    si hay un agente de IA instalado, le pide que revise un resumen del repo (`--deep` para que lo explore entero, `--no-ai` para solo detección automática).
 3. Te deja confirmar o editar componentes, el comando que levanta cada parte (`npm run dev`, `npm start`…), tests, migraciones y seeds.
@@ -366,7 +383,7 @@ orqen init
 6. Escribe la configuración del entorno (sin Docker de por medio), `AGENTS.md` / `CLAUDE.md`, el plugin, las guías de etapa y el manifiesto,
    y fusiona las reglas del proceso con el `openspec/config.yaml` existente.
 
-Opciones: `--yes` (no interactivo), `--agent "<comando>"`, `--tools claude,codex`, `--no-openspec`.
+Opciones: `--tools-repo @organizacion/tools` (obligatorio en el primer uso con `--yes`; alternativa: `ORQEN_TOOLS_REPO`), `--yes` (no interactivo), `--agent "<comando>"`, `--tools claude,codex`, `--no-openspec`.
 
 **Plugin para Claude Code** (da los comandos `/orqen:*` y el skill de grilling), una vez por usuario:
 
@@ -534,6 +551,7 @@ orqen update [dir]                     Actualiza la CLI, OpenSpec y el kit
 
 orqen create project [nombre] [--stack <id>] [--dir <carpeta>] · orqen create stacks
 orqen env setup | up [--all] | test [tipo] | status | down
+orqen tutorial [paso] [--step <n|id>] [--list] [--lang es|en]   Tutorial paso a paso · orqen lang: idioma detectado
 orqen swarm "<tarea>" [--parallel N] [--plan-only | --plan plan.json] [--small C] [--large C] [--yes]
 
 orqen pending [--json]                 REC con trabajo: para soporte / para analizar / para un agente

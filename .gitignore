@@ -4,3 +4,8 @@ dist/
 cli/.estado/
 cli/.state/
 cli/.env
+
+# Private stack catalogs (never commit or publish).
+/cli/tools/
+/cli/tools-backup/
+/cli/.tools-clone-*/

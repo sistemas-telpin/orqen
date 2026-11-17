@@ -16,6 +16,7 @@ import {
   cargarTool, chequearRequisitos, copiarCarpeta, instalarTools, listarTools, parametrosDe, render, TOOLS_DIR,
   validarParametro, variablesBase, type Tool, type Variables,
 } from "../lib/tools.ts";
+import { prepararTools } from "../lib/tools-repository.ts";
 import { VERSION_CLI } from "../lib/system.ts";
 import { mostrarLogo } from "../ui/logo.ts";
 import { azul, confirmar, elegir, gris, interactivo, magenta, p, pc, textoValidado, tick } from "../ui/console.ts";
@@ -30,6 +31,7 @@ export interface OpcionesCreate {
   sinAnimacion?: boolean;
   sinOpenspec?: boolean;
   herramientas?: string[];
+  toolsRepo?: string;
   /** Skip running generators and installs (tests). */
   sinComandos?: boolean;
 }
@@ -69,6 +71,7 @@ export async function crearProyecto(o: OpcionesCreate) {
   if (!yes && !interactivo()) { p.log.warn("Non-interactive terminal. Using defaults as with --yes."); yes = true; }
 
   // 1. Name, folder and stack.
+  await prepararTools(o.toolsRepo, yes);
   const tools = listarTools();
   if (!tools.length) { p.cancel(`No tools found in ${TOOLS_DIR}.`); process.exitCode = 1; return; }
   const nombre = o.nombre ?? (yes ? "" : await textoValidado("Project name", "", (v) => (/^[\p{L}\p{N}][\p{L}\p{N} _.-]*$/u.test(v) ? undefined : "Use letters, numbers, spaces, dots, dashes or underscores"), "Plataforma de Pagos"));
@@ -157,7 +160,7 @@ export async function crearProyecto(o: OpcionesCreate) {
   // 4. orqen init with the known stack and environments.
   p.log.step("Preparing the repository for agents (orqen init)…");
   await init({
-    dir, yes, sinAnimacion: true, sinLogo: true, sinOpenspec: o.sinOpenspec, herramientas: o.herramientas,
+    dir, yes, sinAnimacion: true, sinLogo: true, sinOpenspec: o.sinOpenspec, herramientas: o.herramientas, toolsRepo: o.toolsRepo,
     predefinido: { stack: tool.stack, entornos: tool.entornos },
   });
   if (process.exitCode) return;
@@ -183,6 +186,7 @@ export async function crearProyecto(o: OpcionesCreate) {
 export async function crear(que: string | undefined, o: OpcionesCreate) {
   if (!que || ["project", "proyecto", "proyect"].includes(que)) return crearProyecto(o);
   if (que === "list" || que === "stacks") {
+    await prepararTools(o.toolsRepo, !!o.yes || !interactivo());
     for (const t of listarTools()) console.log(`${pc.bold(t.id.padEnd(24))} ${t.nombre}\n${" ".repeat(25)}${gris(t.descripcion)}`);
     return;
   }

@@ -11,6 +11,7 @@
  * Text posted to Jira, the SIS descriptions and the generated analysis.md stay in Spanish: they are read by people.
  */
 import { join } from "node:path";
+import { detectarIdioma } from "../lib/lang.ts";
 import type { Config } from "./config.ts";
 import { SCHEMAS } from "./schemas.ts";
 import {
@@ -175,6 +176,8 @@ export class Process {
         key, state, round: rec.round, branch: rec.branch || undefined,
         // A person is on the other side (everything but the unattended `orqen cycle`): keep them informed and ask them.
         human_present: agent !== "cycle",
+        // The person's language, from the operating system: talk to them in it (artifacts keep their own rules).
+        language: detectarIdioma(),
         supporter: rec.supporter, analyst: rec.analyst, lane: rec.lane, factory: `orqen/work/${key}/round-${rec.round}`,
         issue, sis: rec.sis, comments, environment,
         openspec,

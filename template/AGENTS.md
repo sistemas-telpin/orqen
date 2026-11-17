@@ -11,6 +11,7 @@
 orqen works alongside the person; it does not replace them. While someone is on the other side (they invoked
 `/orqen:support`, `/orqen:analyze`, `/orqen:implement`, `/orqen:pr`, a review command, or asked you directly; `human_present: true` in the context):
 
+- **Talk to them in their system language**: `language` in the stage context, or `orqen lang` (`es` = Spanish, `en` = English). Use it for every message, question, and option you show them. Keep commands, state names, and paths as they are. This is only the conversation; artifacts follow the rules below.
 - **Say what you are about to do before doing it**, in one or two lines, and **wait for their OK** before each important step:
   choosing the lane, writing or changing the spec, the implementation plan, any change outside the plan, deleting or
   rewriting files, adding dependencies, opening a PR, `orqen complete`, and `orqen block`.
@@ -71,6 +72,10 @@ Propose the steps, rollback, and read-only verification. A person authorized by 
 - If you cannot proceed, run `orqen block <KEY> "<specific reason>"`. Human reviewers use `/approve` or `/reject <reason>` in Jira.
 - orqen writes `state.json`, `log.md`, and `round-N/analysis.md` and `.json` under `orqen/work/<KEY>/`. Operational rounds also record execution details under `execution/`. The authoritative workflow state is stored under `orqen/state/` or `cli/.state/`, depending on how the project is configured.
 
+### Implementation execution
+
+`/orqen:implement <SIS>` runs `orqen swarm --file <task> --yes --json --apply` internally after the person approves the implementation plan. Supply the approved analysis, scope, criteria, spec or direct plan, and feedback as task context. ORQEN integrates a verified result into the request branch. Do not ask the person to run the engine or show its worker logs; report scope, progress, decisions and results. A failed run or integration must not advance the stage. Keep the existing approval before `orqen complete`.
+
 ### Integration PR and code review
 
 - `TESTING` opens no PR. The only PR is the integration PR to `DEVEL_BRANCH`, opened with `/orqen:pr` (`orqen pr <KEY> <explanation.md>`) from the request branch. orqen commits pending changes, pushes, and opens or updates it.
@@ -82,7 +87,7 @@ Propose the steps, rollback, and read-only verification. A person authorized by 
 - Do not edit `orqen/state/`, `orqen/work/`, or orqen configuration as part of a REC.
 - Obtain explicit analyst approval before closing analysis, including approval of the selected lane.
 - Record unanswered questions and label assumptions. Read `openspec/specs/` for current behavior before proposing changes.
-- Write in clear, professional English. Follow OpenSpec's structural headings and use SHALL/MUST where required.
+- Write in clear, professional English (this is for artifacts; talk to the person in their system language). Follow OpenSpec's structural headings and use SHALL/MUST where required.
 - Use network access only as required by the stage, such as installing project dependencies for tests.
 
 ### Environments and tests

@@ -153,7 +153,7 @@ test("orqen swarm --plan --yes --json runs a saved plan from the CLI", () => {
   const planFile = join(tools, "plan.json");
   writeFileSync(planFile, JSON.stringify({ summary: "cli", subtasks: [sub("a"), sub("b")] }));
   const cli = fileURLToPath(new URL("../src/index.ts", import.meta.url));
-  const loaders = process.execArgv.filter((a) => !a.startsWith("--test"));
+  const loaders = ["--import", import.meta.resolve("tsx")];
   const r = spawnSync(process.execPath, [...loaders, cli, "swarm", "--plan", planFile, "--yes", "--json", "--no-setup",
     "--small", tiers[0].command, "--large", tiers[1].command], { cwd: repo, encoding: "utf8", env: { ...process.env, NO_COLOR: "1" } });
   assert.equal(r.status, 0, r.stdout + r.stderr);

@@ -28,6 +28,7 @@ export const SWARM_HELP = `  swarm "<task>"          Split a task into small sub
       --small-attempts <n> --large-attempts <n>   Attempts per tier (default 2 and 2)
       --test "<cmd>"      Final verification when the plan has none (default: entornos.tests.unitarios)
       --setup "<cmd>"     Run in each worktree before the agent (default: entornos.preparar); --no-setup
+      --apply             Integrate a successful result into the starting branch (fast-forward only)
       --plan <file.json>  Use an existing plan instead of planning · --plan-only  Only write the plan
       --timeout <min>     Per agent run (default 20) · --keep  Keep worktrees · --yes  No confirmation · --json`;
 
@@ -63,7 +64,7 @@ export async function swarm(argv: string[]) {
       test: { type: "string" }, setup: { type: "string", multiple: true }, "no-setup": { type: "boolean" },
       plan: { type: "string" }, "plan-only": { type: "boolean" },
       timeout: { type: "string" }, keep: { type: "boolean" }, yes: { type: "boolean", short: "y" },
-      json: { type: "boolean" }, dir: { type: "string" }, help: { type: "boolean", short: "h" },
+      apply: { type: "boolean" }, json: { type: "boolean" }, dir: { type: "string" }, help: { type: "boolean", short: "h" },
     },
   });
   if (v.help) return console.log(SWARM_HELP);
@@ -90,6 +91,13 @@ export async function swarm(argv: string[]) {
   const runId = newRunId();
   const stateDir = join(repo, "orqen", "state", "swarm", runId);
   const quiet = !!v.json;
+
+  // Capture the starting checkout before planning, which can take several minutes.
+  let git: SwarmGit | undefined;
+  if (v.apply) {
+    git = new SwarmGit(repo, runId, join(stateDir, "unused"));
+    git.checkApply();
+  }
 
   if (!quiet) p.intro(pc.bold("orqen swarm"));
 
@@ -119,7 +127,7 @@ export async function swarm(argv: string[]) {
   }
 
   // 2. Confirm with the person (unless --yes or unattended)
-  const git = new SwarmGit(repo, runId, join(stateDir, "unused"));
+  git ??= new SwarmGit(repo, runId, join(stateDir, "unused"));
   if (!quiet) {
     p.note(describePlan(plan, tiers).join("\n"), plan.summary);
     p.log.info([
@@ -131,6 +139,7 @@ export async function swarm(argv: string[]) {
   if (!(await confirmar("Launch the swarm with this plan?", true, yes))) { p.cancel("Canceled. The plan is in " + join(stateDir, "plan.json")); return; }
 
   // 3. Run
+  if (v.apply) git.checkApply();
   const report = await runSwarm({
     repo, task: task || plan.summary, plan, tiers, runId, stateDir,
     parallel: num(v.parallel, 4, "parallel"), testCommand, setup,
@@ -138,7 +147,9 @@ export async function swarm(argv: string[]) {
     onEvent: quiet ? undefined : printEvent,
   });
 
-  if (quiet) { console.log(JSON.stringify(report, null, 2)); }
+  if (v.apply && report.ok) git.apply(report.branch);
+
+  if (quiet) { console.log(JSON.stringify({ ...report, applied: !!v.apply && report.ok }, null, 2)); }
   else {
     const lines = report.tasks.map((t) => `${icon[t.status]} ${t.id} ${gris(t.solvedBy ? `${t.solvedBy}, ${t.attempts.length} attempt${t.attempts.length > 1 ? "s" : ""}` : t.reason ?? "")}`);
     if (report.finalTest) lines.push(`${report.finalTest.passed ? icon.merged : icon.failed} final test ${gris(report.finalTest.command)}${report.finalTest.fixAttempts ? gris(` (${report.finalTest.fixAttempts} integrator fix${report.finalTest.fixAttempts > 1 ? "es" : ""})`) : ""}`);
@@ -147,7 +158,7 @@ export async function swarm(argv: string[]) {
       `Result branch: ${pc.cyan(report.branch)} (${report.commits.length} commits)`,
       `Report and logs: ${gris(stateDir)}`,
       `Review: git log --oneline ${report.baseCommit.slice(0, 8)}..${report.branch}`,
-      `Bring it in: git merge ${report.branch}`,
+      v.apply && report.ok ? "Result integrated into the starting branch." : `Bring it in: git merge ${report.branch}`,
     ].join("\n"));
     p.outro(report.ok ? pc.green("Done") : pc.yellow("Done with failures"));
   }

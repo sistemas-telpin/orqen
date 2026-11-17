@@ -4,7 +4,7 @@
  * even when many workers finish at the same time.
  */
 import { spawn } from "node:child_process";
-import { existsSync, mkdirSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, realpathSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { ejecutar } from "../lib/proc.ts";
 
@@ -32,6 +32,7 @@ export class SwarmGit {
   readonly integrationBranch: string;
   readonly integrationDir: string;
   readonly baseCommit: string;
+  private readonly baseBranch: string;
   private readonly identity: string[];
 
   constructor(repo: string, runId: string, root: string) {
@@ -40,6 +41,7 @@ export class SwarmGit {
     const head = git(repo, ["rev-parse", "--verify", "HEAD"], true);
     if (head.codigo !== 0) throw new GitError("The repository has no commits yet: commit something before running the swarm");
     this.baseCommit = head.stdout.trim();
+    this.baseBranch = git(repo, ["rev-parse", "--abbrev-ref", "HEAD"]).stdout.trim();
     this.integrationBranch = `orqen/swarm-${runId}`;
     this.integrationDir = join(root, "_integration");
     this.identity = identityArgs(repo);
@@ -101,13 +103,29 @@ export class SwarmGit {
     return git(this.repo, ["log", "--oneline", "--first-parent", `${this.baseCommit}..${this.integrationBranch}`]).stdout.split(/\r?\n/).filter(Boolean);
   }
 
+  /** Refuse detached HEADs, pending edits and changes to the starting checkout. */
+  checkApply(): void {
+    if (this.baseBranch === "HEAD") throw new GitError("Cannot apply a swarm result to a detached HEAD");
+    const current = git(this.repo, ["rev-parse", "--abbrev-ref", "HEAD"]).stdout.trim();
+    const head = git(this.repo, ["rev-parse", "HEAD"]).stdout.trim();
+    if (current !== this.baseBranch || head !== this.baseCommit) throw new GitError("The checkout changed while the swarm ran; review the integration branch before applying it.");
+    if (this.dirty()) throw new GitError("The checkout has uncommitted changes; commit or move aside pending changes before applying a swarm result.");
+  }
+
+  /** Bring a verified result into the original checkout without overwriting intervening work. */
+  apply(branch: string): void {
+    this.checkApply();
+    git(this.repo, ["merge", "--ff-only", "--", branch]);
+  }
+
   /** Remove worktrees and subtask branches. The integration branch stays (it is the result). */
   cleanup(o: { keepIntegrationWorktree?: boolean } = {}) {
     const list = git(this.repo, ["worktree", "list", "--porcelain"], true).stdout;
     const dirs = list.split(/\r?\n/).filter((l) => l.startsWith("worktree ")).map((l) => l.slice(9).trim());
-    const norm = (p: string) => p.replace(/\\/g, "/").toLowerCase();
+    // Git expands Windows short paths (MATEO-~1); compare canonical paths on both sides.
+    const norm = (p: string) => (existsSync(p) ? realpathSync.native(p) : p).replace(/\\/g, "/").toLowerCase();
     for (const d of dirs) {
-      if (!norm(d).startsWith(norm(this.root))) continue;
+      if (!norm(d).startsWith(norm(this.root) + "/")) continue;
       if (o.keepIntegrationWorktree && norm(d) === norm(this.integrationDir)) continue;
       git(this.repo, ["worktree", "remove", "--force", d], true);
     }

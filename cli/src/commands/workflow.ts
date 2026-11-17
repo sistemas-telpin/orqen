@@ -73,7 +73,8 @@ export async function runWorkflow(cmd: string, rest: string[]) {
       "",
       withHuman
         ? "> **You are working with a person.** Before each important step, tell them what you are about to do and wait for their OK. " +
-          "When in doubt, ask them (concrete options plus your recommendation) instead of assuming. See \"Working with the person\" in AGENTS.md."
+          "When in doubt, ask them (concrete options plus your recommendation) instead of assuming. See \"Working with the person\" in AGENTS.md. " +
+          `Talk to them in ${ctx.language === "es" ? "Spanish" : "English"} (their system language).`
         : "> **Unattended mode: nobody can answer you.** Do not assume. If a doubt changes the outcome, run " +
           `\`orqen block ${key} "<specific question>"\`; a person answers it in Jira.`,
       "",

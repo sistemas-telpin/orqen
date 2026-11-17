@@ -1,5 +1,5 @@
 /**
- * Tools: the catalog of stacks orqen knows how to create and run (`tools/<id>/` in the orqen repo).
+ * Tools: the catalog of stacks orqen knows how to create and run (`cli/tools/<id>/` in a private GitHub clone).
  *
  * Each tool has a `tool.yaml` with:
  *   - requisitos   commands it needs (node, mvn, docker…), with an optional minimum version
@@ -13,7 +13,7 @@
  */
 import { randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
-import { basename, dirname, join } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import semver from "semver";
 import { parse } from "yaml";
@@ -22,8 +22,8 @@ import { ProcesoEntorno } from "./processes.ts";
 import { version } from "./proc.ts";
 import { Stack, type Servicio } from "./stack.ts";
 
-const bundled = import.meta.url.endsWith(".js");
-export const TOOLS_DIR = fileURLToPath(new URL(bundled ? "../tools/" : "../../../tools/", import.meta.url));
+// Source and compiled modules have the same depth beneath the CLI installation.
+export const TOOLS_DIR = resolve(process.env.ORQEN_TOOLS_DIR || fileURLToPath(new URL("../../tools/", import.meta.url)));
 
 const Requisito = z.object({ comando: z.string(), version: z.string().nullish(), ayuda: z.string().nullish() });
 const Parametro = z.object({
@@ -73,19 +73,19 @@ export const render = (texto: string, vars: Variables) =>
   texto.replace(/\{\{([A-Z][A-Z0-9_]*)\}\}/g, (m, k) => (k in vars ? vars[k] : m));
 
 // Normalize line endings: on Windows, Git may check the catalog out with CRLF.
-const leerYaml = (id: string) => readFileSync(join(TOOLS_DIR, id, "tool.yaml"), "utf8").replace(/\r\n/g, "\n");
+const leerYaml = (id: string, dir = TOOLS_DIR) => readFileSync(join(dir, id, "tool.yaml"), "utf8").replace(/\r\n/g, "\n");
 
 export interface ResumenTool { id: string; nombre: string; descripcion: string }
 
 /** Available tools (folders with a tool.yaml; `_shared` and others starting with `_` are not tools). */
-export function listarTools(): ResumenTool[] {
-  if (!existsSync(TOOLS_DIR)) return [];
-  return readdirSync(TOOLS_DIR)
-    .filter((d) => !d.startsWith("_") && existsSync(join(TOOLS_DIR, d, "tool.yaml")))
+export function listarTools(dir = TOOLS_DIR): ResumenTool[] {
+  if (!existsSync(dir)) return [];
+  return readdirSync(dir)
+    .filter((d) => !d.startsWith("_") && existsSync(join(dir, d, "tool.yaml")))
     .sort()
     .map((id) => {
       // Placeholders are not valid YAML everywhere: read only the top-level text fields.
-      const y = leerYaml(id);
+      const y = leerYaml(id, dir);
       const campo = (k: string) => y.match(new RegExp(`^${k}:\\s*(.+)$`, "m"))?.[1].trim().replace(/^["']|["']$/g, "") ?? "";
       return { id, nombre: campo("nombre") || id, descripcion: campo("descripcion") };
     });

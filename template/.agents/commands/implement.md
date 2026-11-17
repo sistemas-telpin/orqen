@@ -8,7 +8,9 @@ Implement the request identified by `$ARGUMENTS` from the repository root. orqen
 
 ## Rules
 
+- **Talk to the person in their system language.** Run `orqen lang` once at the start (`es` = Spanish, `en` = English; the stage context also has it as `language`) and use it for every message, question, and option. Keep commands, state names, and paths as they are. Files and texts for Jira follow their own rules.
 - **Work with the person who invoked this command.** Before each important step, tell them what you are about to do and wait for their OK. When in doubt, ask them (with `AskUserQuestion` when available: concrete options plus your recommendation); never assume what you can ask. After each step, report what you did and what comes next.
+- **Use `orqen swarm` internally for implementation.** Do not ask the person to run it, announce the engine, or request a separate approval for choosing it. Discuss the SIS scope, plan, decisions and results in normal terms. Capture its JSON output instead of forwarding worker logs. Never silently replace a failed run with manual implementation.
 - Use Jira and Jira MCP for read-only access. orqen posts comments and updates issue transitions.
 - Leave Git operations, branch changes, OpenSpec archiving, and writes to `orqen/state/`, `orqen/work/`, and orqen configuration to orqen.
 - Follow the approved scope, specifications or plan, and acceptance criteria. Ask the user or block the request if you need a decision to proceed.
@@ -31,7 +33,15 @@ Implement the request identified by `$ARGUMENTS` from the repository root. orqen
    Read `previous_stages.ANALYSIS` and the work record as needed. Address failures in `test_result`, prior `previous_stages.TESTING`, and review feedback in `human_feedback` first.
    - For `light` or `full`, use `openspec-apply-change`, `/opsx:apply`, or `openspec instructions apply --change <change> --json`. Read the proposal, design, specs, and tasks, then check off completed tasks in `tasks.md`.
    - For `direct`, follow the analysis `plan` in order.
-   - Follow repository conventions and current specs. Write automated tests for each Scenario or acceptance criterion. Run `orqen env test` and project linters. Use `environment.commands` and `environment.variables` from the context.
+   - Follow repository conventions and current specs. Write automated tests for each Scenario or acceptance criterion. Use `environment.commands` and `environment.variables` from the context.
+   - Once the implementation plan is approved, write a temporary task file **outside the repository**. Include the SIS and REC keys, the approved plan and acceptance criteria, lane, branch, OpenSpec change and file paths, relevant analysis, prior test failures and review feedback, environment variables needed for tests (never Jira tokens), and repository rules. Workers must stay within that scope, ask no questions themselves, leave workflow state and Jira alone, and never invoke this slash command or another swarm recursively. They must report blockers instead of guessing.
+   - Make sure the approved artifacts are committed on the request branch through orqen before launching; do not discard or commit unrelated edits. If pending changes prevent this, ask the person how to handle them.
+   - Execute the implementation internally and capture its report:
+     ```sh
+     orqen swarm --file <temporary-task-file> --yes --json --apply
+     ```
+     This command plans and runs the implementation, verifies it, and integrates a successful result into the branch prepared by `orqen take`. Do not run the implementation yourself in parallel. If the command fails, the report has `ok: false`, or integration fails, do not advance the stage or claim success: inspect the report and ask the person about any decision needed. Keep partial work available for diagnosis.
+   - Review the applied diff against the approved plan. For `light` or `full`, verify and check off the completed OpenSpec tasks; do not mark unfinished work complete. Run `orqen env test` and project linters. Show only the implementation outcome, verification evidence and any decisions needed, without exposing internal orchestration details.
 5. Show the person a summary (what was implemented, tests and results, assumptions or deviations) and **ask for their OK to close the stage**. With their OK, write the JSON output and submit it:
    ```sh
    orqen complete <SIS> <output.json> --agent implementer

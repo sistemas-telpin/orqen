@@ -7,13 +7,15 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { parse, stringify } from "yaml";
 import { hash } from "../src/lib/kit.ts";
-import { MONOREPO, repoTemporal } from "./helpers.ts";
+import { catalogoTemporal, MONOREPO, repoTemporal } from "./helpers.ts";
 
 const CLI = fileURLToPath(new URL("../src/index.ts", import.meta.url));
 const TSX = fileURLToPath(new URL("../node_modules/tsx/dist/cli.mjs", import.meta.url));
 
+const catalogo = catalogoTemporal();
+
 function orqen(cwd: string, ...args: string[]) {
-  const r = spawnSync(process.execPath, [TSX, CLI, ...args], { cwd, encoding: "utf8", env: { ...process.env, NO_COLOR: "1" } });
+  const r = spawnSync(process.execPath, [TSX, CLI, ...args], { cwd, encoding: "utf8", env: { ...process.env, NO_COLOR: "1", ORQEN_TOOLS_DIR: catalogo, ORQEN_TOOLS_REPO: "@example/catalog" } });
   return { codigo: r.status, salida: r.stdout + r.stderr };
 }
 

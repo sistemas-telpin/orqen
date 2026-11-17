@@ -23,7 +23,7 @@ orqen works alongside the person; it does not replace them. While someone is on 
 
 ### Support (optional)
 
-With `SUPPORT_STAGE=on`, a new request waits for a support person before the analyst.
+With `SUPPORT_STAGE=on`, `orqen pending` sends a new request to a support person before the analyst. `orqen support` also works with it off, to pass a particular request through support.
 
 1. Start with `/orqen:support REC-1234` or `orqen support REC-1234 --person "<name>"`. A person from support leads this stage.
 2. Read the issue, comments, similar requests, and the documented behavior. Look for the answer before asking the person, and ask them only what you cannot find.

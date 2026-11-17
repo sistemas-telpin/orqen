@@ -16,7 +16,7 @@ export const WORKFLOW_COMMANDS = ["pending", "support", "analyze", "lane", "take
 
 export const WORKFLOW_HELP = `Customer request workflow:
   pending [--json]                      List pending analyst and agent work
-  support <KEY> [--person NAME]         Start first-line support (SUPPORT_STAGE=on)
+  support <KEY> [--person NAME]         Start first-line support
   analyze <KEY> [--analyst NAME]        Start analysis
   lane <KEY> <direct|light|full>        Record the lane
   take <KEY> [--agent NAME]             Claim an agent stage

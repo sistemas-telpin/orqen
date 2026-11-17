@@ -20,7 +20,7 @@ Handle the customer request in `$ARGUMENTS` with the support person who invoked 
    ```sh
    orqen support <KEY> --person "<name>" --agent support
    ```
-   If this fails, explain the reason to the person and stop. If the support stage is off, tell them to use `/orqen:analyze <KEY>`.
+   If this fails, explain the reason to the person and stop.
 3. Read the issue and comments, then look for the answer: similar requests, the documented behavior in `openspec/specs/`, and the code when needed. Report what you found.
 4. Agree the outcome with the person: `resolved` (the customer can be answered without changes) or `escalate` (the analyst must take it). When unsure, recommend `escalate`.
 5. Draft the reply to the customer (or the escalation summary for the analyst), show it, and adjust it until the person approves it.

@@ -22,7 +22,7 @@ function repoRoot(): string {
 export interface Config {
   jiraUrl: string; jiraUser: string; jiraToken: string; jiraDeployment: "cloud" | "server";
   jql: string;
-  /** SUPPORT_STAGE=on: new requests wait for the support person first (the analyst can still take a NEW one directly). */
+  /** SUPPORT_STAGE=on: `orqen pending` sends new requests to the support person first. `orqen support` works either way, and the analyst can still take a NEW one directly. */
   supportStage: boolean;
   /** analysis = analysts (they also unblock BLOCKED together with code). */
   approvers: { analysis?: string[]; code: string[]; client: string[]; execution?: string[] };

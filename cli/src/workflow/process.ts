@@ -61,11 +61,10 @@ export class Process {
 
   // ================================================================ support
   /**
-   * Opens (or resumes) the first-line handling of a REC (SUPPORT_STAGE=on). The support person drives it; the agent helps them
+   * Opens (or resumes) the first-line handling of a REC (available even with SUPPORT_STAGE=off: that variable only decides whether new requests are routed here). The support person drives it; the agent helps them
    * find an answer. The stage ends resolved (the client confirms in ACCEPTANCE) or escalated to the analyst.
    */
   async support(key: string, agent = "agent", person = agent) {
-    if (!this.cfg.supportStage) throw new Error("The support stage is off (SUPPORT_STAGE=off): use `orqen analyze` to analyze the request.");
     const rec = this.store.get(key) ?? newRec(key);
     if (rec.state !== "NEW" && rec.state !== "SUPPORT")
       throw new Error(`${key} is not waiting for support (state: ${rec.state}).${rec.state === "ANALYSIS" ? " It was escalated to the analyst: use `orqen analyze`." : ""}`);

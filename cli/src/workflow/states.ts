@@ -2,7 +2,7 @@
  * REC state machine. This code decides the FLOW; the agent (any one:
  * Claude Code, Codex, Cursor, Copilot...) only produces content at each stage.
  *
- * SUPPORT (optional, `SUPPORT_STAGE=on`) and ANALYSIS are the stretches driven by a person (support via `/orqen:support`,
+ * SUPPORT (optional: `SUPPORT_STAGE=on` routes new requests to it, `orqen support` always works) and ANALYSIS are the stretches driven by a person (support via `/orqen:support`,
  * the analyst via `/orqen:analyze`). Once ANALYSIS closes with the analyst's OK, the lane, the spec (if any) and the SIS are decided.
  */
 export const State = {

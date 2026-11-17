@@ -41,10 +41,13 @@ const ESCALATE = (over: Record<string, unknown> = {}) => ({
   outcome: "escalate", escalation_summary: "No existe el formato pedido: hay que definir alcance con el cliente.", support_ok: true, ...over,
 });
 
-test("support off: NEW goes to the analyst and `support` is refused", async () => {
-  const { p } = setup(false);
+test("support off: NEW is listed for the analyst, but `support` still works on a particular request", async () => {
+  const { p, est } = setup(false);
   assert.deepEqual((await p.review()).map((x) => [x.state, x.for]), [["NEW", "analyst"]]);
-  await assert.rejects(p.support("REC-1", "a", "Sofi"), /support stage is off/);
+  await p.support("REC-1", "codex", "Sofi");
+  assert.equal(est().state, "SUPPORT");
+  assert.deepEqual((await p.review()).map((x) => [x.state, x.for]), [["SUPPORT", "support"]]);
+  assert.deepEqual(await p.complete("REC-1", RESOLVED(), "codex"), { ok: true, next: "ACCEPTANCE" });
 });
 
 test("support on: NEW is for support, the person leads, an agent cannot take it", async () => {

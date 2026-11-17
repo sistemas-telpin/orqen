@@ -33,7 +33,7 @@ Opcionalmente, una persona de **soporte** atiende primero el reclamo con el agen
 ## Soporte (opcional): `/orqen:support REC-1234`
 
 Es la etapa **antes del analista**: la persona que recibe el reclamo intenta responderle al cliente sin llegar a un análisis ni a
-un desarrollo. Está apagada por defecto; se activa con `SUPPORT_STAGE=on` en `orqen/.env`. Con la etapa apagada, el flujo es el de siempre
+un desarrollo. `SUPPORT_STAGE` (en `orqen/.env`, apagada por defecto) solo decide si `orqen pending` manda los REC nuevos a soporte: con `on` aparecen primero ahí; con `off`, el flujo es el de siempre
 (`NEW` → `ANALYSIS`).
 
 ```mermaid
@@ -282,7 +282,7 @@ Jira, git, PR y `openspec archive` los ejecuta solo `orqen`; el agente produce c
 
 | Estado         | Quién             | Qué pasa                                                                                                      | OpenSpec                                                                                                                                                      |
 | -------------- | ----------------- | ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| SUPPORT        | soporte + agente  | opcional (`SUPPORT_STAGE=on`): busca la respuesta y la redacta con la persona. **Resuelto** → ACCEPTANCE (sin SIS); **escalar** → ANALYSIS con el resumen | —                                                                                                                                                             |
+| SUPPORT        | soporte + agente  | opcional: busca la respuesta y la redacta con la persona. **Resuelto** → ACCEPTANCE (sin SIS); **escalar** → ANALYSIS con el resumen | —                                                                                                                                                             |
 | ANALYSIS       | analista + agente | grilling → OK → carril → spec (si corresponde) → SIS vinculado al REC                                         | lee `openspec/specs`; liviano/completo: `orqen lane` crea el change y `orqen complete` exige `validate --strict`, artefactos completos y `(Nh)` en cada tarea |
 | WAITING_CLIENT | cliente           | responde en Jira (máx. 3 rondas)                                                                              | —                                                                                                                                                             |
 | DEVELOPMENT    | agente            | implementa con el entorno levantado; con spec tilda `tasks.md`, en directo sigue el `plan`                    | flujo _apply_; `orqen` rechaza si queda alguna tarea sin tildar                                                                                               |
@@ -378,7 +378,7 @@ actualizan solos; para los editados elegís conservar, reemplazar o dejar una co
 | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------ |
 | `JIRA_URL`, `JIRA_USER`, `JIRA_TOKEN`, `JIRA_DEPLOYMENT`      | Conexión a Jira (`cloud` o `server`)                                                       |
 | `REC_JQL`                                                    | Qué REC procesa `orqen`                                                                    |
-| `SUPPORT_STAGE`                                              | `on`: los REC nuevos pasan primero por soporte (`/orqen:support`). Por defecto `off`. No hay lista de personas de soporte: puede tomarlo cualquiera |
+| `SUPPORT_STAGE`                                              | `on`: `orqen pending` manda los REC nuevos primero a soporte. Por defecto `off`; `/orqen:support` funciona con cualquiera de los dos valores. No hay lista de personas de soporte: puede tomarlo cualquiera |
 | `SIS_PROJECT`, `SIS_TYPE`, `SIS_LINK`, `SIS_TYPE_OPERATIONAL` | Cómo se crea y vincula el SIS                                                              |
 | `JIRA_TRANSITIONS`, `SIS_TRANSITIONS`                        | Transiciones de Jira por estado                                                            |
 | `APPROVERS_ANALYSIS`, `APPROVERS_CODE`, `APPROVERS_CLIENT`, `APPROVERS_EXECUTION` | Quién puede decidir en cada gate de Jira, con cuentas de Jira (vacío = cualquiera). `APPROVERS_CODE` también destraba un BLOCKED |
@@ -476,7 +476,7 @@ Los modelos son comandos headless, así que se puede usar cualquier agente: `--s
 
 ## Uso
 
-**Soporte (opcional)**: con `SUPPORT_STAGE=on`, en Claude Code, `/orqen:support REC-1234`. En otro agente: _"atendé el REC-1234 como soporte"_ (`orqen support` → búsqueda → `orqen complete`). Si resuelve, `orqen` publica la respuesta y el cliente confirma con `/approve` o `/reject <motivo>`; si escala, el analista parte del resumen. El analista también puede tomar un REC nuevo directo con `analyze`.
+**Soporte (opcional)**: en Claude Code, `/orqen:support REC-1234`. En otro agente: _"atendé el REC-1234 como soporte"_ (`orqen support` → búsqueda → `orqen complete`). Si resuelve, `orqen` publica la respuesta y el cliente confirma con `/approve` o `/reject <motivo>`; si escala, el analista parte del resumen. El analista también puede tomar un REC nuevo directo con `analyze`. `support` funciona aunque `SUPPORT_STAGE` esté en `off`: sirve para pasar un REC puntual por soporte sin cambiar el flujo del resto.
 
 **Análisis (analista)**: en Claude Code, `/orqen:analyze REC-1234`. En otro agente: _"analizá el REC-1234"_ (el agente lee
 `AGENTS.md` y corre `orqen analyze` → grilling → `orqen lane` → `orqen complete`).
@@ -499,7 +499,7 @@ orqen cycle --loop     # cada REC_INTERVAL_SEC: avanza gates y lanza AGENT_CMD p
 ```
 
 Para cambiar de agente alcanza con cambiar `AGENT_CMD`, por ejemplo a `codex exec --full-auto {prompt}`.
-Los REC nuevos no se toman solos: quedan en NEW hasta que soporte corre `support` (con `SUPPORT_STAGE=on`) o un analista corre `analyze`.
+Los REC nuevos no se toman solos: quedan en NEW hasta que soporte corre `support` o un analista corre `analyze` (con `SUPPORT_STAGE=on`, `orqen pending` los lista primero para soporte).
 
 ### Comandos
 
@@ -512,7 +512,7 @@ orqen env setup | up [--all] | test [tipo] | status | down
 orqen swarm "<tarea>" [--parallel N] [--plan-only | --plan plan.json] [--small C] [--large C] [--yes]
 
 orqen pending [--json]                 REC con trabajo: para soporte / para analizar / para un agente
-orqen support <KEY> [--person N]       Abre la atención de soporte (SUPPORT_STAGE=on)
+orqen support <KEY> [--person N]       Abre la atención de soporte (anda con SUPPORT_STAGE on u off)
 orqen analyze <KEY> [--analyst N]      Abre el análisis con un analista
 orqen lane <KEY> <direct|light|full>   Registra el carril (light/full: rama + change de OpenSpec)
 orqen take <KEY> [--agent N]           Reserva una etapa de agente y prepara rama y entorno

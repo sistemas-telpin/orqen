@@ -9,13 +9,13 @@ orqen init               # Run from the repository you want to initialize
 
 `orqen init [dir]` runs the following setup:
 
-1. Displays the ORQEN logo and checks Node (20.12 or later), Git, a package manager, and optional Docker. The animation needs a terminal with at least 92 columns and 23 rows. Press Enter to continue. Non-interactive terminals, CI, `--yes`, and `--no-animation` use the static logo.
-2. Detects components and services from manifests such as `package.json`, `pom.xml`, and `pyproject.toml`, as well as Dockerfiles, existing Compose files, Prisma, and `.env.example`.
+1. Displays the ORQEN logo and checks Node (20.12 or later), Git, and a package manager. The animation needs a terminal with at least 92 columns and 23 rows. Press Enter to continue. Non-interactive terminals, CI, `--yes`, and `--no-animation` use the static logo.
+2. Detects components and services from manifests such as `package.json`, `pom.xml`, and `pyproject.toml`, as well as Prisma and `.env.example`, including the command that starts each part (`npm run dev`, `npm start`…).
 3. Uses an installed AI agent to review a short repository summary in the background. It validates the proposal with Zod. Use `--deep` to let the agent explore the repository or `--no-ai` to use automatic detection only.
-4. Lets you confirm or edit components, services, tests, migrations, and seed commands.
+4. Lets you confirm or edit components, the command that starts each part, tests, migrations, and seed commands.
 5. Finds a compatible OpenSpec installation (version 2.x), installs it if needed, and runs `openspec init` for the selected tools with English artifact output.
 6. Collects Jira connection settings, REC and SIS projects, and approvers in the ignored `orqen/.env`. With `--yes`, it uses example values for a new file.
-7. Writes the environment configuration, Compose file, agent instructions, plugin, stage guides, and manifest. It merges the OpenSpec workflow rules with the repository's existing configuration.
+7. Writes the environment configuration (no Docker in between), agent instructions, plugin, stage guides, and manifest. It merges the OpenSpec workflow rules with the repository's existing configuration.
 
 Other options include `--agent "<command>"`, `--tools claude,codex`, and `--no-openspec`. Non-interactive runs use the defaults. If a managed file conflicts, `--yes` writes the proposed version alongside the original.
 
@@ -29,13 +29,13 @@ Use `--no-cli`, `--no-openspec`, or `--no-kit` to skip a step. Run `orqen init` 
 
 ```sh
 orqen env setup
-orqen env up [--apps]
+orqen env up [--all]
 orqen env test [unitarios|integracion|e2e|visual]
 orqen env status
 orqen env down
 ```
 
-`up` waits for services, then runs migrations and seed commands. The test commands receive variables from `entornos.variables` in `orqen/config.yaml`. The values `unitarios` and `integracion` select unit and integration tests.
+`up` starts the processes in `entornos.procesos` in the background (`--all` includes the `cuando: e2e` ones, such as the frontend), waits until each one responds on its port, URL, or log line, then runs migrations and seed commands. `down` stops what orqen started; `status` shows what is running and where each log is (`orqen/state/logs/`). The test commands receive variables from `entornos.variables` in `orqen/config.yaml`. The values `unitarios` and `integracion` select unit and integration tests.
 
 ## Process a request
 

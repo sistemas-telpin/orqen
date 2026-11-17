@@ -16,18 +16,10 @@ export function chequearSistema(repo: string): Chequeo[] {
   const git = version("git");
   const esRepo = git ? ejecutar("git", ["rev-parse", "--is-inside-work-tree"], { cwd: repo }).codigo === 0 : false;
   const pnpm = version("pnpm"), npm = version("npm");
-  const docker = version("docker");
-  const compose = docker ? version("docker", ["compose", "version", "--short"]) : null;
-  const daemon = docker ? ejecutar("docker", ["info", "--format", "{{.ServerVersion}}"], { timeoutMs: 15_000 }).codigo === 0 : false;
   return [
     { nombre: "Node.js", ok: semver.gte(node, "20.12.0"), detalle: `v${node}`, requerido: true, ayuda: "Install Node 20.12 or later" },
     { nombre: "git", ok: !!git && esRepo, detalle: git ? (esRepo ? git.replace(/^git version /, "v") : "directory is not a Git repository") : "not installed", requerido: true, ayuda: git ? "Run `git init` or pass a repository path" : "Install Git" },
     { nombre: "pnpm / npm", ok: !!(pnpm || npm), detalle: [pnpm && `pnpm ${pnpm}`, npm && `npm ${npm}`].filter(Boolean).join(" · ") || "not installed", requerido: true },
-    {
-      nombre: "Docker", ok: !!docker && !!compose && daemon, requerido: false,
-      detalle: !docker ? "not installed" : !compose ? "Docker Compose v2 is missing" : daemon ? `${docker.replace(/^Docker version /, "v").split(",")[0]} · compose ${compose}` : "installed, but the daemon is unavailable",
-      ayuda: "Compose configuration can be generated now. Install Docker to start services (Docker Desktop on Windows or macOS).",
-    },
   ];
 }
 

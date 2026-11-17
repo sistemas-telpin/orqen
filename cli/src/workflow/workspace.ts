@@ -1,8 +1,7 @@
 /** git, tests and PR: always run by the process, never by the agent. */
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
-import { join, relative } from "node:path";
-import { parse as parseYaml } from "yaml";
+import { relative } from "node:path";
+import { bajarProcesos, levantarProcesos } from "../lib/processes.ts";
 import type { Config } from "./config.ts";
 
 /** Environment setup result included in the agent context. */
@@ -22,7 +21,8 @@ export interface Workspace {
   currentBranch(): string;
   /** `path` limits the commit to that path; `branch` commits only if it is the active branch (avoids committing on another REC's branch). */
   commit(key: string, message: string, opts?: { path?: string; branch?: string }): boolean;
-  startEnvironment?(apps: boolean): EnvironmentResult;
+  /** Install dependencies, start the processes (all, or only `cuando: siempre`), wait until ready, migrate and seed. */
+  startEnvironment?(all: boolean): Promise<EnvironmentResult>;
   stopEnvironment?(): void;
   runTests(): { ok: boolean; output: string };
   push(branch: string): void;
@@ -82,47 +82,30 @@ export class GitWorkspace implements Workspace {
     return { ok: p.status === 0, output: ((p.stdout ?? "") + (p.stderr ?? "")).slice(-15_000) };
   }
 
-  private compose(args: string, apps = false) {
-    return `docker compose -f "${this.cfg.environment!.compose}"${apps ? " --profile apps" : ""} ${args}`;
-  }
-
-  /** Check for Compose services, including the apps profile when requested. */
-  private hasComposeServices(apps: boolean): boolean {
-    const e = this.cfg.environment;
-    if (!e) return false;
-    const ruta = join(this.cfg.repoPath, e.compose);
-    if (!existsSync(ruta)) return false;
-    try {
-      const svcs = Object.values<any>(parseYaml(readFileSync(ruta, "utf8"))?.services ?? {});
-      return svcs.some((s) => apps || !(s?.profiles ?? []).includes("apps"));
-    } catch { return false; }
-  }
-
-  startEnvironment(apps: boolean): EnvironmentResult {
+  async startEnvironment(all: boolean): Promise<EnvironmentResult> {
     const e = this.cfg.environment;
     if (!e) return { ok: true, detail: "No environment configuration in orqen/config.yaml. Run `orqen init`." };
     const commands = Object.fromEntries(Object.entries(e.tests).filter(([, v]) => v).map(([k]) => [k, `orqen env test ${k}`]));
-    const hecho: string[] = [];
-    const fallar = (paso: string, output: string): EnvironmentResult => ({
+    const done: string[] = [];
+    const fail = (step: string, output: string): EnvironmentResult => ({
       ok: false, variables: e.variables, commands, output: output.slice(-3000),
-      detail: `Failed: "${paso}". ${hecho.length ? `Completed: ${hecho.join(", ")}. ` : ""}Review orqen/config.yaml and ${e.compose}. If you cannot resolve the issue, block the request.`,
+      detail: `Failed: "${step}". ${done.length ? `Completed: ${done.join("; ")}. ` : ""}Review entornos in orqen/config.yaml. If you cannot resolve it, ask the person (or block the request when nobody can answer).`,
     });
-    for (const cmd of e.preparar) { const r = this.runCommand(cmd); if (!r.ok) return fallar(cmd, r.output); }
-    if (e.preparar.length) hecho.push("dependencies installed");
-    if (this.hasComposeServices(apps)) {
-      const r = this.runCommand(this.compose("up -d --wait --remove-orphans", apps), 15);
-      if (!r.ok) return fallar("docker compose up", r.output);
-      hecho.push(apps ? "services and apps started" : "services started");
+    for (const cmd of e.preparar) { const r = this.runCommand(cmd); if (!r.ok) return fail(cmd, r.output); }
+    if (e.preparar.length) done.push("dependencies installed");
+    if (e.procesos.length) {
+      const r = await levantarProcesos(this.cfg.repoPath, e.procesos, e.variables, { todos: all });
+      if (!r.ok) return fail(r.detalle, r.salida ?? "");
+      if (r.levantados.length) done.push(`processes: ${r.levantados.join(", ")}`);
     }
-    for (const cmd of [...e.migrar, ...e.seed]) { const r = this.runCommand(cmd); if (!r.ok) return fallar(cmd, r.output); }
-    if (e.migrar.length) hecho.push("migrations applied");
-    if (e.seed.length) hecho.push("test data loaded");
-    return { ok: true, detail: hecho.length ? `Environment ready: ${hecho.join(", ")}.` : "No environment setup needed.", variables: e.variables, commands };
+    for (const cmd of [...e.migrar, ...e.seed]) { const r = this.runCommand(cmd); if (!r.ok) return fail(cmd, r.output); }
+    if (e.migrar.length) done.push("migrations applied");
+    if (e.seed.length) done.push("test data loaded");
+    return { ok: true, detail: done.length ? `Environment ready: ${done.join("; ")}.` : "No environment setup needed.", variables: e.variables, commands };
   }
 
   stopEnvironment() {
-    if (!this.cfg.environment || !this.hasComposeServices(true)) return;
-    this.runCommand(this.compose("down -v --remove-orphans", true), 5);
+    bajarProcesos(this.cfg.repoPath);
   }
 
   runTests() {

@@ -1,11 +1,11 @@
 /**
  * Initialize a repository with OpenSpec, the orqen kit, and an environment configuration.
  * Automatic detection and optional AI analysis propose a stack for the user to confirm.
- * The CLI writes the configuration, Compose file, and workflow templates.
+ * The CLI writes the configuration (with the command that starts each part of the project) and the workflow templates.
+ * No Docker in between.
  */
 import { basename, resolve } from "node:path";
 import { agentesInstalados, comandoRapido, explorarConAgente, explorarRapidoAislado, type ResultadoExploracion } from "../lib/agent.ts";
-import { ARCHIVO_COMPOSE, generarCompose } from "../lib/compose.ts";
 import { ARCHIVO_CONFIG, entornosDesdeStack, escribirConfig, existeConfig, type Config } from "../lib/config.ts";
 import { detectar } from "../lib/detect.ts";
 import { escribirEnv, jqlDeProyecto, leerEnv, proyectoDeJql, RUTA_ENV } from "../lib/env.ts";
@@ -15,7 +15,8 @@ import {
   RANGO_OPENSPEC, ultimaVersionOpenSpec, VERSION_MINIMA, type Instalacion,
 } from "../lib/openspec.ts";
 import { chequearSistema, ramaBase, VERSION_CLI } from "../lib/system.ts";
-import { CATALOGO, resumenStack, type Servicio, type Stack, TIPOS_SERVICIO } from "../lib/stack.ts";
+import { resumenStack, type Stack } from "../lib/stack.ts";
+import type { ProcesoEntorno } from "../lib/processes.ts";
 import { mostrarLogo } from "../ui/logo.ts";
 import {
   azul, confirmar, diffColoreado, elegir, elegirVarios, gris, interactivo, magenta, p, pc, salirSiCancela, secreto, texto, textoValidado, tick,
@@ -84,7 +85,7 @@ export async function init(o: OpcionesInit) {
 
   // 2. Detect the stack and analyze it with AI when requested.
   const s = p.spinner();
-  s.start("Inspecting manifests, Dockerfiles, Compose files, and dependencies…");
+  s.start("Inspecting manifests, scripts, and dependencies…");
   const deteccion = detectar(repo);
   s.stop(`Automatic detection: ${deteccion.stack.componentes.length} component(s), ${deteccion.stack.servicios.length} service(s)`);
   if (deteccion.evidencias.length) p.log.message(gris(deteccion.evidencias.slice(0, 15).map((e) => `· ${e}`).join("\n") + (deteccion.evidencias.length > 15 ? `\n· … ${deteccion.evidencias.length - 15} more` : "")));
@@ -160,9 +161,10 @@ export async function init(o: OpcionesInit) {
     entornos: entornosDesdeStack(stack),
   };
   const vars = { RESUMEN_STACK: resumenStack(stack), BASE_BRANCH: config.proyecto.rama_base, AGENT_CMD: comandoAgente ? `${comandoAgente}` : "claude -p --permission-mode acceptEdits" };
-  const compose = generarCompose(stack, `orqen-${nombre}`);
+  // Review how each part of the project starts before writing anything.
+  config.entornos = await revisarProcesos(config.entornos, yes);
 
-  const plan = planificar(repo, vars, { extra: { [ARCHIVO_COMPOSE]: compose } });
+  const plan = planificar(repo, vars);
   p.note(resumenPlan(plan, config), "Files to write");
   if (!(await confirmar("Write these files?", true, yes))) { p.outro("Canceled. The kit was not written."); return; }
 
@@ -175,15 +177,15 @@ export async function init(o: OpcionesInit) {
   const env = leerEnv(repo) ?? {};
   const faltanEnv = ["JIRA_URL", "JIRA_USER", "JIRA_TOKEN"].filter((k) => !env[k] || /your-company|tu-empresa/.test(env[k]));
   const lado = res.filter((r) => r.accion === "guardado-al-lado");
-  p.log.success(`${ARCHIVO_CONFIG}, ${ARCHIVO_COMPOSE} and kit v${VERSION_CLI} installed`);
+  p.log.success(`${ARCHIVO_CONFIG} and kit v${VERSION_CLI} installed`);
   for (const r of lado) p.log.warn(`${r.ruta}: the proposed version is in ${r.detalle} for you to merge`);
 
   const mk = marketplace(existsSync(join(repo, MARKETPLACE)) ? readFileSync(join(repo, MARKETPLACE), "utf8") : undefined).nombre;
   const pasos = [
     ...(faltanEnv.length ? [`Complete ${pc.cyan(RUTA_ENV)}: missing ${faltanEnv.join(", ")}. Git ignores this file.`] : []),
-    `Review ${pc.cyan(ARCHIVO_CONFIG)} and ${pc.cyan(ARCHIVO_COMPOSE)}, then try: ${pc.cyan("orqen env up")} · ${pc.cyan("orqen env test")}`,
+    `Review ${pc.cyan(ARCHIVO_CONFIG)}, then try: ${pc.cyan("orqen env up")} · ${pc.cyan("orqen env test")} · ${pc.cyan("orqen env down")}`,
     `In Claude Code: ${pc.cyan("/plugin marketplace add ./")} and ${pc.cyan(`/plugin install orqen@${mk}`)}`,
-    `Commit the changes (orqen/config.yaml, compose, AGENTS.md, orqen/, openspec/).`,
+    `Commit the changes (orqen/, AGENTS.md, CLAUDE.md, openspec/).`,
   ];
   p.note(pasos.map((x, i) => `${pc.bold(`${i + 1}.`)} ${x}`).join("\n"), "Next steps");
   p.outro(`${magenta("//")} ${pc.bold("From request to production.")}`);
@@ -247,7 +249,7 @@ async function revisarStack(stack: Stack, yes: boolean, hayAgente: boolean): Pro
   p.note(resumenStack(stack), "Proposed stack");
   const accion = await elegir("How would you like to proceed?", [
     { value: "ok", label: "Accept the proposal" },
-    { value: "ajustar", label: "Edit services and commands" },
+    { value: "ajustar", label: "Edit components and test commands" },
     ...(hayAgente ? [{ value: "profundo", label: "Let the agent explore the repository in depth", hint: "More detail, takes a few minutes" }] : []),
   ], "ok", yes);
   if (accion === "ok") return stack;
@@ -256,14 +258,6 @@ async function revisarStack(stack: Stack, yes: boolean, hayAgente: boolean): Pro
   const comps = await elegirVarios("Components to include",
     stack.componentes.map((c) => ({ value: c.nombre, label: `${c.nombre} ${gris(`(${c.ruta})`)}`, hint: [c.tipo, c.framework ?? c.lenguaje].join(" · ") })),
     stack.componentes.map((c) => c.nombre), false);
-  const servs = await elegirVarios("Services to run in Docker",
-    stack.servicios.map((x) => ({ value: x.nombre, label: `${x.nombre} ${gris(`(${x.tipo})`)}`, hint: x.motivo ?? undefined })),
-    stack.servicios.map((x) => x.nombre), false);
-  const disponibles = TIPOS_SERVICIO.filter((t) => t !== "otro" && !stack.servicios.some((x) => x.tipo === t));
-  const extra = await elegirVarios("Add other services?",
-    disponibles.map((t) => ({ value: t, label: t, hint: CATALOGO[t as Exclude<Servicio["tipo"], "otro">].imagen })), [], false);
-
-  const nuevos: Servicio[] = extra.map((t) => ({ nombre: t, tipo: t as Servicio["tipo"], variables: {}, motivo: "Added manually" }));
   const tests = { ...stack.tests };
   for (const k of ["unitarios", "integracion", "e2e", "visual"] as const) {
     tests[k] = (await texto(`Test command for ${k} (leave blank to skip)`, tests[k] ?? "", false)) || undefined;
@@ -273,11 +267,34 @@ async function revisarStack(stack: Stack, yes: boolean, hayAgente: boolean): Pro
   const r: Stack = {
     ...stack,
     componentes: stack.componentes.filter((c) => comps.includes(c.nombre)),
-    servicios: [...stack.servicios.filter((x) => servs.includes(x.nombre)), ...nuevos],
     tests, migraciones, seed,
   };
   p.note(resumenStack(r), "Final stack");
   return r;
+}
+
+/** Show how each part of the project starts and let the person fix the command, directory, port, and when it runs. */
+async function revisarProcesos(e: Config["entornos"], yes: boolean): Promise<Config["entornos"]> {
+  const linea = (x: ProcesoEntorno) => `${x.nombre}: ${x.comando}${x.ruta !== "." ? gris(` (in ${x.ruta})`) : ""}${x.puerto ? gris(` → :${x.puerto}`) : ""}${x.cuando === "e2e" ? gris("  [e2e only]") : ""}`;
+  p.note(e.procesos.length
+    ? e.procesos.map(linea).join("\n") + "\n\n" + gris("orqen starts them when needed (orqen take / orqen env up) and stops them afterwards.")
+    : gris("Could not find how to start the project (no dev/start script). You can add it under entornos.procesos in orqen/config.yaml."),
+  "How the project starts");
+  if (yes || !e.procesos.length) return e;
+  if (!(await confirmar("Do you want to change any command?", false, false))) return e;
+  const procesos: ProcesoEntorno[] = [];
+  for (const x of e.procesos) {
+    const comando = await texto(`${x.nombre}: command ${gris("(leave blank to skip it)")}`, x.comando, false);
+    if (!comando) continue;
+    const ruta = (await texto(`${x.nombre}: directory where it runs`, x.ruta, false)) || ".";
+    const puertoTxt = await texto(`${x.nombre}: port it opens ${gris("(blank = no port; waits a few seconds)")}`, x.puerto ? String(x.puerto) : "", false);
+    const cuando = await elegir(`${x.nombre}: when should it run?`, [
+      { value: "siempre", label: "Always", hint: "for development and tests" },
+      { value: "e2e", label: "Only for e2e / visual tests" },
+    ], x.cuando, false);
+    procesos.push({ ...x, comando, ruta, puerto: Number(puertoTxt) || undefined, cuando });
+  }
+  return { ...e, procesos };
 }
 
 async function prepararOpenSpec(repo: string, agentes: string[], herramientasPedidas: string[] | undefined, yes: boolean): Promise<Config["openspec"]> {
@@ -323,7 +340,7 @@ function resumenPlan(plan: Cambio[], config: Config): string {
   const plugin = plan.filter((c) => c.ruta.startsWith("orqen/plugin/") && c.accion !== "igual").length;
   if (etapas) filas.push(`${pc.green("+")} orqen/stages/ ${gris(`(${etapas} stage guides)`)}`);
   if (plugin) filas.push(`${pc.green("+")} orqen/plugin/ ${gris(`(${plugin} Claude Code plugin files)`)}`);
-  filas.push("", gris(`Environments: ${config.stack.servicios.length} service(s) · tests: ${Object.entries(config.entornos.tests).filter(([, v]) => v).map(([k]) => k).join(", ") || "none"}`));
+  filas.push("", gris(`Processes: ${config.entornos.procesos.map((x) => x.nombre).join(", ") || "none"} · tests: ${Object.entries(config.entornos.tests).filter(([, v]) => v).map(([k]) => k).join(", ") || "none"}`));
   return filas.join("\n");
 }
 

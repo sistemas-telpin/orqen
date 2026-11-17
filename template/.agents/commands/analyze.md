@@ -1,13 +1,14 @@
 ---
 description: Analyze a customer request with the analyst, choose a lane, write a spec when needed, and create the linked Jira issue
 argument-hint: REC-1234 [analyst name]
-allowed-tools: Bash(orqen:*), Read, Grep, Glob, Write, Edit, Skill
+allowed-tools: Bash(orqen:*), Read, Grep, Glob, Write, Edit, Skill, AskUserQuestion
 ---
 
 Analyze the customer request in `$ARGUMENTS` with the analyst who invoked this command. The first argument is the issue key. Use any remaining text as the analyst's name, or ask once and remember it. Work from the repository root and follow the customer request workflow in `AGENTS.md`.
 
 ## Rules
 
+- **Work with the person who invoked this command.** Before each important step, tell them what you are about to do and wait for their OK. When in doubt, ask them (with `AskUserQuestion` when available: concrete options plus your recommendation); never assume what you can ask. After each step, report what you did and what comes next.
 - Use Jira MCP for read-only access. orqen creates and links the SIS and posts comments.
 - Leave Git operations, OpenSpec archiving, and writes to `orqen/state/` and `orqen/work/` to orqen.
 - Require the analyst's explicit approval of the analysis and lane. Record unknowns as open questions or labeled assumptions.

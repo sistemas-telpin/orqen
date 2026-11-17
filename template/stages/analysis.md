@@ -1,5 +1,7 @@
 ## Analysis (`ANALYSIS`)
 
+> If `human_present` is `true`, tell the person what you are about to do, wait for their OK at each important step, and ask them about any doubt (see "Working with the person" in AGENTS.md). If it is `false`, run `orqen block` for any doubt that changes the outcome.
+
 A human analyst leads this stage. Use the `orqen:grilling` skill when available, or interview the analyst as described below. Obtain their explicit approval before advancing.
 
 ### 1. Read the context

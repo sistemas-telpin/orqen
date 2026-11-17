@@ -1,7 +1,5 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { parse } from "yaml";
-import { generarCompose } from "../src/lib/compose.ts";
 import { entornosDesdeStack } from "../src/lib/config.ts";
 import { detectar } from "../src/lib/detect.ts";
 import { MONOREPO, repoTemporal } from "./helpers.ts";
@@ -55,22 +53,14 @@ test("detects an empty stack for an empty repository", () => {
   assert.equal(stack.servicios.length, 0);
 });
 
-test("Compose services have health checks and apps use the apps profile", () => {
-  const { stack } = detectar(repoTemporal(MONOREPO));
-  const doc = parse(generarCompose(stack, "orqen-pagos"));
-  assert.equal(doc.name, "orqen-pagos");
-  assert.equal(doc.services.db.image, "postgres:17-alpine");
-  assert.ok(doc.services.db.healthcheck.test.join(" ").includes("pg_isready"));
-  assert.ok(doc.services.cache.healthcheck);
-  assert.deepEqual(doc.services.api.profiles, ["apps"]);
-  assert.deepEqual(doc.services.api.build, { context: "./apps/api", dockerfile: "Dockerfile" });
-  assert.equal(doc.services.api.depends_on.db.condition, "service_healthy");
-  assert.equal(doc.services.api.environment.DATABASE_URL, "postgresql://orqen:orqen@db:5432/orqen");
-  assert.equal(doc.services.web.image, "node:22-alpine");
-  assert.deepEqual(doc.services.web.volumes, ["./apps/web:/app", "/app/node_modules"]);
-
+test("environments: one process per startable component, no Docker; the frontend only for e2e", () => {
+  const { stack } = detectar(repoTemporal({ ...MONOREPO, ".env.example": "DATABASE_URL=postgresql://localhost:5432/pagos\nAPI_KEY=xyz\n" }));
   const e = entornosDesdeStack(stack);
-  assert.equal(e.variables.DATABASE_URL, "postgresql://orqen:orqen@localhost:5432/orqen");
-  assert.equal(e.variables.REDIS_URL, "redis://localhost:6379");
+  const api = e.procesos.find((p) => p.nombre === "api")!, web = e.procesos.find((p) => p.nombre === "web")!;
+  assert.deepEqual([api.comando, api.ruta, api.puerto, api.cuando], ["pnpm start", "apps/api", 3000, "siempre"]);
+  assert.deepEqual([web.comando, web.ruta, web.puerto, web.cuando], ["pnpm dev", "apps/web", 5173, "e2e"]);
+  assert.equal(e.variables.DATABASE_URL, "postgresql://localhost:5432/pagos", "variables come from the repo's .env.example");
+  assert.equal(e.variables.API_KEY, undefined, "no secrets");
   assert.deepEqual(e.migrar, ["npx prisma migrate deploy"]);
+  assert.ok(!("compose" in e));
 });

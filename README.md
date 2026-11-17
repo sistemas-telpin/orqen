@@ -100,7 +100,7 @@ configuración de `orqen`. Si el contexto trae un test fallido o un rechazo de r
 
 ## Testing
 
-Es una etapa del agente, sin intervención humana. `orqen take` levanta el entorno completo (servicios y apps), corre la suite configurada y lo baja.
+Es una etapa del agente, sin intervención humana. `orqen take` levanta todos los procesos del proyecto (también el front), corre la suite configurada y los corta.
 El agente mapea **cada Scenario** (carril directo: cada **criterio de aceptación**) contra el test que lo verifica, y `orqen` decide:
 aprueba solo si la suite pasó y todo está cubierto. Si no, vuelve a DEVELOPMENT; al tercer intento fallido pasa a BLOCKED.
 
@@ -245,13 +245,13 @@ orqen init
 
 `orqen init`:
 
-1. Verifica Node, git, el gestor de paquetes y (opcional) Docker.
-2. Detecta componentes y servicios del repo (`package.json`, `pom.xml`, `pyproject.toml`, Dockerfiles, Compose, Prisma, `.env.example`) y,
+1. Verifica Node, git y el gestor de paquetes.
+2. Detecta componentes, cómo se levanta cada uno y qué servicios necesita (`package.json`, `pom.xml`, `pyproject.toml`, Prisma, `.env.example`) y,
    si hay un agente de IA instalado, le pide que revise un resumen del repo (`--deep` para que lo explore entero, `--no-ai` para solo detección automática).
-3. Te deja confirmar o editar componentes, servicios, tests, migraciones y seeds.
+3. Te deja confirmar o editar componentes, el comando que levanta cada parte (`npm run dev`, `npm start`…), tests, migraciones y seeds.
 4. Instala OpenSpec (2.x) si hace falta y corre `openspec init` para las herramientas elegidas.
 5. Pide la conexión a Jira, los proyectos REC y SIS y los aprobadores, y los guarda en `orqen/.env` (ignorado por git).
-6. Escribe la configuración del entorno, `docker-compose.orqen.yml`, `AGENTS.md` / `CLAUDE.md`, el plugin, las guías de etapa y el manifiesto,
+6. Escribe la configuración del entorno (sin Docker de por medio), `AGENTS.md` / `CLAUDE.md`, el plugin, las guías de etapa y el manifiesto,
    y fusiona las reglas del proceso con el `openspec/config.yaml` existente.
 
 Opciones: `--yes` (no interactivo), `--agent "<comando>"`, `--tools claude,codex`, `--no-openspec`.
@@ -273,14 +273,13 @@ actualizan solos; para los editados elegís conservar, reemplazar o dejar una co
 
 | Ruta                             | Para qué                                                                                       |
 | -------------------------------- | ---------------------------------------------------------------------------------------------- |
-| `orqen/config.yaml`              | Stack, servicios, migraciones, tests, rama base y configuración del agente                     |
+| `orqen/config.yaml`              | Stack, cómo se levanta cada parte, migraciones, tests, rama base y configuración del agente    |
 | `orqen/.env`                     | Credenciales de Jira, proyectos y aprobadores (local, ignorado por git)                        |
 | `orqen/stages/`                  | Guías de cada etapa (editables)                                                                |
 | `orqen/plugin/`                  | Comandos de Claude Code y el skill de grilling                                                 |
 | `orqen/work/<KEY>/`              | Registro versionado de cada REC                                                                |
-| `orqen/state/` y `orqen/tmp/`    | Estado operativo y temporales (ignorados por git)                                              |
+| `orqen/state/` y `orqen/tmp/`    | Estado operativo, procesos corriendo y sus logs (ignorados por git)                            |
 | `orqen/manifest.json`            | Hashes de los archivos del kit, para que `orqen update` detecte tus cambios                    |
-| `docker-compose.orqen.yml`       | Servicios con health checks y apps opcionales en el perfil `apps`                              |
 | `AGENTS.md` y `CLAUDE.md`        | Instrucciones del proceso para los agentes                                                     |
 | `openspec/`                      | Specs y configuración de OpenSpec                                                              |
 
@@ -299,19 +298,53 @@ actualizan solos; para los editados elegís conservar, reemplazar o dejar una co
 
 ## Entornos y tests
 
-`orqen/config.yaml` define los entornos en `entornos` y `docker-compose.orqen.yml` los servicios.
+Cada parte del proyecto se levanta con su propio comando, sin Docker de por medio (si un equipo lo quiere, un proceso puede ser
+`docker compose up db`). `orqen init` lo propone y lo deja en `orqen/config.yaml`:
 
-- En **DEVELOPMENT**, `orqen take` instala dependencias, espera los health checks de los servicios y corre migraciones y seeds.
-  El agente recibe en `environment` el estado, las variables de conexión y los comandos de test. `orqen complete` baja el entorno.
-- En **TESTING**, `orqen` levanta servicios y apps, corre toda la suite configurada y baja todo.
+```yaml
+entornos:
+  procesos:
+    - nombre: api
+      comando: npm run dev        # o npm start, mvn spring-boot:run, dotnet watch run…
+      ruta: apps/api
+      puerto: 3000                # listo cuando el puerto responde (o `url:` / `listo_si: "texto del log"`)
+      cuando: siempre             # siempre: para desarrollar y testear · e2e: solo para tests e2e / visuales
+    - nombre: web
+      comando: npm run dev
+      ruta: apps/web
+      puerto: 5173
+      cuando: e2e
+  variables: { DATABASE_URL: postgresql://localhost:5432/pagos }
+  preparar: [pnpm install]
+  migrar: [npx prisma migrate deploy]
+  tests: { unitarios: pnpm test, e2e: pnpm exec playwright test }
+```
+
+- En **DEVELOPMENT**, `orqen take` instala dependencias, levanta los procesos de `cuando: siempre` en segundo plano, espera a
+  que respondan y corre migraciones y seeds. El agente recibe en `environment` el estado, las variables y los comandos de test.
+  `orqen complete` los corta.
+- En **TESTING**, `orqen` levanta todos los procesos (también los de e2e), corre toda la suite configurada y los corta.
+- Si un proceso no levanta, el agente ve el final de su log (`orqen/state/logs/<proceso>.log`) y lo corrige o te pregunta.
 
 ```sh
 orqen env setup                                    # instala dependencias
-orqen env up [--apps]                              # servicios + migraciones + seeds
+orqen env up [--all]                               # procesos + migraciones + seeds (--all: también los de e2e)
 orqen env test [unitarios|integracion|e2e|visual]
-orqen env status
-orqen env down
+orqen env status                                   # qué está corriendo y dónde está su log
+orqen env down                                     # corta lo que levantó orqen
 ```
+
+## Con la persona en el medio
+
+orqen acompaña a la persona, no la reemplaza. Mientras haya alguien del otro lado (`/orqen:analyze`, `/orqen:implement`,
+`/orqen:pr`, los reviews), el agente:
+
+- cuenta qué va a hacer y espera el OK antes de cada paso importante (carril, spec, plan, cambios fuera del plan, abrir el PR,
+  cerrar la etapa) y, al terminar cada paso, cuenta qué hizo y qué sigue;
+- ante cualquier duda pregunta, con opciones concretas y su recomendación, en vez de suponer.
+
+En modo desatendido (`orqen cycle`) nadie puede contestar: una duda que cambia el resultado se convierte en `orqen block` con la
+pregunta, que orqen publica en Jira; la persona responde con `/approve <respuesta>` y el agente sigue con esa respuesta.
 
 ## Uso
 
@@ -344,7 +377,7 @@ Los REC nuevos no se toman solos: quedan en NEW hasta que un analista corre `ana
 orqen init [dir]                       Inicializa un repo
 orqen update [dir]                     Actualiza la CLI, OpenSpec y el kit
 
-orqen env setup | up [--apps] | test [tipo] | status | down
+orqen env setup | up [--all] | test [tipo] | status | down
 
 orqen pending [--json]                 REC con trabajo: para analizar / para un agente
 orqen analyze <KEY> [--analyst N]      Abre el análisis con un analista

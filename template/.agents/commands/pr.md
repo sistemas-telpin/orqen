@@ -1,13 +1,14 @@
 ---
 description: Write an explanation of the implemented SIS and ask orqen to open its integration pull request
 argument-hint: SIS-32
-allowed-tools: Bash(orqen:*), Bash(git diff:*), Bash(git log:*), Bash(git status:*), Bash(git branch:*), Bash(git show:*), Read, Grep, Glob, Write
+allowed-tools: Bash(orqen:*), Bash(git diff:*), Bash(git log:*), Bash(git status:*), Bash(git branch:*), Bash(git show:*), Read, Grep, Glob, Write, AskUserQuestion
 ---
 
 Prepare the integration PR for `$ARGUMENTS` from the repository root. `orqen pr` targets `DEVEL_BRANCH`. It is the only PR in the workflow: testing opens none, and the senior does the code review (CODE_REVIEW) on this PR. Follow the workflow in `AGENTS.md`.
 
 ## Rules
 
+- **Work with the person who invoked this command.** Before each important step, tell them what you are about to do and wait for their OK. When in doubt, ask them (with `AskUserQuestion` when available: concrete options plus your recommendation); never assume what you can ask. After each step, report what you did and what comes next.
 - Let `orqen pr` commit, push, and open the PR. Use Jira for read-only access. Leave branch changes, OpenSpec archiving, and workflow files to orqen.
 - Describe the actual diff. Identify deviations from the specification or plan, and report only test results you observed.
 

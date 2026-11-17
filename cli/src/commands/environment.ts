@@ -1,19 +1,22 @@
-/** Commands for preparing, testing, and shutting down a project environment. */
-import { existsSync } from "node:fs";
-import { join, resolve } from "node:path";
-import { PERFIL_APPS } from "../lib/compose.ts";
+/**
+ * orqen env: start the project and run its tests without a person at the keyboard (used by the workflow and agents).
+ *   setup            install dependencies (entornos.preparar)
+ *   up [--all]       start the processes (npm run dev, npm start…) and wait until they are ready; then migrations and seed.
+ *                    --all: also the processes that are only for e2e / visual tests (e.g. the frontend)
+ *   test [type...]   unitarios / integracion / e2e / visual with the variables in entornos.variables
+ *   status           which processes are running
+ *   down             stop the processes orqen started
+ */
+import { resolve } from "node:path";
 import { leerConfig, type Config } from "../lib/config.ts";
-import { ejecutarLinea, version } from "../lib/proc.ts";
+import { ejecutarLinea } from "../lib/proc.ts";
+import { bajarProcesos, estadoProcesos, levantarProcesos } from "../lib/processes.ts";
 import { pc } from "../ui/console.ts";
 
 const TIPOS = ["unitarios", "integracion", "e2e", "visual"] as const;
 type TipoTest = (typeof TIPOS)[number];
 
 const titulo = (s: string) => console.log(`\n${pc.bold(pc.magenta("▸"))} ${pc.bold(s)}`);
-
-function compose(cfg: Config, args: string, apps = false) {
-  return `docker compose -f "${cfg.entornos.compose}"${apps ? ` --profile ${PERFIL_APPS}` : ""} ${args}`;
-}
 
 async function correr(repo: string, cfg: Config, lineas: string[], etiqueta: string): Promise<boolean> {
   const env = { ...process.env, ...cfg.entornos.variables };
@@ -25,12 +28,7 @@ async function correr(repo: string, cfg: Config, lineas: string[], etiqueta: str
   return true;
 }
 
-function requiereDocker(repo: string, cfg: Config) {
-  if (!version("docker", ["compose", "version", "--short"])) throw new Error("Docker Compose is unavailable. Install Docker (Docker Desktop on Windows or macOS).");
-  if (!existsSync(join(repo, cfg.entornos.compose))) throw new Error(`Missing ${cfg.entornos.compose}. Run \`orqen init\` or check entornos.compose in orqen/config.yaml.`);
-}
-
-export async function entorno(sub: string | undefined, resto: string[], o: { dir?: string; apps?: boolean }) {
+export async function entorno(sub: string | undefined, resto: string[], o: { dir?: string; todos?: boolean }) {
   const repo = resolve(o.dir ?? process.cwd());
   const cfg = leerConfig(repo);
   const e = cfg.entornos;
@@ -40,14 +38,20 @@ export async function entorno(sub: string | undefined, resto: string[], o: { dir
       ok = await correr(repo, cfg, e.preparar, "install dependencies");
       break;
     case "up": {
-      requiereDocker(repo, cfg);
-      ok = await correr(repo, cfg, [compose(cfg, "up -d --wait --remove-orphans", o.apps)], "start services")
-        && await correr(repo, cfg, e.migrar, "run migrations")
-        && await correr(repo, cfg, e.seed, "seed");
+      if (!e.procesos.length) console.log(pc.dim("No processes configured in orqen/config.yaml (entornos.procesos)."));
+      const r = await levantarProcesos(repo, e.procesos, e.variables, { todos: o.todos, alAvanzar: (m) => titulo(m) });
+      if (!r.ok) {
+        console.error(pc.red(`✘ ${r.detalle}`));
+        if (r.salida) console.error(pc.dim(r.salida));
+        ok = false;
+        break;
+      }
+      ok = await correr(repo, cfg, e.migrar, "run migrations") && await correr(repo, cfg, e.seed, "seed");
       if (ok) {
+        console.log(pc.green(`\n✔ ${r.detalle}`));
         const vars = Object.entries(e.variables);
-        console.log(pc.green("\n✔ Environment ready."));
         if (vars.length) console.log(pc.dim(vars.map(([k, v]) => `  ${k}=${v}`).join("\n")));
+        console.log(pc.dim("  To stop them: orqen env down"));
       }
       break;
     }
@@ -66,22 +70,26 @@ export async function entorno(sub: string | undefined, resto: string[], o: { dir
       ok = resultados.every(([, r]) => r !== false);
       break;
     }
-    case "status":
-      requiereDocker(repo, cfg);
-      ok = await correr(repo, cfg, [compose(cfg, "ps", true)], "status");
+    case "status": {
+      const st = await estadoProcesos(repo, e.procesos);
+      if (!st.length) console.log(pc.dim("No processes configured in orqen/config.yaml (entornos.procesos)."));
+      for (const x of st)
+        console.log(`${x.corriendo ? pc.green("●") : pc.dim("○")} ${x.nombre.padEnd(16)} ${pc.dim(x.comando)}${x.puerto ? pc.dim(` :${x.puerto}`) : ""}${x.cuando === "e2e" ? pc.dim("  (e2e only)") : ""}${x.log ? pc.dim(`\n    log: ${x.log}`) : ""}`);
       break;
-    case "down":
-      requiereDocker(repo, cfg);
-      ok = await correr(repo, cfg, [compose(cfg, "down -v --remove-orphans", true)], "stop services");
+    }
+    case "down": {
+      const bajados = bajarProcesos(repo);
+      console.log(bajados.length ? pc.green(`✔ Stopped: ${bajados.join(", ")}`) : pc.dim("No processes started by orqen are running."));
       break;
+    }
     default:
       console.log([
         "Usage: orqen env <command>",
         "  setup            install dependencies (entornos.preparar)",
-        "  up [--apps]      start services, wait for health checks, migrate, and seed (--apps: include apps)",
+        "  up [--all]       start the processes and wait until they are ready, then migrate and seed (--all: include e2e-only processes)",
         "  test [type...]   unitarios | integracion | e2e | visual (default: all configured tests)",
-        "  status           show environment containers",
-        "  down             stop containers and remove volumes",
+        "  status           show which processes are running and where their logs are",
+        "  down             stop the processes orqen started",
       ].join("\n"));
       if (sub) process.exitCode = 1;
       return;

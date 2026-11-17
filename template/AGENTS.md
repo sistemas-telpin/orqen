@@ -6,6 +6,21 @@ ANALYSIS ⇄ WAITING_CLIENT → DEVELOPMENT ⇄ TESTING
   Issues that require intervention → BLOCKED
 ```
 
+### Working with the person
+
+orqen works alongside the person; it does not replace them. While someone is on the other side (they invoked
+`/orqen:analyze`, `/orqen:implement`, `/orqen:pr`, a review command, or asked you directly; `human_present: true` in the context):
+
+- **Say what you are about to do before doing it**, in one or two lines, and **wait for their OK** before each important step:
+  choosing the lane, writing or changing the spec, the implementation plan, any change outside the plan, deleting or
+  rewriting files, adding dependencies, opening a PR, `orqen complete`, and `orqen block`.
+- **When in doubt, ask; never assume.** An ambiguous requirement, two possible approaches, a failing test where you are not
+  sure whether the test or the code is wrong, an environment error you do not understand: ask with concrete options and your
+  recommendation (use your tool's question picker if it has one, such as `AskUserQuestion` in Claude Code).
+- **After each step, report in a few lines what you did and what comes next.**
+- When nobody can answer (`human_present: false`, unattended `orqen cycle`): do not guess. If the doubt changes the outcome,
+  run `orqen block <KEY> "<specific question>"`; orqen posts it to Jira and a person answers with `/approve <answer>`.
+
 ### Analysis
 
 1. Start with `/orqen:analyze REC-1234` or `orqen analyze REC-1234 --analyst "<name>"`. A human analyst leads the analysis.
@@ -55,17 +70,25 @@ Propose the steps, rollback, and read-only verification. A person authorized by 
 
 ### Environments and tests
 
-`orqen/config.yaml` defines the environments under `entornos`. The CLI uses `docker-compose.orqen.yml` to start configured services.
+`orqen/config.yaml` defines how each part of the project starts under `entornos.procesos` (its command, such as
+`npm run dev` or `npm start`, its directory, and its port). There is no Docker in between unless the team configured a
+process that uses it. **orqen manages them on its own; never ask a person to open a terminal or start anything:**
 
-- During `DEVELOPMENT`, `orqen take` installs dependencies, waits for service health checks, and runs migrations and seed commands. Read `environment` in the agent context for status, connection variables, and test commands.
-- `orqen complete` shuts down the development environment.
-- During `TESTING`, orqen starts services and apps, runs the full test suite, and shuts them down.
+- During `DEVELOPMENT`, `orqen take` installs dependencies, starts the `cuando: siempre` processes (backend, workers…),
+  waits until they respond, and runs migrations and seed commands. Read `environment` in the agent context for status,
+  variables, and test commands.
+- `orqen complete` stops them when development ends.
+- During `TESTING`, orqen starts every process (including `cuando: e2e` ones such as the frontend), runs the full test suite,
+  and stops them.
 
 ```sh
 orqen env test [unitarios|integracion|e2e|visual]
-orqen env status
-orqen env up --apps  # Use when development tests also need the apps
+orqen env status   # what is running and where each process log is
+orqen env up --all # only when development also needs the frontend (e2e / visual)
 ```
+
+If a process does not start, `environment.output` has the end of its log (also in `orqen/state/logs/<process>.log`).
+Fix it if it is a code problem; if it is the environment (a missing database, a busy port), **ask the person** how to proceed.
 
 Stack detected during initialization:
 

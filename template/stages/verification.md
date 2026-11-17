@@ -1,5 +1,7 @@
 ## Operational verification (`VERIFICATION`)
 
+> If `human_present` is `true`, tell the person what you are about to do, wait for their OK at each important step, and ask them about any doubt (see "Working with the person" in AGENTS.md). If it is `false`, run `orqen block` for any doubt that changes the outcome.
+
 A person applied the approved change. Their report is in `human_feedback`.
 
 1. Run the read-only checks from `previous_stages.EXECUTION.verification`. Do not modify data or services.

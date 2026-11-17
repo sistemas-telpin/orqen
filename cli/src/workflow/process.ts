@@ -117,10 +117,10 @@ export class Process {
     // ANALYSIS (light/full are created by `orqen lane`) and the fast lane (EXECUTION/VERIFICATION) do not prepare a branch here
     if (["DEVELOPMENT", "TESTING", "DELIVERY"].includes(state)) rec.branch = this.ws.prepareBranch(key);
     let environment: EnvironmentResult | undefined;
-    if (state === "DEVELOPMENT") environment = this.ws.startEnvironment?.(false);
+    if (state === "DEVELOPMENT") environment = await this.ws.startEnvironment?.(false);
     if (state === "TESTING") {
       try {
-        environment = this.ws.startEnvironment?.(true);
+        environment = await this.ws.startEnvironment?.(true);
         rec.artifacts.test_result = environment?.ok === false
           ? { ok: false, output: environment.output ?? environment.detail }
           : this.ws.runTests();
@@ -147,6 +147,8 @@ export class Process {
       rec,
       context: {
         key, state, round: rec.round, branch: rec.branch || undefined,
+        // A person is on the other side (everything but the unattended `orqen cycle`): keep them informed and ask them.
+        human_present: agent !== "cycle",
         analyst: rec.analyst, lane: rec.lane, factory: `orqen/work/${key}/round-${rec.round}`,
         issue, sis: rec.sis, comments, environment,
         openspec,

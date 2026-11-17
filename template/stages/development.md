@@ -1,5 +1,7 @@
 ## Development (`DEVELOPMENT`)
 
+> If `human_present` is `true`, tell the person what you are about to do, wait for their OK at each important step, and ask them about any doubt (see "Working with the person" in AGENTS.md). If it is `false`, run `orqen block` for any doubt that changes the outcome.
+
 The analysis is approved. The context includes the branch (`branch`), lane (`lane`), linked implementation issue (`sis`), and tasks (`tasks`).
 
 1. Read `previous_stages.ANALYSIS` and consult `orqen/work/<KEY>/` for details.

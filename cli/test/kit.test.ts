@@ -14,7 +14,7 @@ const leer = (repo: string, r: string) => readFileSync(join(repo, r), "utf8");
 
 test("installs the kit idempotently", async () => {
   const repo = repoTemporal();
-  const plan = planificar(repo, vars, { extra: { "docker-compose.orqen.yml": "services: {}\n" } });
+  const plan = planificar(repo, vars);
   assert.ok(plan.every((c) => c.accion === "crear"));
   await aplicar(repo, plan, siempre("sobrescribir"));
 
@@ -28,7 +28,7 @@ test("installs the kit idempotently", async () => {
   assert.match(leer(repo, "orqen/.env.example"), /AGENT_CMD=claude -p/);
   assert.ok(Object.keys(leerManifest(repo).archivos).includes("AGENTS.md#orqen"));
 
-  const otra = planificar(repo, vars, { extra: { "docker-compose.orqen.yml": "services: {}\n" } });
+  const otra = planificar(repo, vars);
   assert.deepEqual(otra.filter((c) => c.accion !== "igual").map((c) => c.ruta), []);
 });
 

@@ -1,13 +1,14 @@
 ---
 description: Prepare a visual review of the SIS end-to-end tests and collect explicit approval from the reviewer
 argument-hint: SIS-3312
-allowed-tools: Bash(orqen:*), Bash(git status:*), Bash(git branch:*), Bash(git diff:*), Bash(git log:*), Bash(npm:*), Bash(npx:*), Read, Grep, Glob
+allowed-tools: Bash(orqen:*), Bash(git status:*), Bash(git branch:*), Bash(git diff:*), Bash(git log:*), Bash(npm:*), Bash(npx:*), Read, Grep, Glob, AskUserQuestion
 ---
 
 Prepare a visual review of the end-to-end tests for `$ARGUMENTS`. The human reviewer controls test edits and approval. Follow the workflow in `AGENTS.md`.
 
 ## Rules
 
+- **Work with the person who invoked this command.** Before each important step, tell them what you are about to do and wait for their OK. When in doubt, ask them (with `AskUserQuestion` when available: concrete options plus your recommendation); never assume what you can ask. After each step, report what you did and what comes next.
 - Leave the request stage unchanged. Do not run `orqen take`, `complete`, `block`, or `release` during the review.
 - Leave test edits to the reviewer. Use Jira for read-only access and leave Git writes, branch changes, and OpenSpec archiving to orqen.
 - Report missing coverage and failures as observed. Wait for explicit approval of a passing run after any manual edits.

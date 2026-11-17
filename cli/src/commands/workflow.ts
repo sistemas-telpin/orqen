@@ -65,8 +65,15 @@ export async function runWorkflow(cmd: string, rest: string[]) {
       ? ["", "## Lane selection after analyst approval", `Once the analyst confirms: \`orqen lane ${key} <${LANES.join("|")}> --agent ${agent}\`.`,
          "The light and full lanes prepare a branch and change and print the spec instructions. The direct lane uses the analysis plan."]
       : [];
+    const withHuman = ctx.human_present !== false;
     return [
       `# REC ${key} — stage ${s}`,
+      "",
+      withHuman
+        ? "> **You are working with a person.** Before each important step, tell them what you are about to do and wait for their OK. " +
+          "When in doubt, ask them (concrete options plus your recommendation) instead of assuming. See \"Working with the person\" in AGENTS.md."
+        : "> **Unattended mode: nobody can answer you.** Do not assume. If a doubt changes the outcome, run " +
+          `\`orqen block ${key} "<specific question>"\`; a person answers it in Jira.`,
       "",
       guide(s),
       "",

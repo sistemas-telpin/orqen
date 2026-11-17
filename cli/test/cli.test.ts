@@ -33,12 +33,11 @@ test("orqen init --yes writes the repository configuration", () => {
   const cfg = parse(readFileSync(join(repo, "orqen/config.yaml"), "utf8"));
   assert.equal(cfg.version, 1);
   assert.equal(cfg.proyecto.rama_base, "main");
-  assert.equal(cfg.entornos.compose, "docker-compose.orqen.yml");
+  assert.deepEqual(cfg.entornos.procesos.map((x: any) => `${x.nombre}:${x.comando}:${x.cuando}`).sort(), ["api:pnpm start:siempre", "web:pnpm dev:e2e"]);
   assert.equal(cfg.entornos.tests.e2e, "pnpm exec playwright test");
   assert.ok(!JSON.stringify(cfg).includes("null"), "no null values in orqen/config.yaml");
 
-  const compose = parse(readFileSync(join(repo, "docker-compose.orqen.yml"), "utf8"));
-  assert.ok(compose.services.db && compose.services.cache);
+  assert.ok(!existsSync(join(repo, "docker-compose.orqen.yml")), "no Docker in between");
   assert.match(readFileSync(join(repo, "AGENTS.md"), "utf8"), /orqen env up/);
   assert.ok(existsSync(join(repo, "orqen/manifest.json")));
 });

@@ -1,13 +1,14 @@
 ---
 description: Review the SIS integration PR for the senior and report whether the changes are sound or list each problem with its possible solutions
 argument-hint: SIS-32
-allowed-tools: Bash(orqen:*), Bash(git fetch:*), Bash(git diff:*), Bash(git log:*), Bash(git show:*), Bash(git status:*), Bash(git branch:*), Bash(gh pr view:*), Bash(gh pr diff:*), Bash(orqen env test:*), Read, Grep, Glob, Write
+allowed-tools: Bash(orqen:*), Bash(git fetch:*), Bash(git diff:*), Bash(git log:*), Bash(git show:*), Bash(git status:*), Bash(git branch:*), Bash(gh pr view:*), Bash(gh pr diff:*), Bash(orqen env test:*), Read, Grep, Glob, Write, AskUserQuestion
 ---
 
 Review the integration PR for `$ARGUMENTS` on behalf of the senior who runs this command. Tell them whether the changes are sound and, for each problem, explain it with possible solutions. The senior decides: you give them a report, and they comment `/approve` or `/reject` in Jira. Follow the workflow in `AGENTS.md`.
 
 ## Rules
 
+- **Work with the person who invoked this command.** Before each important step, tell them what you are about to do and wait for their OK. When in doubt, ask them (with `AskUserQuestion` when available: concrete options plus your recommendation); never assume what you can ask. After each step, report what you did and what comes next.
 - Read-only on code. Do not edit code or tests, even when the fix is obvious: propose it as a solution. The only file you write is the report, in a temporary file, to record it with `orqen review`.
 - Do not comment on, approve, or merge the PR (`gh pr review`, `gh pr comment`, and `gh pr merge` are not allowed). Use Jira for read-only access.
 - Leave the request stage unchanged. Do not run `orqen take`, `complete`, `block`, or `release`. Leave Git writes, branch changes, and OpenSpec archiving to orqen.

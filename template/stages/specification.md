@@ -1,5 +1,7 @@
 ## OpenSpec change specification ([light|full])
 
+> If `human_present` is `true`, tell the person what you are about to do, wait for their OK at each important step, and ask them about any doubt (see "Working with the person" in AGENTS.md). If it is `false`, run `orqen block` for any doubt that changes the outcome.
+
 `orqen lane` created the branch and change. Work with the analyst to complete the artifacts. You are still in `ANALYSIS`. Once the spec passes validation, produce the analysis output with `spec`, `ready`, and `analyst_ok`.
 
 1. Use `openspec-propose` or `/opsx:propose` if available. Otherwise, use `openspec status --change <change> --json` for the artifact order. For each ready artifact, run `openspec instructions <artifact> --change <change> --json` and write to `resolvedOutputPath` following the template, instructions, and rules. Produce the proposal, spec deltas, design, and tasks.

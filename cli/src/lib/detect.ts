@@ -317,7 +317,7 @@ export function detectar(repo: string): Deteccion {
     instalar: existsSync(join(repo, "package.json")) ? (pm === "npm" ? (existsSync(join(repo, "package-lock.json")) ? "npm ci" : "npm install") : `${pm} install`) : undefined,
     componentes, servicios, tests,
     migraciones: extra.migraciones, seed: extra.seed,
-    variables: {}, notas: [],
+    variables: vars, notas: [],
   });
   return { stack, evidencias: ev };
 }

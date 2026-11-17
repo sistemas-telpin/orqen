@@ -23,7 +23,7 @@ Commands:
       --no-openspec       Skip OpenSpec installation and initialization
   update [dir]            Update the CLI, OpenSpec, and kit
       --yes, -y  --no-cli  --no-openspec  --no-kit
-  env <cmd>               setup | up [--apps] | test [type...] | status | down
+  env <cmd>               setup | up [--all] | test [type...] | status | down
   --version, -v           Show version
   --help, -h              Show this help
 
@@ -49,7 +49,7 @@ async function main() {
       "no-openspec": { type: "boolean" },
       "no-cli": { type: "boolean" },
       "no-kit": { type: "boolean" },
-      apps: { type: "boolean" },
+      all: { type: "boolean" },
       dir: { type: "string" },
     },
   });
@@ -71,7 +71,7 @@ async function main() {
     case "update":
       return update({ dir: (v.dir as string) ?? resto[0], yes: !!v.yes, sinCli: !!v["no-cli"], sinOpenspec: !!v["no-openspec"], sinKit: !!v["no-kit"], sinAnimacion: !!v["no-animation"] });
     case "env":
-      return entorno(resto[0], resto.slice(1), { dir: v.dir as string | undefined, apps: !!v.apps });
+      return entorno(resto[0], resto.slice(1), { dir: v.dir as string | undefined, todos: !!v.all });
     default:
       console.error(`Unknown command: ${cmd}\n${AYUDA}`);
       process.exitCode = 1;

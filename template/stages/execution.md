@@ -1,5 +1,7 @@
 ## Operational preparation (`EXECUTION`)
 
+> If `human_present` is `true`, tell the person what you are about to do, wait for their OK at each important step, and ask them about any doubt (see "Working with the person" in AGENTS.md). If it is `false`, run `orqen block` for any doubt that changes the outcome.
+
 This request can be resolved through SQL, data cleanup, a restart, or a configuration change. Prepare the proposal for a person to authorize and apply. Do not modify data or services.
 
 1. Read the issue, conversation, and `previous_stages.ANALYSIS`. Address feedback from `human_feedback` or a previous `previous_stages.VERIFICATION` first.

@@ -23,13 +23,15 @@ export const ProcesoEntorno = z.object({
   puerto: z.number().int().positive().nullish().describe("Ready when this port accepts connections"),
   url: z.string().nullish().describe("Ready when this URL responds (e.g. http://localhost:3000/health)"),
   listo_si: z.string().nullish().describe("Ready when this text (or regex) shows up in its output"),
+  detener: z.string().nullish()
+    .describe("Command that stops it cleanly before orqen kills it (e.g. node tools/db.mjs down to stop a Docker container)"),
   cuando: z.enum(["siempre", "e2e"]).default("siempre")
     .describe("siempre: started for development and tests. e2e: only for end-to-end / visual tests (e.g. the frontend)"),
   espera_seg: z.number().int().positive().default(120),
 });
 export type ProcesoEntorno = z.infer<typeof ProcesoEntorno>;
 
-interface Registro { pid: number; comando: string; log: string; desde: string; propio: boolean }
+interface Registro { pid: number; comando: string; log: string; desde: string; propio: boolean; detener?: string; cwd?: string }
 type Registros = Record<string, Registro>;
 
 const dirEstado = (repo: string) => join(repo, "orqen", "state");
@@ -139,7 +141,7 @@ export async function levantarProcesos(
     let pid: number;
     try { pid = arrancar(p.comando, resolve(repo, p.ruta), env, log); }
     catch (e) { return { ok: false, detalle: `Could not start ${p.nombre}: ${(e as Error).message}`, levantados }; }
-    registro[p.nombre] = { pid, comando: p.comando, log, desde: new Date().toISOString(), propio: true };
+    registro[p.nombre] = { pid, comando: p.comando, log, desde: new Date().toISOString(), propio: true, detener: p.detener ?? undefined, cwd: resolve(repo, p.ruta) };
     guardarRegistro(repo, registro);
 
     const hasta = Date.now() + p.espera_seg * 1000;
@@ -168,7 +170,12 @@ export function bajarProcesos(repo: string): string[] {
   const registro = leerRegistro(repo);
   const bajados: string[] = [];
   for (const [nombre, r] of Object.entries(registro)) {
-    if (r.propio && vivo(r.pid)) { matar(r.pid); bajados.push(nombre); }
+    if (r.propio && vivo(r.pid)) {
+      // Clean stop first (e.g. `docker stop`): killing the process tree alone would leave a container running.
+      if (r.detener) spawnSync(r.detener, { shell: true, cwd: r.cwd ?? repo, stdio: "ignore", windowsHide: true, timeout: 120_000 });
+      matar(r.pid);
+      bajados.push(nombre);
+    }
     delete registro[nombre];
   }
   if (existsSync(archivoRegistro(repo))) guardarRegistro(repo, registro);

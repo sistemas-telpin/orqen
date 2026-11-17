@@ -250,6 +250,30 @@ y las indicaciones como feedback para el agente.
 y la verificación; una persona de `APPROVERS_EXECUTION` autoriza y aplica, y el agente verifica en solo lectura. Si la verificación muestra
 que la causa es de código, el REC vuelve a ANALYSIS y nace un SIS de desarrollo.
 
+
+## Crear un proyecto nuevo: `orqen create project`
+
+Arma un repo desde cero, con el código base, los scripts que levantan sus entornos y orqen ya listo para los agentes:
+
+```sh
+orqen create project "Plataforma de Pagos"                          # pregunta el stack y los datos
+orqen create project "Facturación" --stack java-tomcat-sqlserver --dir ./facturacion
+orqen create stacks                                                 # lista los stacks disponibles
+```
+
+1. Pregunta el nombre, la carpeta y el **stack**: `vue-node-postgres` (Vue 3 + API Node/Express + PostgreSQL) o
+   `java-tomcat-sqlserver` (Java 17 en Tomcat 10 + SQL Server).
+2. Revisa los requisitos (Node, Maven, Docker…) y pide los parámetros del stack (puertos, paquete Java); si un puerto está
+   ocupado propone el siguiente libre.
+3. Crea la carpeta y el repo git, genera el código (generadores oficiales, como `create-vue`, más un esqueleto propio con
+   health check, migraciones y tests de ejemplo) y copia a `tools/` el script de la base (`tools/db.mjs`, PostgreSQL o
+   SQL Server en Docker).
+4. Corre `orqen init` con el stack y los entornos ya definidos (sin detección ni IA): OpenSpec, Jira, `AGENTS.md`, plugin.
+5. Ofrece el commit inicial.
+
+Después: `cd <carpeta>`, `orqen env up` (base + backend + migraciones; `--all` también el front) y `orqen env test`.
+Los stacks viven en [`tools/`](tools/README.md): cada uno es una carpeta con su `tool.yaml` y su esqueleto, y se pueden agregar más.
+
 ## Instalación en un repo
 
 ```sh
@@ -362,6 +386,43 @@ orqen acompaña a la persona, no la reemplaza. Mientras haya alguien del otro la
 En modo desatendido (`orqen cycle`) nadie puede contestar: una duda que cambia el resultado se convierte en `orqen block` con la
 pregunta, que orqen publica en Jira; la persona responde con `/approve <respuesta>` y el agente sigue con esa respuesta.
 
+## Enjambre: `orqen swarm`
+
+Para una tarea de cualquier tipo que se pueda partir: orqen la divide en subtareas chicas, las resuelve en paralelo con modelos
+chicos y junta todo en una rama.
+
+```sh
+orqen swarm "Agregar exportación a CSV en el listado de pagos, con filtros por fecha y tests"
+orqen swarm --file tarea.md --parallel 6
+orqen swarm "…" --plan-only          # solo el plan (orqen/state/swarm/<run>/plan.json), para revisarlo o editarlo
+orqen swarm --plan plan.json         # corre un plan ya revisado
+```
+
+1. **Plan**: un modelo grande (`--planner`, por defecto Opus) lee el repo y devuelve un grafo de subtareas: archivos que toca
+   cada una, dependencias, criterios y un `test` rápido que solo pasa cuando la subtarea está hecha. orqen valida el plan (ids,
+   ciclos, y que dos subtareas que pueden correr a la vez no toquen el mismo archivo) y, si no cierra, se lo devuelve con los
+   errores una vez.
+2. **OK de la persona**: muestra el plan y pregunta antes de lanzar (`--yes` o sin terminal: sigue solo).
+3. **Workers en paralelo**: cada subtarea corre en su propio `git worktree` (tu checkout no se toca), hasta `--parallel` a la vez
+   (4 por defecto). Las que dependen de otras arrancan cuando esas ya están mergeadas, encima del código mergeado. En cada
+   worktree nuevo corre `entornos.preparar` (o `--setup`).
+4. **Verificación y escalado**: después de cada intento orqen corre el `test` de la subtarea. Si falla, resetea el worktree y
+   reintenta pasándole al modelo la salida del error. El modelo chico (`--small`, Haiku) tiene 2 intentos; si no lo resuelve,
+   la subtarea pasa al grande (`--large`, Sonnet) con 2 intentos más. Las marcadas `complex` en el plan arrancan en el grande.
+5. **Merge**: cada subtarea que pasa se commitea y se mergea (`--no-ff`) a la rama `orqen/swarm-<run>`. Si choca con algo
+   mergeado mientras tanto, se rehace encima de lo último (cuenta como intento).
+6. **Test final**: con todo mergeado corre el `finalTest` del plan (o `--test` / `entornos.tests.unitarios`). Si falla, el
+   modelo grande lo arregla sobre la rama de integración (hasta 2 veces).
+
+Al terminar quedan la rama `orqen/swarm-<run>` lista para revisar y mergear (`git merge orqen/swarm-<run>` o un PR), y el
+informe con cada intento, modelo y log en `orqen/state/swarm/<run>/`. Si una subtarea no se resuelve con ningún modelo, las que
+dependen de ella se saltean, el resto se mergea igual y el comando sale con código 1. Los worktrees se borran al final
+(`--keep` deja el de integración).
+
+Los modelos son comandos headless, así que se puede usar cualquier agente: `--small "codex exec --full-auto -"`,
+`--large "claude -p --model opus --permission-mode acceptEdits"` (o `ORQEN_SWARM_SMALL`, `ORQEN_SWARM_LARGE`,
+`ORQEN_SWARM_PLANNER`). Con `{prompt}` en el comando, el prompt va como argumento en vez de stdin.
+
 ## Uso
 
 **Análisis (analista)**: en Claude Code, `/orqen:analyze REC-1234`. En otro agente: _"analizá el REC-1234"_ (el agente lee
@@ -393,7 +454,9 @@ Los REC nuevos no se toman solos: quedan en NEW hasta que un analista corre `ana
 orqen init [dir]                       Inicializa un repo
 orqen update [dir]                     Actualiza la CLI, OpenSpec y el kit
 
+orqen create project [nombre] [--stack <id>] [--dir <carpeta>] · orqen create stacks
 orqen env setup | up [--all] | test [tipo] | status | down
+orqen swarm "<tarea>" [--parallel N] [--plan-only | --plan plan.json] [--small C] [--large C] [--yes]
 
 orqen pending [--json]                 REC con trabajo: para analizar / para un agente
 orqen analyze <KEY> [--analyst N]      Abre el análisis con un analista

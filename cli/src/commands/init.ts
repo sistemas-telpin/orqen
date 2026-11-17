@@ -34,6 +34,10 @@ export interface OpcionesInit {
   agente?: string;
   sinOpenspec?: boolean;
   herramientas?: string[];
+  /** Called from `orqen create project`: the logo was already shown. */
+  sinLogo?: boolean;
+  /** Stack and environments already known (from a tool): skip detection, AI analysis and review. */
+  predefinido?: { stack: Stack; entornos: Config["entornos"] };
 }
 
 const HERRAMIENTAS_OPENSPEC = [
@@ -52,7 +56,7 @@ const HERRAMIENTAS_OPENSPEC = [
 export async function init(o: OpcionesInit) {
   const repo = resolve(o.dir ?? process.cwd());
   let yes = !!o.yes;
-  await mostrarLogo({
+  if (!o.sinLogo) await mostrarLogo({
     animar: !o.sinAnimacion && !o.yes, esperarTecla: true,
     bienvenida: [
       "Initialization will:",
@@ -83,17 +87,19 @@ export async function init(o: OpcionesInit) {
     }
   }
 
-  // 2. Detect the stack and analyze it with AI when requested.
+  // 2. Detect the stack and analyze it with AI when requested (unless it comes from a tool).
   const s = p.spinner();
-  s.start("Inspecting manifests, scripts, and dependencies…");
-  const deteccion = detectar(repo);
-  s.stop(`Automatic detection: ${deteccion.stack.componentes.length} component(s), ${deteccion.stack.servicios.length} service(s)`);
+  const pre = o.predefinido;
+  if (!pre) s.start("Inspecting manifests, scripts, and dependencies…");
+  const deteccion = pre ? { stack: pre.stack, evidencias: [] } : detectar(repo);
+  if (!pre) s.stop(`Automatic detection: ${deteccion.stack.componentes.length} component(s), ${deteccion.stack.servicios.length} service(s)`);
   if (deteccion.evidencias.length) p.log.message(gris(deteccion.evidencias.slice(0, 15).map((e) => `· ${e}`).join("\n") + (deteccion.evidencias.length > 15 ? `\n· … ${deteccion.evidencias.length - 15} more` : "")));
 
   let stack: Stack = deteccion.stack;
   let comandoAgente: string | undefined = o.agente;
   const agentes = agentesInstalados();
-  if (!o.sinIa) {
+  if (pre) comandoAgente ??= agentes[0]?.comando;
+  else if (!o.sinIa) {
     if (!comandoAgente) {
       if (!agentes.length) p.log.warn("No installed AI agent was found (claude, codex, gemini). Using automatic detection.");
       else {
@@ -115,11 +121,11 @@ export async function init(o: OpcionesInit) {
   // Quick analysis runs in the background while OpenSpec is configured.
   const inicioIa = Date.now();
   let enCurso: Promise<ResultadoExploracion> | undefined;
-  if (comandoAgente && !o.profundo) {
+  if (comandoAgente && !o.profundo && !pre) {
     // Isolate analysis from the terminal so it cannot interfere with prompts.
     enCurso = explorarRapidoAislado(repo, comandoRapido(comandoAgente), deteccion).resultado;
     p.log.step(`${comandoAgente.split(" ")[0]} is analyzing the stack in the background.`);
-  } else if (comandoAgente) {
+  } else if (comandoAgente && !pre) {
     stack = (await explorarAFondo(repo, comandoAgente, deteccion)) ?? stack;
   }
 
@@ -144,7 +150,7 @@ export async function init(o: OpcionesInit) {
       if (r.errores.length) p.log.message(gris(r.errores.slice(0, 5).join("\n")));
     }
   }
-  for (;;) {
+  for (; !pre;) {
     const r = await revisarStack(stack, yes, !!comandoAgente);
     if (r !== "profundo") { stack = r; break; }
     stack = (await explorarAFondo(repo, comandoAgente!, deteccion)) ?? stack;
@@ -158,11 +164,11 @@ export async function init(o: OpcionesInit) {
     agente: { comando: comandoAgente },
     openspec: openspecCfg,
     stack,
-    entornos: entornosDesdeStack(stack),
+    entornos: pre ? pre.entornos : entornosDesdeStack(stack),
   };
   const vars = { RESUMEN_STACK: resumenStack(stack), BASE_BRANCH: config.proyecto.rama_base, AGENT_CMD: comandoAgente ? `${comandoAgente}` : "claude -p --permission-mode acceptEdits" };
   // Review how each part of the project starts before writing anything.
-  config.entornos = await revisarProcesos(config.entornos, yes);
+  if (!pre) config.entornos = await revisarProcesos(config.entornos, yes);
 
   const plan = planificar(repo, vars);
   p.note(resumenPlan(plan, config), "Files to write");
@@ -187,6 +193,7 @@ export async function init(o: OpcionesInit) {
     `In Claude Code: ${pc.cyan("/plugin marketplace add ./")} and ${pc.cyan(`/plugin install orqen@${mk}`)}`,
     `Commit the changes (orqen/, AGENTS.md, CLAUDE.md, openspec/).`,
   ];
+  if (o.sinLogo) return;   // `orqen create project` shows its own next steps
   p.note(pasos.map((x, i) => `${pc.bold(`${i + 1}.`)} ${x}`).join("\n"), "Next steps");
   p.outro(`${magenta("//")} ${pc.bold("From request to production.")}`);
 }

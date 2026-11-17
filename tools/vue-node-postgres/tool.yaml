@@ -1,0 +1,64 @@
+# Tool: everything orqen needs to create and run a Vue + Node + PostgreSQL project.
+id: vue-node-postgres
+nombre: Vue + Node + PostgreSQL
+descripcion: Frontend Vue 3 (Vite, TypeScript, Vitest, Playwright), API Node (Express) and PostgreSQL in Docker.
+requisitos:
+  - { comando: node, version: ">=22.18", ayuda: "The Vue generator needs Node 22.18 or later" }
+  - { comando: npm, ayuda: "npm comes with Node" }
+  - { comando: docker, ayuda: "PostgreSQL runs in Docker: install Docker Desktop (Windows/macOS) or Docker Engine (Linux)" }
+parametros:
+  - { id: PUERTO_DB, pregunta: "PostgreSQL port", tipo: puerto, defecto: 5432 }
+  - { id: PUERTO_API, pregunta: "API port", tipo: puerto, defecto: 3000 }
+# Steps to create the code, in order. {{VARIABLES}} are replaced in commands and copied files.
+scaffold:
+  - copiar: scaffold
+  - correr: npm create vue@latest web -- --ts --router --vitest --playwright --eslint --force
+    descripcion: Create the frontend with the official Vue generator
+  - archivo: web/.env.development
+    contenido: "VITE_API_URL=http://localhost:{{PUERTO_API}}\n"
+  # npm 10 fails to resolve the generator's dependency tree ("reading 'edgesOut'"); npm 11 does not need it.
+  - archivo: web/.npmrc
+    contenido: "legacy-peer-deps=true\n"
+  - correr: npm install
+    en: web
+    descripcion: Install frontend dependencies
+  - correr: npm install
+    en: api
+    descripcion: Install API dependencies
+# Scripts copied to the project's tools/ folder.
+tools:
+  - _shared/db.mjs
+db:
+  engine: postgres
+  port: {{PUERTO_DB}}
+  database: "{{PROYECTO_ID}}"
+  user: app
+  password: app
+stack:
+  resumen: "{{PROYECTO}}: Vue 3 frontend (web/), Express API (api/) and PostgreSQL (Docker, tools/db.mjs)."
+  gestor_paquetes: npm
+  componentes:
+    - { nombre: web, tipo: frontend, ruta: web, lenguaje: typescript, framework: vue+vite, puerto: 5173, comandos: { instalar: npm install, dev: npm run dev, build: npm run build, tests: "npm run test:unit -- --run" } }
+    - { nombre: api, tipo: backend, ruta: api, lenguaje: javascript, framework: express, puerto: {{PUERTO_API}}, comandos: { instalar: npm install, dev: npm run dev, tests: npm test } }
+  servicios:
+    - { nombre: db, tipo: postgres, puerto: {{PUERTO_DB}}, motivo: "tools/db.mjs (Docker)" }
+  migraciones: cd api && npm run migrate
+entornos:
+  procesos:
+    - { nombre: db, comando: node tools/db.mjs up, detener: node tools/db.mjs down, listo_si: "orqen-db: ready", cuando: siempre, espera_seg: 300 }
+    - { nombre: api, comando: npm run dev, ruta: api, puerto: {{PUERTO_API}}, url: "http://localhost:{{PUERTO_API}}/health", cuando: siempre, espera_seg: 120 }
+    - { nombre: web, comando: npm run dev, ruta: web, puerto: 5173, cuando: e2e, espera_seg: 120 }
+  variables:
+    DATABASE_URL: "postgresql://app:app@localhost:{{PUERTO_DB}}/{{PROYECTO_ID}}"
+    PORT: "{{PUERTO_API}}"
+    VITE_API_URL: "http://localhost:{{PUERTO_API}}"
+  preparar:
+    - cd api && npm install
+    - cd web && npm install
+    - cd web && npx playwright install chromium
+  migrar:
+    - cd api && npm run migrate
+  tests:
+    unitarios: "cd web && npm run test:unit -- --run && cd ../api && npm test"
+    integracion: cd api && npm run test:integration
+    e2e: cd web && npm run test:e2e

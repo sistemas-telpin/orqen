@@ -19,6 +19,18 @@ orqen init               # Run from the repository you want to initialize
 
 Other options include `--agent "<command>"`, `--tools claude,codex`, and `--no-openspec`. Non-interactive runs use the defaults. If a managed file conflicts, `--yes` writes the proposed version alongside the original.
 
+## Create a new project
+
+```sh
+orqen create project "Payments Platform" [--stack vue-node-postgres | java-tomcat-sqlserver] [--dir ./payments] [--yes]
+orqen create stacks
+```
+
+Asks the name, folder and stack; checks the stack requirements and asks its parameters (ports, Java package); creates the
+folder and Git repository; generates the code (official generators plus the stack skeleton); copies the environment scripts
+to `tools/` (e.g. `tools/db.mjs`, the database in Docker); runs `orqen init` with the stack and environments already known;
+and offers the initial commit. Stacks live in the repository's `tools/` folder (one `tool.yaml` plus a `scaffold/` per stack).
+
 ## Update an installation
 
 `orqen update [dir]` checks for a newer CLI, a compatible OpenSpec update, and kit changes. The kit updates files that still match the manifest. For edited files, you can keep the existing version, replace it, or write a copy with the `.orqen-new` suffix.
@@ -36,6 +48,16 @@ orqen env down
 ```
 
 `up` starts the processes in `entornos.procesos` in the background (`--all` includes the `cuando: e2e` ones, such as the frontend), waits until each one responds on its port, URL, or log line, then runs migrations and seed commands. `down` stops what orqen started; `status` shows what is running and where each log is (`orqen/state/logs/`). The test commands receive variables from `entornos.variables` in `orqen/config.yaml`. The values `unitarios` and `integracion` select unit and integration tests.
+
+## Split a task across a swarm of agents
+
+```sh
+orqen swarm "Add CSV export to the payments list, with date filters and tests"
+orqen swarm --file task.md --parallel 6 --plan-only   # write the plan only
+orqen swarm --plan orqen/state/swarm/<run>/plan.json  # run a reviewed plan
+```
+
+A planner model (default Opus) splits the task into a dependency graph of small subtasks, each with the files it touches and a fast test. After the person confirms, subtasks run in parallel in separate git worktrees: the small model (default Haiku) gets two attempts, then the subtask escalates to the large model (default Sonnet) with the failure output. Each passing subtask is committed and merged into `orqen/swarm-<run>`; dependents start on top of merged code. Finally the plan's `finalTest` runs on the integration branch, and the large model fixes it if needed. The report and every attempt's log are in `orqen/state/swarm/<run>/`. Run `orqen swarm --help` for all options.
 
 ## Process a request
 

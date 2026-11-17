@@ -4,7 +4,7 @@ argument-hint: SIS-32
 allowed-tools: Bash(orqen:*), Bash(git fetch:*), Bash(git diff:*), Bash(git log:*), Bash(git show:*), Bash(git status:*), Bash(git branch:*), Bash(gh pr view:*), Bash(gh pr diff:*), Bash(orqen env test:*), Read, Grep, Glob, Write, AskUserQuestion
 ---
 
-Review the integration PR for `$ARGUMENTS` on behalf of the senior who runs this command. Tell them whether the changes are sound and, for each problem, explain it with possible solutions. The senior decides: you give them a report, and they comment `/approve` or `/reject` in Jira. Follow the workflow in `AGENTS.md`.
+Review the integration PR for `$ARGUMENTS` on behalf of the senior who runs this command. Tell them whether the changes are sound and, for each problem, explain it with possible solutions. The senior decides: you give them a report, and they approve or request changes in a review on the PR in GitHub (or comment `/approve` or `/reject` in Jira when the project uses `CODE_REVIEW_GATE=jira`). Follow the workflow in `AGENTS.md`.
 
 ## Rules
 
@@ -40,9 +40,9 @@ Review the integration PR for `$ARGUMENTS` on behalf of the senior who runs this
      - **Possible solutions**: one to three concrete options (what to change and where, with a short snippet if it helps) and their cost or trade-off. Put the recommended option first and mark it.
    - **What is good**: two or three lines, only when useful.
    - If there are no findings, say so plainly.
-8. If the verdict is not `Approvable`, draft a `/reject <reason>` for Jira with the blocking and important findings (number, location, problem, and recommended solution, one line each). Jira passes that text back to development as feedback. If the verdict is approvable, remind the senior to comment `/approve` on the REC. The senior posts it, not you.
+8. If the verdict is not `Approvable`, draft the text for the senior's "request changes" review (or the `/reject <reason>` comment in the Jira mode) with the blocking and important findings (number, location, problem, and recommended solution, one line each). orqen passes that text back to development as feedback. If the verdict is approvable, remind the senior to approve the PR in GitHub (or comment `/approve` in the Jira mode). The senior posts it, not you. A push to the PR after their review makes it stale, so they need to review again.
 9. Stay available while the senior digs into a finding, drops one, or asks for another area to be reviewed, and update the report with their decisions.
-10. When the senior accepts the report, write it to a temporary file with the verdict, summary, findings with their solutions, and the `/reject` text when there is one. Record it once:
+10. When the senior accepts the report, write it to a temporary file with the verdict, summary, findings with their solutions, and the text of the changes request when there is one. Record it once:
 
     ```sh
     orqen review <KEY> <report.md> --verdict <approve|minor|reject> --agent code-review

@@ -57,7 +57,7 @@ Propose the steps, rollback, and read-only verification. A person authorized by 
 ### Integration PR and code review
 
 - `TESTING` opens no PR. The only PR is the integration PR to `DEVEL_BRANCH`, opened with `/orqen:pr` (`orqen pr <KEY> <explanation.md>`) from the request branch. orqen commits pending changes, pushes, and opens or updates it.
-- The senior reviews that PR in `CODE_REVIEW`, supported by `/orqen:code-review <KEY>`: review the PR diff read-only against the analysis, spec or plan, and acceptance criteria, and give a verdict plus each finding with its severity, `file:line`, impact, and possible solutions. When the senior accepts the report, record it with `orqen review <KEY> <report.md> --verdict <approve|minor|reject>`. It does not change the stage: the senior still comments `/approve` or `/reject <reason>` in Jira.
+- The senior reviews that PR in `CODE_REVIEW`, supported by `/orqen:code-review <KEY>`: review the PR diff read-only against the analysis, spec or plan, and acceptance criteria, and give a verdict plus each finding with its severity, `file:line`, impact, and possible solutions. When the senior accepts the report, record it with `orqen review <KEY> <report.md> --verdict <approve|minor|reject>`. It does not change the stage. With the default `CODE_REVIEW_GATE=github`, the senior decides with a review on the PR in GitHub (limited to `GITHUB_REVIEWERS` when set): orqen reads it, moves to `DELIVERY` on approval, and returns to `DEVELOPMENT` on "changes requested" (the review text becomes feedback for the agent). Only reviews on the PR's current head count, so a later push needs a new review. With `CODE_REVIEW_GATE=jira`, the senior comments `/approve` or `/reject <reason>` in Jira instead.
 
 ### Rules
 

@@ -31,6 +31,10 @@ export interface Config {
   repoPath: string; baseBranch: string; testCommand: string;
   /** `orqen pr`: integration branch ("desarrollo"/"devel") the REC branch is sent to, and the command that opens that PR. */
   develBranch: string; develPrCommand: string;
+  /** Who decides in CODE_REVIEW: the review on the PR in GitHub (approvers.code = GitHub logins) or `/approve`/`/reject` in Jira. */
+  codeReviewGate: "github" | "jira";
+  /** GitHub logins whose reviews count in CODE_REVIEW when codeReviewGate is github (empty = any reviewer). Separate from approvers.code, which are Jira accounts. */
+  githubReviewers: string[];
   openspecCmd: string;
   stateDir: string; lockMinutes: number; stagesDir: string;
   environment?: ProjectConfig["entornos"];
@@ -68,6 +72,8 @@ export function loadConfig(over: Partial<Config> = {}): Config {
     testCommand: env("TEST_COMMAND", "npm test"),
     develBranch: env("DEVEL_BRANCH", "desarrollo"),
     develPrCommand: env("DEVEL_PR_COMMAND", 'gh pr create --base {base} --head {branch} --title "{key}: {title}" --body-file {body}'),
+    codeReviewGate: env("CODE_REVIEW_GATE", "github") === "jira" ? "jira" : "github",
+    githubReviewers: split(env("GITHUB_REVIEWERS")),
     openspecCmd: env("OPENSPEC_CMD") && env("OPENSPEC_CMD") !== "openspec" ? env("OPENSPEC_CMD") : existsSync(localOpenSpec) ? localOpenSpec : "openspec",
     stateDir: env("REC_STATE_DIR") || (existsSync(localState) || !project ? localState : join(repoPath, "orqen", "state")),
     stagesDir: stages ?? join(TEMPLATES_DIR, "stages"),

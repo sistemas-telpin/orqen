@@ -21,7 +21,7 @@ import { BOT_MARK, type Comment, type JiraApi } from "./jira.ts";
 import { type Scenario, type OpenSpecApi, type Task, hoursOf } from "./openspec.ts";
 import { reviewSql } from "./sql.ts";
 import { type Rec, Store, newRec } from "./store.ts";
-import type { EnvironmentResult, Workspace } from "./workspace.ts";
+import type { EnvironmentResult, PrReview, Workspace } from "./workspace.ts";
 
 const CMD = /^\s*\/(approve|reject)\b\s*([\s\S]*)/i;
 /** Verdicts of `orqen review` (code review report for the senior) and how they read in Jira. */
@@ -396,7 +396,10 @@ export class Process {
         if (s.approved) {
           // testing does not open the PR: the senior reviews the PR to the devel branch (`orqen pr`)
           const pr = rec.artifacts.devel_pr ? `PR to *${this.cfg.develBranch}*: ${rec.artifacts.devel_pr}` : `Branch \`${rec.branch}\` (the PR to *${this.cfg.develBranch}* is opened with /orqen:pr)`;
-          return this.commentWithSis(rec, `Tests passed and all scenarios are covered:\n${table}\n\n${pr}\nCode review: comment */approve* or */reject <reason>*.`);
+          const decide = this.cfg.codeReviewGate === "github"
+            ? "Code review: approve or request changes on the PR in GitHub."
+            : "Code review: comment */approve* or */reject <reason>*.";
+          return this.commentWithSis(rec, `Tests passed and all scenarios are covered:\n${table}\n\n${pr}\n${decide}`);
         }
         return this.commentWithSis(rec, `Testing failed (attempt ${rec.testingAttempts}). Suite: ${rt?.ok ? "OK" : "FAILED"}\n${table}\n\nDiagnosis: ${s.failure_diagnosis}` +
           (next === "BLOCKED" ? "\nRetries are exhausted. Human review is needed." : "\nReturning to development."));
@@ -446,8 +449,49 @@ export class Process {
     return ({ CODE_REVIEW: a.code, ACCEPTANCE: a.client, EXECUTION_APPROVAL: a.execution ?? [], APPLICATION: a.execution ?? [], BLOCKED: [...(a.analysis ?? []), ...a.code] } as Record<string, string[]>)[s] ?? [];
   }
 
+  /**
+   * CODE_REVIEW with CODE_REVIEW_GATE=github: the senior decides with a review on the integration PR.
+   * Only reviews submitted on the PR's current head count (a push after the review makes it stale, like GitHub's
+   * "dismiss stale approvals"), each review is handled once, and with GITHUB_REVIEWERS set only those GitHub logins count.
+   * Changes requested win over approvals. If GitHub cannot be read, the REC keeps waiting (it is not blocked).
+   */
+  private async reviewCodeOnPr(rec: Rec) {
+    const url = rec.artifacts.devel_pr as string | undefined;
+    if (!url) return this.store.save(rec);   // no PR yet: nothing to decide on (`/orqen:pr` opens it)
+    if (!this.ws.prReviews) { console.error("[orqen] warning: this workspace cannot read PR reviews; use CODE_REVIEW_GATE=jira"); return this.store.save(rec); }
+    let snap: { head: string; reviews: PrReview[] };
+    try { snap = this.ws.prReviews(url); } catch (e) {
+      console.error(`[orqen] warning: could not read the reviews of ${url}: ${(e as Error).message}`);
+      return this.store.save(rec);
+    }
+    const handled = new Set<string>(rec.artifacts.handled_reviews ?? []);
+    const authorized = this.cfg.githubReviewers;
+    const latest = new Map<string, PrReview>();   // last decisive review per author, on the current head
+    for (const r of snap.reviews) {
+      if (!["APPROVED", "CHANGES_REQUESTED"].includes(r.state) || r.commit !== snap.head || handled.has(r.id)) continue;
+      if (authorized.length && !authorized.includes(r.author)) continue;
+      latest.set(r.author, r);
+    }
+    const decisive = [...latest.values()];
+    const rejected = decisive.filter((r) => r.state === "CHANGES_REQUESTED");
+    const approved = decisive.filter((r) => r.state === "APPROVED");
+    if (!rejected.length && !approved.length) return this.store.save(rec);
+
+    const used = rejected.length ? rejected : approved;
+    rec.artifacts.handled_reviews = [...handled, ...used.map((r) => r.id)];
+    if (rejected.length) {
+      for (const r of rejected) rec.feedback.push({ from: r.author, rejection: r.body.trim() || `Changes requested on the PR: ${url}` });
+      rec.testingAttempts = 0;
+      await this.commentWithSis(rec, `Changes requested on the PR by ${rejected.map((r) => r.author).join(", ")}: ${url}\nReturning to development.`);
+      return this.move(rec, GATES.CODE_REVIEW.reject, `changes requested on the PR by ${rejected.map((r) => r.author).join(", ")}`);
+    }
+    await this.commentWithSis(rec, `PR approved by ${approved.map((r) => r.author).join(", ")}: ${url}\nMoving to delivery.`);
+    return this.move(rec, GATES.CODE_REVIEW.approve, `PR approved by ${approved.map((r) => r.author).join(", ")}`);
+  }
+
   private async reviewGate(rec: Rec & { state: keyof typeof GATES }) {
     const gate = GATES[rec.state];
+    if (rec.state === "CODE_REVIEW" && this.cfg.codeReviewGate === "github") return this.reviewCodeOnPr(rec);
     const fresh = await this.newHumanComments(rec);
     if (gate.kind === "answer") {
       if (fresh.length) {

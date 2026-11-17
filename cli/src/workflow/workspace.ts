@@ -16,6 +16,9 @@ export interface EnvironmentResult {
   output?: string;
 }
 
+/** A review left on the PR (GitHub). `commit` is the commit it was submitted on. */
+export interface PrReview { id: string; author: string; state: string; commit: string; body: string }
+
 export interface Workspace {
   prepareBranch(key: string): string;
   currentBranch(): string;
@@ -27,6 +30,8 @@ export interface Workspace {
   runTests(): { ok: boolean; output: string };
   push(branch: string): void;
   openPr(vars: Record<string, string>, command: string): string;
+  /** Reviews of the PR and its head commit; the senior's decision when CODE_REVIEW_GATE=github. */
+  prReviews?(url: string): { head: string; reviews: PrReview[] };
 }
 
 export class GitWorkspace implements Workspace {
@@ -122,6 +127,18 @@ export class GitWorkspace implements Workspace {
   }
 
   push(branch: string) { this.git("push", "-u", "origin", branch); }
+
+  prReviews(url: string) {
+    // execFile (no shell): the url comes from the PR output stored by orqen, but it is never interpolated into a command line
+    const out = execFileSync("gh", ["pr", "view", url, "--json", "headRefOid,reviews"], {
+      cwd: this.cfg.repoPath, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"],
+    });
+    const j = JSON.parse(out) as { headRefOid: string; reviews?: Array<{ id: string; author?: { login?: string }; state: string; body?: string; commit?: { oid?: string } }> };
+    return {
+      head: j.headRefOid,
+      reviews: (j.reviews ?? []).map((r) => ({ id: r.id, author: r.author?.login ?? "", state: r.state, commit: r.commit?.oid ?? "", body: r.body ?? "" })),
+    };
+  }
 
   openPr(vars: Record<string, string>, command: string) {
     if (!command) return "";

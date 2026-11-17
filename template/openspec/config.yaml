@@ -1,30 +1,27 @@
-# Configuración de OpenSpec para el proceso REC.
-# Si ya corriste `openspec init`, fusioná `context` y `rules` con tu config.yaml.
+# orqen merges this fragment into openspec/config.yaml after initialization.
 schema: spec-driven
 
 context: |
-  Language: es
-  All artifacts must be written in es.
-  Keep OpenSpec structural headings and SHALL/MUST keywords in English.
-  Este repo procesa requerimientos de clientes (REC) de Jira. Cada change corresponde a un REC
-  y su nombre empieza con la key del REC (ej. rec-123-exportar-facturas).
+  This repository uses Jira for customer requests (REC). Each change corresponds to a REC
+  and starts with its issue key, for example rec-123-export-invoices.
 
 rules:
   proposal:
-    - En "Why" citá la key del REC y el problema de negocio del cliente.
-    - Incluí una sección "Fuera de alcance" dentro de "What Changes".
+    - In "Why", cite the REC key and explain the customer's business problem.
+    - Include an "Out of scope" section under "What Changes".
   specs:
-    - Cada criterio de aceptación del análisis del REC debe tener al menos un Scenario con WHEN/THEN.
-    - Los escenarios describen comportamiento observable, verificable con un test automático.
+    - Cover every acceptance criterion with at least one Scenario using WHEN and THEN.
+    - Describe observable behavior that an automated test can verify.
   tasks:
-    - Cada tarea termina con su estimación en horas entre paréntesis, ej. "(4h)". Máximo 8h por tarea.
-    - Incluí tareas explícitas de tests automáticos por escenario y de documentación.
+    - End each task with its estimate in hours, such as "(4h)". Limit individual tasks to eight hours.
+    - Include explicit tasks for automated scenario coverage and documentation.
 
 operations:
   apply:
     guidance:
-      - Escribí un test por Scenario y nombralo de forma que se reconozca el escenario.
-      - Tildá cada tarea en tasks.md al terminarla. No hagas commits; los hace el proceso REC.
+      - Write a test per Scenario and name it so the coverage is easy to identify.
+      - Check off each completed task in tasks.md. orqen handles commits.
+      - Run tests with orqen env test. Start required services with orqen env up.
   archive:
     guidance:
-      - El archivado lo ejecuta el proceso REC en la etapa DELIVERY; los agentes no archivan.
+      - orqen archives changes during DELIVERY.

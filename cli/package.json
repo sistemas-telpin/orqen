@@ -1,24 +1,45 @@
 {
-  "name": "orqen-cli",
-  "version": "0.2.0",
-  "private": true,
+  "name": "orqen",
+  "version": "0.1.0",
+  "description": "ORQEN multi-agent orchestration on OpenSpec, from customer request to production.",
   "type": "module",
-  "description": "Agent-agnostic orqen process: AGENTS.md + TypeScript CLI",
+  "bin": {
+    "orqen": "dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
   "engines": {
     "node": ">=20.12"
   },
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
-    "orqen": "tsx scripts/cli.ts",
+    "dev": "tsx src/index.ts",
+    "build": "tsc -p tsconfig.build.json",
     "test": "node --import tsx --test test/*.test.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "pnpm build"
   },
   "dependencies": {
+    "@clack/prompts": "^1.9.0",
+    "orqen-kit": "workspace:*",
+    "cross-spawn": "^7.0.6",
+    "diff": "^9.0.0",
+    "picocolors": "^1.1.1",
+    "semver": "^7.8.6",
+    "yaml": "^2.9.1",
     "zod": "^4.6.7"
   },
   "devDependencies": {
-    "@fission-ai/openspec": "^2.0.0",
-    "@types/node": "^26.6.6",
+    "@types/cross-spawn": "^6.0.6",
+    "@types/node": "^24.0.0",
+    "@types/semver": "^7.7.0",
     "tsx": "^4.23.15",
-    "typescript": "^7.0.2"
-  }
+    "typescript": "^7.0.2",
+    "@fission-ai/openspec": "^2.0.0"
+  },
+  "license": "UNLICENSED",
+  "author": "Telpin"
 }

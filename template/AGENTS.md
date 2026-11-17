@@ -1,86 +1,67 @@
-# AGENTS.md
+## Customer request workflow (REC)
 
-## Proceso REC (requerimientos del cliente)
-
-Este repo procesa los REC (requerimientos del cliente que llegan por Jira) con un proceso fijo:
-
-```
-ANALYSIS ⇄ WAITING_CLIENT ──(OK del analista: carril + spec si corresponde + SIS)──▶ DEVELOPMENT ⇄ TESTING
-   → CODE_REVIEW → DELIVERY → ACCEPTANCE → CLOSED        (cualquier problema → BLOCKED)
+```text
+ANALYSIS ⇄ WAITING_CLIENT → DEVELOPMENT ⇄ TESTING
+  → CODE_REVIEW → DELIVERY → ACCEPTANCE → CLOSED
+  Issues that require intervention → BLOCKED
 ```
 
-**El análisis lo conduce un analista.** Se dispara con `/orqen:analyze REC-1234` (plugin `orqen`; en otros agentes:
-_"analizá el REC-1234"_, que equivale a `./cli/bin/orqen analyze REC-1234`). No es un trámite automático:
+### Analysis
 
-1. **Grilling**: leés el REC (Jira por MCP **solo lectura**, o `orqen search`) y el repo, y entrevistás al analista
-   (skill `orqen:grilling`) hasta cerrar las dudas. Lo que solo puede contestar el cliente va como pregunta (WAITING_CLIENT).
-2. **OK del analista** al análisis. Sin OK explícito no se avanza.
-3. **Propuesta de carril** (el analista confirma):
+1. Start with `/orqen:analyze REC-1234` or `orqen analyze REC-1234 --analyst "<name>"`. A human analyst leads the analysis.
+2. Read the issue, comments, and repository, then interview the analyst using the `orqen:grilling` skill. Use Jira MCP for read-only access or `orqen search`. Record questions only the customer can answer and wait for their response.
+3. Summarize the scope, acceptance criteria, and risks. Obtain the analyst's explicit approval and ask them to confirm the lane.
 
-   | Carril     | Cuándo                                                                                                 | Qué se genera                                                               |
-   | ---------- | ------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------- |
-   | `direct`  | Cambio acotado, un componente, ≲ 4 h, sin cambio de contrato, bajo riesgo                              | **Sin OpenSpec.** Plan + criterios de aceptación en el análisis y en el SIS |
-   | `light`  | Cambia comportamiento pero es acotado (1–2 capacidades, ≲ 2 días)                                      | Change de OpenSpec compacto (proposal + deltas + tasks; design mínimo)      |
-   | `full` | Varias capacidades, datos/integraciones, seguridad o facturación, > 2 días, decisiones de arquitectura | Change de OpenSpec completo (proposal + specs + design + tasks)             |
+   | Lane | When | Output |
+   | --- | --- | --- |
+   | `direct` | One component, roughly four hours or less, low risk, no contract change | Plan and acceptance criteria |
+   | `light` | One or two capabilities, roughly two days or less | OpenSpec proposal, spec deltas, a short design, and tasks |
+   | `full` | Broader changes involving architecture, data, integrations, security, or billing | Full OpenSpec proposal, specs, design, and tasks |
 
-   Con `light`/`full`: `orqen lane <KEY> <lane>` crea la rama y el change, y escribís la spec con el analista.
+   With `light` or `full`, `orqen lane <KEY> <lane>` prepares a branch and change. Write the spec with the analyst under `openspec/changes/`.
+4. Run `orqen complete <KEY> <output.json>`. Once validation passes, orqen creates the SIS in `SIS_PROJECT`, links it to the REC, and writes the record under `orqen/work/<KEY>/`. The REC tracks the customer conversation and the SIS tracks implementation through `SIS_TRANSITIONS`. Rejected customer acceptance starts a new analysis round and a new SIS.
 
-4. **Cierre** (`orqen complete`): crea el **SIS** (issue de desarrollo en `SIS_PROJECT`), lo **vincula al REC**, deja el
-   registro en **`orqen/work/<KEY>/`** y pasa a DEVELOPMENT. El REC sigue siendo el dueño de la conversación con el cliente
-   (vinculado hasta `ACCEPTANCE`); el SIS recibe el seguimiento técnico (`SIS_TRANSITIONS`). `orqen take` lo informa en el contexto (`sis`).
-   Si el cliente rechaza la conformidad, la ronda nueva vuelve a ANALYSIS y genera un SIS nuevo.
+### Operational work
 
-**Carril operativo (`route: operational`).** Si el REC se resuelve sin cambiar código (script SQL, corrección de datos,
-reinicio, configuración), el análisis lo marca (carril `direct`, sin spec) y el flujo es:
+For a data correction, restart, configuration change, or other work without code changes, set `route: operational` and `lane: direct`. The workflow is:
 
-```
+```text
 ANALYSIS → EXECUTION → EXECUTION_APPROVAL → APPLICATION → VERIFICATION → ACCEPTANCE → CLOSED
 ```
 
-Sin OpenSpec, rama, tests ni PR (el SIS igual se crea al cerrar el análisis). Vos **proponés** (script + rollback + verificación) y después
-**verificás en solo lectura**; una persona autoriza (`APPROVERS_EXECUTION`) y **aplica**. Nunca ejecutes SQL que modifique datos ni
-toques servicios. Si la verificación demuestra que la causa es de código, el REC vuelve a ANALYSIS (nace un SIS de desarrollo).
+Propose the steps, rollback, and read-only verification. A person authorized by `APPROVERS_EXECUTION` approves and applies the change. Never execute SQL that modifies data or change services yourself. If verification identifies a code defect, the REC returns to analysis. Operational work still creates a SIS; it skips the spec, branch, tests, and PR.
 
-**Registro en `orqen/work/<KEY>/`** (se commitea con la rama del REC): `state.json` (proyección del estado), `log.md`
-(una línea por transición) y `round-N/analysis.md|json` (resumen, criterios, decisiones del grilling, carril, SIS; en el carril
-operativo también `round-N/execution/`). Lo escribe `orqen`; la fuente de verdad operativa sigue siendo `cli/.state/`.
+### Work on a stage
 
-**Vos trabajás en las etapas ANALYSIS (con el analista), DEVELOPMENT, TESTING, DELIVERY, EXECUTION y VERIFICATION.** Las demás son
-aprobaciones humanas en Jira (`/approve`, `/reject <motivo>`) y las maneja el script `orqen`.
-La especificación se hace con **OpenSpec**: en los carriles liviano y completo cada REC es un _change_ en `openspec/changes/`.
+- `orqen pending` lists work for analysts and agents.
+- `orqen take <KEY>` claims an agent stage and prints its instructions, issue context, feedback, and JSON output schema. Use `orqen analyze` for analysis.
+- Run `orqen complete <KEY> <output.json>` when the output is ready. Correct validation errors and retry until the command reports success. Stop after completing the stage.
+- If you cannot proceed, run `orqen block <KEY> "<specific reason>"`. Human reviewers use `/approve` or `/reject <reason>` in Jira.
+- orqen writes `state.json`, `log.md`, and `round-N/analysis.md` and `.json` under `orqen/work/<KEY>/`. Operational rounds also record execution details under `execution/`. The authoritative workflow state is stored under `orqen/state/` or `cli/.state/`, depending on how the project is configured.
 
-### Cómo trabajar un REC
+### Rules
 
-1. `./cli/bin/orqen pending` → lista los REC con trabajo, separados entre _para analizar_ y _para un agente_.
-2. **Análisis**: `./cli/bin/orqen analyze <KEY> --analyst "<name>"` → reserva el REC e imprime las instrucciones, el contexto
-   completo (issue, comentarios, feedback) y el JSON Schema de la salida. Seguilas al pie de la letra.
-   **Otras etapas**: `./cli/bin/orqen take <KEY>` (hace lo mismo y además prepara rama y tests). `take` no sirve para ANALYSIS.
-3. Escribí tu salida en un archivo JSON y corré `./cli/bin/orqen complete <KEY> <archivo.json>`.
-   Si responde con errores, corregí (la salida o los archivos de OpenSpec) y repetí hasta que diga `✔`.
-4. Una etapa por vez: después de `complete`, terminá. No sigas con la etapa siguiente aunque esté disponible.
-5. Si no podés avanzar: `./cli/bin/orqen block <KEY> "motivo concreto"`.
+- Use Jira for read-only access. orqen handles issue writes, Git commits, branch changes, pushes, and OpenSpec archiving. Do not run `git commit/push/checkout/reset/rebase` or `openspec archive`.
+- Do not edit `orqen/state/`, `orqen/work/`, or orqen configuration as part of a REC.
+- Obtain explicit analyst approval before closing analysis, including approval of the selected lane.
+- Record unanswered questions and label assumptions. Read `openspec/specs/` for current behavior before proposing changes.
+- Write in clear, professional English. Follow OpenSpec's structural headings and use SHALL/MUST where required.
+- Use network access only as required by the stage, such as installing project dependencies for tests.
 
-### Revisión de e2e (`/orqen:e2e-review SIS-3312`)
+### Environments and tests
 
-Los tests e2e que generaste en DEVELOPMENT los valida **visualmente el diseñador de testing e2e** (una persona). Con el REC en `TESTING`
-o `CODE_REVIEW`, mapeás cada Scenario / criterio de aceptación contra los e2e de la rama, dejás listo el modo visual (headed, traza, video)
-con una guía de revisión y **esperás su aprobación**, con los ajustes que haga a mano. No es una etapa del flujo: no uses `take`, `complete`
-ni `block`. No edites los e2e por tu cuenta ni des la aprobación por la persona. Los ajustes los commitea la persona en la rama antes de que se abra el PR.
+`orqen/config.yaml` defines the environments under `entornos`. The CLI uses `docker-compose.orqen.yml` to start configured services.
 
-### PR a desarrollo (`/orqen:pr SIS-32`)
+- During `DEVELOPMENT`, `orqen take` installs dependencies, waits for service health checks, and runs migrations and seed commands. Read `environment` in the agent context for status, connection variables, and test commands.
+- `orqen complete` shuts down the development environment.
+- During `TESTING`, orqen starts services and apps, runs the full test suite, and shuts them down.
 
-Con el desarrollo hecho (TESTING o después), redactás la explicación de los cambios (resumen, cambios, desvíos, tests, cómo verificar, riesgos) a partir
-del diff contra la rama base, y se la pasás a `./cli/bin/orqen pr <KEY> <archivo.md>`, que commitea lo pendiente, empuja y abre el PR hacia `DEVEL_BRANCH`.
-`./cli/bin/orqen pr <KEY>` sin archivo solo informa. El PR lo abre siempre `orqen`: vos no corrés `git push` ni `gh`.
+```sh
+orqen env test [unitarios|integracion|e2e|visual]
+orqen env status
+orqen env up --apps  # Use when development tests also need the apps
+```
 
-### Reglas
+Stack detected during initialization:
 
-- **Nunca** escribas en Jira (tampoco por MCP: el MCP es de solo lectura), ni hagas `git commit/push/checkout/reset/rebase`,
-  ni cambies de rama, ni corras `openspec archive`. El script `orqen` lo hace en el momento correcto (incluida la creación del SIS y su vínculo con el REC).
-- **Nunca** edites `cli/.state/`, `orqen/work/` ni los scripts de `cli/` como parte de un REC.
-- **Nunca** cierres un análisis sin el OK explícito del analista al análisis y al carril.
-- No inventes información del cliente. Lo que falte es una pregunta (ANALYSIS) o un supuesto explícito.
-- Las specs en `openspec/specs/` son la fuente de verdad del comportamiento actual: leelas antes de proponer cambios.
-- Escribí en español rioplatense, claro y profesional. Mantené en inglés los encabezados estructurales
-  de OpenSpec y las palabras SHALL/MUST.
-- Sin red salvo lo que pida la etapa (instalar dependencias del proyecto si hace falta para correr tests).
+{{RESUMEN_STACK}}

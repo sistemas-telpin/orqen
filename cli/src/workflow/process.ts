@@ -20,7 +20,7 @@ import { BOT_MARK, type Comment, type JiraApi } from "./jira.ts";
 import { type Scenario, type OpenSpecApi, type Task, hoursOf } from "./openspec.ts";
 import { reviewSql } from "./sql.ts";
 import { type Rec, Store, newRec } from "./store.ts";
-import type { Workspace } from "./workspace.ts";
+import type { EnvironmentResult, Workspace } from "./workspace.ts";
 
 const CMD = /^\s*\/(approve|reject)\b\s*([\s\S]*)/i;
 
@@ -65,7 +65,7 @@ export class Process {
       throw new Error(`${key} already went through the analysis (state: ${rec.state}). If it must be redone, a rejection or an escalation sends it back to ANALYSIS.`);
     if (rec.state === "NEW") {
       rec.analyst = analyst;
-      await this.jira.comment(key, `${analyst} inició el análisis de este REC.`);
+      await this.jira.comment(key, `${analyst} started analyzing this request.`);
       await this.move(rec, "ANALYSIS", "registered by analyst", agent);
     }
     rec.analyst = analyst;
@@ -112,12 +112,21 @@ export class Process {
 
     // ANALYSIS (light/full are created by `orqen lane`) and the fast lane (EXECUTION/VERIFICATION) do not prepare a branch here
     if (["DEVELOPMENT", "TESTING", "DELIVERY"].includes(state)) rec.branch = this.ws.prepareBranch(key);
+    let environment: EnvironmentResult | undefined;
+    if (state === "DEVELOPMENT") environment = this.ws.startEnvironment?.(false);
     if (state === "TESTING") {
-      rec.artifacts.test_result = this.ws.runTests();
+      try {
+        environment = this.ws.startEnvironment?.(true);
+        rec.artifacts.test_result = environment?.ok === false
+          ? { ok: false, output: environment.output ?? environment.detail }
+          : this.ws.runTests();
+      } finally {
+        this.ws.stopEnvironment?.();
+      }
     }
     if (state === "DELIVERY" && rec.change && !rec.artifacts.archive) {
       rec.artifacts.archive = this.os.archive(rec.change);
-      this.ws.commit(key, `archiva change OpenSpec ${rec.change}`);
+      this.ws.commit(key, `Archive OpenSpec change ${rec.change}`);
       this.attempt(() => this.ws.push(rec.branch));
     }
     this.store.save(rec);
@@ -135,7 +144,7 @@ export class Process {
       context: {
         key, state, round: rec.round, branch: rec.branch || undefined,
         analyst: rec.analyst, lane: rec.lane, factory: `orqen/work/${key}/round-${rec.round}`,
-        issue, sis: rec.sis, comments,
+        issue, sis: rec.sis, comments, environment,
         openspec,
         ...(["DEVELOPMENT", "TESTING"].includes(state) ? { tasks: this.tasksOf(rec) } : {}),
         ...(state === "TESTING" ? { scenarios: this.scenariosOf(rec) } : {}),
@@ -172,7 +181,7 @@ export class Process {
     if (body.trim().length < 80) throw new Error("The explanation is too short: describe what changed, why and how to verify it.");
     const bodyFile = `orqen/work/${key}/round-${rec.round}/devel-pr.md`;
     this.fac.write(rec, "devel-pr.md", body.trim() + "\n");
-    this.ws.commit(key, `explicación del PR a ${info.base}`, { branch: rec.branch });
+    this.ws.commit(key, `PR explanation for ${info.base}`, { branch: rec.branch });
     this.ws.push(rec.branch);
     if (info.existing) return { url: info.existing, created: false, base: info.base };
     const issue = await this.jira.issue(key);
@@ -184,7 +193,7 @@ export class Process {
     if (!url) throw new Error(`The PR was not opened. Output: ${out || "(none)"}`);
     rec.artifacts.devel_pr = url;
     this.store.save(rec);
-    await this.commentWithSis(rec, `PR a *${info.base}* abierto desde la rama \`${rec.branch}\`: ${url}`);
+    await this.commentWithSis(rec, `PR to *${info.base}* opened from branch \`${rec.branch}\`: ${url}`);
     this.store.log(key, { ts: new Date().toISOString(), from: rec.state, to: rec.state, detail: `PR to ${info.base}: ${url}`, agent });
     return { url, created: true, base: info.base };
   }
@@ -228,6 +237,7 @@ export class Process {
     if (state === "VERIFICATION" && next !== "EXECUTION") rec.testingAttempts = 0;
 
     if (state === "ANALYSIS" && s.ready) await this.closeAnalysis(rec, s);
+    if (state === "DEVELOPMENT") this.ws.stopEnvironment?.();
     await this.publish(rec, state, s, next);
     rec.feedback = [];
     await this.move(rec, next, `stage ${state} completed`, agent);
@@ -295,16 +305,16 @@ export class Process {
     const md = (t: string, xs: string[]) => xs.length ? `## ${t}\n\n${xs.map((x) => `- ${x}`).join("\n")}\n\n` : "";
     this.fac.write(rec, "analysis.json", JSON.stringify(s, null, 2) + "\n");
     this.fac.write(rec, "analysis.md",
-      `# ${rec.key} — análisis (ronda ${rec.round})\n\n` +
-      `- **Analista:** ${rec.analyst ?? "?"}\n- **Vía:** ${s.route}\n- **Carril:** ${s.lane}\n- **Justificación del carril:** ${s.lane_rationale}\n` +
+      `# ${rec.key} — analysis (round ${rec.round})\n\n` +
+      `- **Analyst:** ${rec.analyst ?? "?"}\n- **Route:** ${s.route}\n- **Lane:** ${s.lane}\n- **Lane rationale:** ${s.lane_rationale}\n` +
       `- **SIS:** ${rec.sis ?? "—"}\n` + (rec.change ? `- **OpenSpec change:** openspec/changes/${rec.change}/\n` : "") +
-      (rec.artifacts.estimated_hours !== undefined ? `- **Estimación:** ${rec.artifacts.estimated_hours} h\n` : "") +
-      `\n## Resumen\n\n${s.summary}\n\n` +
-      md("Criterios de aceptación", s.acceptance_criteria) +
-      (s.plan?.length ? `## Plan (carril directo)\n\n${s.plan.map((x: string, i: number) => `${i + 1}. ${x}`).join("\n")}\n\n` : "") +
-      (s.decisions.length ? `## Decisiones del grilling\n\n${s.decisions.map((d: any) => `- **${d.question}** → ${d.answer}`).join("\n")}\n\n` : "") +
-      md("Capacidades afectadas", s.affected_capabilities) + md("Riesgos", s.risks) +
-      (s.spec ? md("Supuestos de la spec", s.spec.assumptions) : ""));
+      (rec.artifacts.estimated_hours !== undefined ? `- **Estimate:** ${rec.artifacts.estimated_hours} h\n` : "") +
+      `\n## Summary\n\n${s.summary}\n\n` +
+      md("Acceptance criteria", s.acceptance_criteria) +
+      (s.plan?.length ? `## Plan (direct lane)\n\n${s.plan.map((x: string, i: number) => `${i + 1}. ${x}`).join("\n")}\n\n` : "") +
+      (s.decisions.length ? `## Analyst decisions\n\n${s.decisions.map((d: any) => `- **${d.question}** → ${d.answer}`).join("\n")}\n\n` : "") +
+      md("Affected capabilities", s.affected_capabilities) + md("Risks", s.risks) +
+      (s.spec ? md("Specification assumptions", s.spec.assumptions) : ""));
   }
 
   // ================================================================ publish
@@ -312,26 +322,26 @@ export class Process {
     const k = rec.key;
     switch (state) {
       case "ANALYSIS": {
-        let t = `*Análisis*${rec.analyst ? ` (analista: ${rec.analyst})` : ""}\n${s.summary}\n\n*Tipo:* ${s.type}\n\n*Criterios de aceptación:*\n${bullets(s.acceptance_criteria)}`;
-        if (s.risks.length) t += `\n\n*Riesgos:*\n${bullets(s.risks)}`;
+        let t = `*Analysis*${rec.analyst ? ` (analyst: ${rec.analyst})` : ""}\n${s.summary}\n\n*Type:* ${s.type}\n\n*Acceptance criteria:*\n${bullets(s.acceptance_criteria)}`;
+        if (s.risks.length) t += `\n\n*Risks:*\n${bullets(s.risks)}`;
         if (s.ready) {
-          t += `\n\n*Carril:* ${s.route === "operational" ? "operativo (sin código)" : s.lane} — ${s.lane_rationale}`;
+          t += `\n\n*Lane:* ${s.route === "operational" ? "operational (no code changes)" : s.lane} — ${s.lane_rationale}`;
           if (rec.change) {
             const sc = this.os.scenarios(rec.change);
-            t += `\n*Spec:* OpenSpec change \`${rec.change}\` (rama \`${rec.branch}\`), ${sc.length} escenario(s), ${rec.artifacts.estimated_hours} h estimadas.`;
-          } else if (s.route === "development") t += `\n*Plan:*\n${bullets(s.plan ?? [], true)}` + (s.estimated_hours !== undefined ? `\n*Estimación:* ${s.estimated_hours} h` : "");
+            t += `\n*Spec:* OpenSpec change \`${rec.change}\` (branch \`${rec.branch}\`), ${sc.length} scenario(s), ${rec.artifacts.estimated_hours} estimated hours.`;
+          } else if (s.route === "development") t += `\n*Plan:*\n${bullets(s.plan ?? [], true)}` + (s.estimated_hours !== undefined ? `\n*Estimate:* ${s.estimated_hours} h` : "");
           t += `\n*SIS:* ${rec.sis}`;
         }
-        if (next === "WAITING_CLIENT") t += `\n\n*Necesito que me confirmes lo siguiente para poder especificar:*\n${bullets(s.open_questions, true)}`;
-        if (next === "BLOCKED") t += "\n\nSe agotaron las rondas de preguntas; derivo a una persona del equipo.";
+        if (next === "WAITING_CLIENT") t += `\n\n*Please confirm the following so we can specify the request:*\n${bullets(s.open_questions, true)}`;
+        if (next === "BLOCKED") t += "\n\nThe question limit has been reached. Human review is needed.";
         return this.jira.comment(k, t);
       }
       case "DEVELOPMENT":
         if (s.completed) {
           this.ws.commit(k, s.changes_summary.slice(0, 200));
-          return this.commentWithSis(rec, `Desarrollo listo en la rama \`${rec.branch}\`.\n${s.changes_summary}\n\nTests agregados:\n${bullets(s.added_tests)}\nPaso a testing.`);
+          return this.commentWithSis(rec, `Development complete on branch \`${rec.branch}\`.\n${s.changes_summary}\n\nTests added:\n${bullets(s.added_tests)}\nMoving to testing.`);
         }
-        return this.commentWithSis(rec, `No pude completar el desarrollo: ${s.blocker}`);
+        return this.commentWithSis(rec, `Development could not be completed: ${s.blocker}`);
       case "TESTING": {
         const rt = rec.artifacts.test_result;
         const table = s.scenarios.map((e: any) => `- ${e.covered ? "✔" : "✘"} ${e.requirement} › ${e.scenario}${e.test ? ` (${e.test})` : ""}`).join("\n");
@@ -339,45 +349,45 @@ export class Process {
           if (!rec.artifacts.pr) {
             this.attempt(() => this.ws.push(rec.branch));
             rec.artifacts.pr = this.attempt(() => this.ws.openPr({
-              key: k, branch: rec.branch, change: rec.change, change_dir: rec.change ? `openspec/changes/${rec.change}` : `orqen/work/${k}/round-${rec.round}`,
+              key: k, branch: rec.branch, base: this.cfg.baseBranch, change: rec.change, change_dir: rec.change ? `openspec/changes/${rec.change}` : `orqen/work/${k}/round-${rec.round}`,
               body: rec.change ? `openspec/changes/${rec.change}/proposal.md` : `orqen/work/${k}/round-${rec.round}/analysis.md`,
               title: rec.artifacts.ANALYSIS?.summary?.slice(0, 80) ?? rec.change,
             })) ?? "";
           }
-          return this.commentWithSis(rec, `Tests OK y todos los escenarios cubiertos:\n${table}\n\nPR: ${rec.artifacts.pr || rec.branch}\nRevisión de código: comentá */approve* o */reject <motivo>*.`);
+          return this.commentWithSis(rec, `Tests passed and all scenarios are covered:\n${table}\n\nPR: ${rec.artifacts.pr || rec.branch}\nCode review: comment */approve* or */reject <reason>*.`);
         }
-        return this.commentWithSis(rec, `Testing no aprobado (intento ${rec.testingAttempts}). Suite: ${rt?.ok ? "OK" : "FALLA"}\n${table}\n\nDiagnóstico: ${s.failure_diagnosis}` +
-          (next === "BLOCKED" ? "\nSe agotaron los intentos; derivo a una persona." : "\nVuelvo a desarrollo."));
+        return this.commentWithSis(rec, `Testing failed (attempt ${rec.testingAttempts}). Suite: ${rt?.ok ? "OK" : "FAILED"}\n${table}\n\nDiagnosis: ${s.failure_diagnosis}` +
+          (next === "BLOCKED" ? "\nRetries are exhausted. Human review is needed." : "\nReturning to development."));
       }
       case "EXECUTION": {
-        this.fac.write(rec, "execution/summary.md", `# Propuesta operativa\n\n${s.summary}\n\n- Sistema: ${s.system}\n- Impacto: ${s.impact}\n`);
+        this.fac.write(rec, "execution/summary.md", `# Operational proposal\n\n${s.summary}\n\n- System: ${s.system}\n- Impact: ${s.impact}\n`);
         if (s.sql_script) this.fac.write(rec, "execution/script.sql", s.sql_script);
         if (s.manual_steps?.length) this.fac.write(rec, "execution/steps.md", bullets(s.manual_steps, true));
         this.fac.write(rec, "execution/rollback.txt", s.rollback);
         this.fac.write(rec, "execution/verification.txt", s.verification);
-        const t = `*Propuesta operativa (carril rápido, sin desarrollo)*\n${s.summary}\n\n*Sistema:* ${s.system}\n*Impacto:* ${s.impact}` +
-          (s.estimated_rows !== undefined ? `\n*Filas estimadas:* ${s.estimated_rows}` : "") +
-          (s.sql_script ? `\n\n*Script SQL:*\n{code:sql}\n${s.sql_script}\n{code}` : "") +
-          (s.manual_steps?.length ? `\n\n*Pasos manuales:*\n${bullets(s.manual_steps, true)}` : "") +
-          `\n\n*Rollback:*\n{code}\n${s.rollback}\n{code}\n\n*Verificación:*\n{code}\n${s.verification}\n{code}` +
-          (s.risks.length ? `\n\n*Riesgos:*\n${bullets(s.risks)}` : "") +
-          `\n\nPara autorizar la ejecución comentá */approve*, o */reject <motivo>* para que lo rehaga.`;
+        const t = `*Operational proposal (no code changes)*\n${s.summary}\n\n*System:* ${s.system}\n*Impact:* ${s.impact}` +
+          (s.estimated_rows !== undefined ? `\n*Estimated rows:* ${s.estimated_rows}` : "") +
+          (s.sql_script ? `\n\n*SQL script:*\n{code:sql}\n${s.sql_script}\n{code}` : "") +
+          (s.manual_steps?.length ? `\n\n*Manual steps:*\n${bullets(s.manual_steps, true)}` : "") +
+          `\n\n*Rollback:*\n{code}\n${s.rollback}\n{code}\n\n*Verification:*\n{code}\n${s.verification}\n{code}` +
+          (s.risks.length ? `\n\n*Risks:*\n${bullets(s.risks)}` : "") +
+          `\n\nTo authorize the change, comment */approve*. To request revisions, comment */reject <reason>*.`;
         return this.commentWithSis(rec, t);
       }
       case "VERIFICATION": {
-        const t = `*Verificación*\n${s.evidence}\n\n`;
+        const t = `*Verification*\n${s.evidence}\n\n`;
         if (next === "ACCEPTANCE")
-          return this.commentWithSis(rec, t + `${s.client_message}\n\n*Cómo validarlo:*\n${bullets(s.validation_steps, true)}\n\n` +
-            `Para dar conformidad comentá */approve*, o */reject <motivo>* si algo no está bien.`);
+          return this.commentWithSis(rec, t + `${s.client_message}\n\n*How to verify:*\n${bullets(s.validation_steps, true)}\n\n` +
+            `To accept the result, comment */approve*. To report a problem, comment */reject <reason>*.`);
         if (next === "ANALYSIS")
-          return this.jira.comment(k, t + "Se comprobó que la causa requiere un cambio de código: vuelve a análisis para que el analista elija el carril de desarrollo.");
+          return this.jira.comment(k, t + "Verification shows that a code change is required. Returning to analysis to choose a development lane.");
         return this.jira.comment(k, t + (next === "BLOCKED"
-          ? "No quedó resuelto y se agotaron los intentos; derivo a una persona."
-          : "No quedó resuelto; preparo una nueva propuesta."));
+          ? "The issue persists and retries are exhausted. Human review is needed."
+          : "The issue persists. Preparing a new proposal."));
       }
       case "DELIVERY":
-        return this.jira.comment(k, `${s.client_message}\n\n*Cómo validarlo:*\n${bullets(s.validation_steps, true)}\n\n` +
-          `Para dar conformidad comentá */approve*, o */reject <motivo>* si algo no está bien.`);
+        return this.jira.comment(k, `${s.client_message}\n\n*How to verify:*\n${bullets(s.validation_steps, true)}\n\n` +
+          `To accept the result, comment */approve*. To report a problem, comment */reject <reason>*.`);
     }
   }
 
@@ -409,7 +419,7 @@ export class Process {
       const m = c.body.match(CMD);
       if (!m) { rec.feedback.push({ from: c.authorName, text: c.body }); continue; }
       if (authorized.length && !authorized.includes(c.author)) {
-        await this.jira.comment(rec.key, `${c.authorName}: no estás habilitado para /${m[1]} en esta etapa.`);
+        await this.jira.comment(rec.key, `${c.authorName}: you are not authorized to use /${m[1]} at this stage.`);
         continue;
       }
       const action = m[1].toLowerCase() as "approve" | "reject", reason = m[2].trim();
@@ -418,7 +428,7 @@ export class Process {
         rec.feedback.push({ from: c.authorName, text: reason });  // result of the application
       if (rec.state === "CODE_REVIEW" && action === "reject") rec.testingAttempts = 0;
       if (rec.state === "EXECUTION_APPROVAL" && action === "approve")
-        await this.jira.comment(rec.key, "Ejecución autorizada. Quien lo aplique, que lo haga tal como está propuesto y comente */approve <resultado>* si salió bien, o */reject <motivo>* si falló.");
+        await this.jira.comment(rec.key, "Operational change approved. Apply the proposal as written and comment */approve <result>* on success or */reject <reason>* on failure.");
       if (rec.state === "ACCEPTANCE" && action === "reject") {
         // new round: the previous change is already archived → the analyst re-analyzes (new lane, change and SIS)
         rec.round++; rec.change = ""; rec.questionRounds = 0; rec.testingAttempts = 0; delete rec.lane;
@@ -460,22 +470,22 @@ export class Process {
         project: this.cfg.sis.project, type: operational ? this.cfg.sis.operationalType : this.cfg.sis.type,
         title: `[${rec.key}] ${issue.title}`, labels: [`origin-${rec.key.toLowerCase()}`, `lane-${operational ? "operational" : a.lane}`],
         description: operational
-          ? `Resolución operativa del requerimiento ${rec.key} (sin desarrollo).\n\n*Resumen:* ${a.summary}\n*Justificación:* ${a.lane_rationale}\n\n` +
-            `*Criterios de aceptación:*\n${bullets(a.acceptance_criteria ?? [])}\n\nEl script, el rollback y la verificación los propone la etapa EXECUTION y se publican en el REC.`
-          : `Desarrollo del requerimiento ${rec.key}. *Carril:* ${a.lane} — ${a.lane_rationale}\n\n` +
-            `*Resumen:* ${rec.artifacts.ANALYSIS?.spec?.summary ?? a.summary}\n\n` +
-            `*Rama:* rec/${rec.key.toLowerCase()}\n` + (rec.change ? `*OpenSpec change:* openspec/changes/${rec.change}/\n` : `*Sin spec (carril directo):* orqen/work/${rec.key}/round-${rec.round}/analysis.md\n`) +
-            `*Estimación:* ${rec.artifacts.estimated_hours ?? "?"} h\n\n` +
-            `*${rec.change ? "Tareas" : "Plan"}:*\n${bullets(tasks.map((t) => t.description))}\n\n` +
-            `*${rec.change ? "Escenarios de aceptación" : "Criterios de aceptación"}:*\n${bullets(sc.map((e) => rec.change ? `${e.requirement} › ${e.scenario}` : e.scenario))}`,
+          ? `Operational resolution for request ${rec.key} (no code changes).\n\n*Summary:* ${a.summary}\n*Rationale:* ${a.lane_rationale}\n\n` +
+            `*Acceptance criteria:*\n${bullets(a.acceptance_criteria ?? [])}\n\nThe execution stage prepares the script, rollback, and verification and posts them on the request.`
+          : `Development for request ${rec.key}. *Lane:* ${a.lane} — ${a.lane_rationale}\n\n` +
+            `*Summary:* ${rec.artifacts.ANALYSIS?.spec?.summary ?? a.summary}\n\n` +
+            `*Branch:* rec/${rec.key.toLowerCase()}\n` + (rec.change ? `*OpenSpec change:* openspec/changes/${rec.change}/\n` : `*Direct-lane analysis:* orqen/work/${rec.key}/round-${rec.round}/analysis.md\n`) +
+            `*Estimate:* ${rec.artifacts.estimated_hours ?? "?"} h\n\n` +
+            `*${rec.change ? "Tasks" : "Plan"}:*\n${bullets(tasks.map((t) => t.description))}\n\n` +
+            `*${rec.change ? "Acceptance scenarios" : "Acceptance criteria"}:*\n${bullets(sc.map((e) => rec.change ? `${e.requirement} › ${e.scenario}` : e.scenario))}`,
       });
       rec.sis = sis;
       this.store.save(rec);
     }
     if (!rec.artifacts.sis_linked) {
       await this.jira.link(rec.sis, rec.key, this.cfg.sis.link);
-      await this.jira.comment(rec.key, `Análisis cerrado${rec.analyst ? ` con ${rec.analyst}` : ""}. Creé ${rec.sis} (carril ${operational ? "operativo" : a.lane}) para el seguimiento; el seguimiento técnico va por ahí y acá sigo informando los hitos.`);
-      await this.jira.comment(rec.sis, `Creado a partir de ${rec.key} al cerrarse el análisis. Registro: orqen/work/${rec.key}/.`);
+      await this.jira.comment(rec.key, `Analysis complete${rec.analyst ? ` with ${rec.analyst}` : ""}. Track implementation in ${rec.sis} (${operational ? "operational" : a.lane} lane). Milestones will also be posted on this request.`);
+      await this.jira.comment(rec.sis, `Created from ${rec.key} after analysis. Request record: orqen/work/${rec.key}/.`);
       rec.artifacts.sis_linked = true;
       this.store.save(rec);
     }
@@ -491,7 +501,7 @@ export class Process {
   async block(key: string, reason: string, agent = "agent") {
     const rec = this.store.get(key) ?? newRec(key);
     if (rec.state === "BLOCKED") return;
-    await this.jira.comment(key, `Necesito intervención humana: ${reason}\nCuando esté resuelto, comentá /approve <indicaciones> para reintentar.`);
+    await this.jira.comment(key, `Human intervention needed: ${reason}\nWhen resolved, comment /approve <instructions> to retry.`);
     await this.move(rec, "BLOCKED", reason, agent);
   }
 
@@ -548,4 +558,4 @@ export function changeName(key: string, title: string, round: number) {
 }
 
 const norm = (s: string) => s.toLowerCase().replace(/\s+/g, " ").trim();
-const bullets = (xs: string[], numbered = false) => xs.map((x) => `${numbered ? "#" : "*"} ${x}`).join("\n") || "_(ninguno)_";
+const bullets = (xs: string[], numbered = false) => xs.map((x) => `${numbered ? "#" : "*"} ${x}`).join("\n") || "_(none)_";

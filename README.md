@@ -1,249 +1,135 @@
-# orqen — AI Software Factory KIT
+# orqen — AI Software Factory Kit
 
-**orqen** es un kit de orquestación multiagente y automatización del desarrollo de software, diseñado para coordinar el ciclo de vida de los proyectos desde la definición de requerimientos hasta su implementación y despliegue.
+**orqen** coordinates AI agents and development workflows from customer requirements through implementation and delivery. It builds on OpenSpec, using repository specifications and Jira issues to track decisions, verification, and approvals.
 
-Construido como una capa superior a OpenSpec, propone integrar agentes especializados de inteligencia artificial, repositorios de código, herramientas de desarrollo, reglas de ingeniería y bases de conocimiento en un ecosistema unificado.
+## Quick start
 
-Su arquitectura busca permitir que múltiples agentes colaboren de manera coordinada en actividades de análisis, planificación, desarrollo, pruebas, validación y mantenimiento, bajo mecanismos de gobernanza, supervisión y trazabilidad.
+```sh
+pnpm add -g orqen          # or: npm i -g orqen (Node >= 20.12)
+cd my-repo
+orqen init
+```
 
-Uno de sus pilares es el aprendizaje continuo a partir de la experiencia: aprovechar los resultados de desarrollos anteriores para enriquecer una base de conocimiento reutilizable y mejorar progresivamente los procesos de trabajo.
+In Claude Code, run `/plugin marketplace add ./` and `/plugin install orqen@orqen` once per user.
 
-El análisis lo conduce un **analista** con el agente (`/orqen:analyze REC-1234`); el resto lo lleva el agente con aprobaciones humanas.
+| Who | What they run |
+| --- | --- |
+| Analyst | `/orqen:analyze REC-1234` to review a request, choose a lane, write a spec when needed, and create a Jira implementation issue |
+| Agent | `/orqen:implement SIS-442` to implement the approved spec or plan |
+| Unattended runner | `orqen cycle --loop` to check for approvals and dispatch eligible stages |
+| Jira reviewers | `/approve` or `/reject <reason>` on the issue |
 
-- **`AGENTS.md`**: lo que el agente lee. Explica el proceso y las reglas, y le dice que use la CLI `cli`.
-- **`cli/`**: CLI en TypeScript (Node ≥ 20.12) que maneja la máquina de estados, Jira, git, tests y OpenSpec.
-  Es determinística: el agente produce contenido y `cli` decide el flujo.
-- **`orqen/.agents`**: recursos para agentes con los comandos `/orqen:analyze`, `/orqen:implement`, `/orqen:e2e-review` y `/orqen:pr`, y el skill `orqen:grilling`.
-- **`orqen/work/<KEY>/`**: registro y estado de cada REC dentro del repo (lo escribe `orqen`).
-- **`openspec/config.yaml`**: reglas del proceso REC aplicadas a los artefactos de OpenSpec.
+## Commands
 
-## Análisis: `/orqen:analyze REC-1234`
+```text
+orqen init [dir]                       Initialize a repository
+orqen update [dir]                     Update the CLI, OpenSpec, and kit
+
+orqen env setup                        Install dependencies
+orqen env up [--apps]                  Start services, run migrations, and seed data
+orqen env test [unitarios|integracion|e2e|visual]
+orqen env status
+orqen env down
+
+orqen pending [--json]                 List requests awaiting analyst or agent work
+orqen analyze <KEY> [--analyst NAME]   Start analysis
+orqen lane <KEY> <direct|light|full>
+orqen take <KEY> [--agent NAME]        Claim a stage and prepare its environment
+orqen complete <KEY> <output.json|->  Validate the output and advance the workflow
+orqen status [KEY]
+orqen schema <STAGE>
+orqen block <KEY> <reason>
+orqen release <KEY>
+orqen search <JQL>
+orqen pr <KEY> [<explanation.md>] [--title TITLE]
+orqen cycle [--loop]                   Run the unattended workflow
+```
+
+`take`, `complete`, `status`, `block`, and `release` accept either the customer request key (REC) or its linked implementation issue key (SIS). Run `orqen schema <STAGE>` to inspect the accepted JSON fields.
+
+## Repository setup
+
+| Path | Purpose |
+| --- | --- |
+| `orqen/config.yaml` | Stack, services, migrations, tests, base branch, and agent settings |
+| `orqen/.env` | Local Jira credentials, project settings, and approvers |
+| `orqen/stages/` | Editable stage instructions |
+| `orqen/plugin/` | Claude Code commands and the grilling skill |
+| `orqen/work/<KEY>/` | Request history, including `state.json`, `log.md`, and analysis notes |
+| `orqen/state/` and `orqen/tmp/` | Local workflow state and temporary files |
+| `orqen/manifest.json` | File hashes used by `orqen update` to identify local edits |
+| `docker-compose.orqen.yml` | Services with health checks and optional apps under the `apps` profile |
+| `AGENTS.md` and `CLAUDE.md` | Workflow instructions for agents |
+| `openspec/` | Specifications and the OpenSpec configuration |
+
+## From request to delivery
+
+The analyst reviews the Jira issue and repository with the agent, confirms the acceptance criteria, and selects a lane. Questions only the customer can answer send the request to `WAITING_CLIENT` (Waiting for customer).
+
+| Lane | When to use it | Output |
+| --- | --- | --- |
+| `direct` (direct) | A low-risk change in one component, roughly four hours or less, with no contract change | An implementation plan and acceptance criteria |
+| `light` (lightweight) | A focused behavior change across one or two capabilities, roughly two days or less | An OpenSpec proposal, spec deltas, a short design, and tasks |
+| `full` (full) | Larger changes involving architecture, data, integration, security, or billing | A full OpenSpec proposal, specs, design, and tasks |
+| `route: operational` (operational) | A data, service, or configuration change with no code changes | Steps, rollback, and read-only verification. A person approves and applies the change |
+
+For the lightweight and full lanes, `orqen lane` prepares the branch and OpenSpec change. After the analyst approves and the analysis passes validation, `orqen complete` creates and links the SIS and writes the request record.
 
 ```mermaid
 flowchart TD
-    A["/orqen:analyze REC-1234"] --> B["orqen analyze: reserva el REC,<br/>crea orqen/work/REC-1234/"]
-    B --> C["Grilling con el analista<br/>(skill orqen:grilling + repo + Jira por MCP, solo lectura)"]
-    C -->|"lo contesta el cliente"| W["WAITING_CLIENT"] -->|"responde"| C
-    C -->|"OK del analista"| D{"Propuesta de carril<br/>(el analista confirma)"}
-    D -->|"directo<br/>sin spec"| G
-    D -->|"liviano / completo"| E["orqen lane: rama + change de OpenSpec<br/>→ el agente escribe la spec con el analista"] --> G
-    D -->|"operativa<br/>(sin código)"| G
-    G["orqen complete: valida · crea el SIS · lo vincula al REC<br/>· registra en orqen/work/ · commit de la spec"] --> H(["DEVELOPMENT · o EXECUTION si es operativa"])
+    A["/orqen:analyze REC-1234"] --> B["Claim the request and load its context"]
+    B --> C["Interview the analyst"]
+    C -->|"Questions for the customer"| W["Wait for a Jira reply"]
+    W --> C
+    C -->|"Analyst approves the analysis and lane"| L{"Which lane?"}
+    L -->|"Lightweight or full"| S["orqen lane prepares the branch and change"]
+    S --> V["Write and validate the spec with the analyst"]
+    L -->|"Direct or operational"| O["Record the approved plan or operational route"]
+    V --> F["orqen complete links the SIS and commits the work record"]
+    O --> F
 ```
 
-El agente **no escribe en Jira** (el MCP es solo lectura): la creación del SIS, el vínculo `SIS ↔ REC`, los comentarios y los
-labels los hace `orqen` en `complete`, solo si el análisis tiene el OK del analista y la spec (si hay) valida.
-
-### Carriles
-
-| Carril                           | Cuándo (guía; ajustable en `cli/stages/analysis.md`)                                   | Qué se genera                                                                                            |
-| -------------------------------- | -------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| `direct`                         | Un componente, ≲ 4 h, sin cambio de contrato, bajo riesgo                              | **Sin OpenSpec.** `plan` + criterios de aceptación en el análisis y el SIS. Testing contra los criterios |
-| `light`                          | Comportamiento observable acotado, 1–2 capacidades, ≲ 2 días                           | Change de OpenSpec compacto: proposal + deltas + tasks (design mínimo)                                   |
-| `full`                           | Varias capacidades, datos/integraciones, seguridad/facturación, > 2 días, arquitectura | Change completo: proposal + specs + design + tasks                                                       |
-| operativa (`route: operational`) | Se resuelve sin cambiar código (SQL, datos, reinicio, config)                          | Sin spec ni rama; flujo EXECUTION → aprobación → aplicación → verificación                               |
-
-### Qué queda en `orqen/work/REC-1234/`
-
-```
-orqen/work/REC-1234/
-├── state.json            proyección del estado (state, lane, sis, branch, change, analyst)
-├── log.md            una línea por transición
-└── round-1/
-    ├── analysis.md        resumen, criterios, decisiones del grilling, carril y justificación, SIS, estimación
-    ├── analysis.json      la salida validada de la etapa
-    └── execution/         (solo carril operativo) script.sql, pasos, rollback, verificación
-```
-
-Se commitea con la rama del REC (`cli` commitea el registro en cada transición mientras esa rama está activa), así la
-trazabilidad viaja con el código y la spec. La **fuente de verdad operativa** sigue en `cli/.state/` (ignorado por git);
-`orqen/` es la proyección legible. Cada ronda nueva (rechazo de conformidad) agrega `round-2/`, etc.
-
-## Implementación: `/orqen:implement SIS-442`
-
-Toma el SIS que creó el análisis y ejecuta la etapa **DEVELOPMENT**: aplica la spec de OpenSpec si el carril la tiene
-(`light` / `full`) o sigue el `plan` del análisis (`direct`). Acepta la key del SIS o la del REC; `cli` resuelve a qué REC
-pertenece (el SIS vigente de la ronda actual).
-
-```mermaid
-flowchart TD
-    A["/orqen:implement SIS-442"] --> B["orqen status SIS-442<br/>(resuelve SIS → REC y mira el estado)"]
-    B -->|"no es DEVELOPMENT,<br/>o es vía operativa"| X(["Se explica qué etapa sigue<br/>y se corta sin reservar el REC"])
-    B -->|"DEVELOPMENT"| C["orqen take SIS-442: reserva el REC,<br/>prepara la rama e imprime contexto + esquema"]
-    C --> D{"Carril"}
-    D -->|"liviano / completo"| E["Apply de OpenSpec<br/>(openspec-apply-change)<br/>proposal + design + specs + tasks<br/>→ tilda cada tarea en tasks.md"]
-    D -->|"directo<br/>sin spec"| F["Implementa el plan del análisis<br/>en orden"]
-    E --> G
-    F --> G["Tests por cada Scenario / criterio de aceptación<br/>+ corre tests y linters"]
-    G -->|"falla algo"| G
-    G --> H["orqen complete SIS-442 salida.json<br/>(rechaza si quedan tareas sin tildar)"]
-    H --> I(["TESTING<br/>una etapa por vez: el agente corta acá"])
-    G -.->|"no se puede avanzar"| Z{{"orqen block SIS-442 'motivo'"}}
-```
-
-Mismas reglas que el análisis: Jira de solo lectura para el agente, sin `git commit/push/checkout`, sin `openspec archive`
-y sin tocar `cli/.state/`, `orqen/work/` ni los scripts de `cli/`. Si el contexto trae un test fallido o un rechazo de revisión,
-se corrige eso primero.
-
-## Revisión de e2e: `/orqen:e2e-review SIS-3312`
-
-Los tests e2e se generan durante la implementación a partir de los Scenarios / criterios de aceptación. Este comando deja todo
-listo para que el **diseñador de testing e2e** (una persona) los valide **visualmente** y **espera su aprobación**, con los ajustes
-que haga a mano. No mueve el estado del REC (no hace `take` ni `complete`): se corre con el REC en `TESTING` o `CODE_REVIEW`,
-parado en la rama del REC, y acepta la key del SIS o la del REC.
-
-```mermaid
-flowchart TD
-    A["/orqen:e2e-review SIS-3312"] --> B["orqen status: ¿TESTING o CODE_REVIEW?<br/>¿rama del REC activa?"]
-    B -->|"no"| X(["Se explica la etapa y se corta"])
-    B -->|"sí"| C["Arma la lista de escenarios / criterios<br/>y los mapea contra los tests e2e de la rama"]
-    C --> D["Deja listo el modo visual<br/>(headed / trace / video) + guía de revisión"]
-    D --> E{"Diseñador e2e<br/>(revisa y ajusta a mano)"}
-    E -->|"ajustó"| F["Re-corre los e2e y revisa el diff<br/>(¿siguen cubriendo todo?)"] --> E
-    E -->|"rechaza"| R(["Qué corregir → DEVELOPMENT<br/>(lo decide una persona)"])
-    E -->|"aprueba explícito + corrida en verde"| G(["Resumen listo para el PR/SIS<br/>→ sigue CODE_REVIEW"])
-```
-
-El agente **no edita los tests**: señala observaciones (escenarios sin e2e, tests que no verifican el THEN, esperas fijas) y el
-diseñador decide. La aprobación la da la persona en la conversación; igual que el OK del analista, **`orqen` no puede comprobarla**
-(barrera de proceso, no de seguridad). Los ajustes quedan sin commitear: hay que commitearlos en la rama del REC **antes de que se abra el PR**
-(`orqen` abre el PR al aprobar `TESTING`).
-
-## PR a desarrollo: `/orqen:pr SIS-32`
-
-Manda la rama del REC a la rama de integración (`DEVEL_BRANCH`, por defecto `desarrollo`; también sirve `devel`) con un pull request cuya
-descripción explica los cambios. Acepta la key del SIS o la del REC y se corre con el REC en `TESTING` o después (no en carril operativo).
-Es independiente del PR del code review que `orqen` abre al aprobar TESTING.
-
-```mermaid
-flowchart TD
-    A["/orqen:pr SIS-32"] --> B["orqen pr SIS-32<br/>(rama, base, análisis, change; ¿ya hay PR?)"]
-    B -->|"todavía en desarrollo,<br/>operativo o desconocido"| X(["Se explica y se corta"])
-    B -->|"ok"| C["El agente lee el diff contra la base,<br/>el análisis y la spec/plan"]
-    C --> D["Escribe la explicación (.md):<br/>resumen · cambios · desvíos · tests · cómo verificar · riesgos"]
-    D --> E["orqen pr SIS-32 explicación.md<br/>guarda devel-pr.md · commitea lo pendiente · push · abre el PR"]
-    E --> F(["URL del PR, comentada en el REC y el SIS"])
-```
-
-El agente solo redacta: el commit, el push y el PR los hace `orqen` (`DEVEL_PR_COMMAND`, con `{base}`, `{branch}`, `{key}`, `{title}`, `{body}`).
-La explicación queda en `orqen/work/<KEY>/round-N/devel-pr.md`. Es idempotente: si el PR ya existe, solo empuja los commits nuevos.
-Como `orqen` commitea lo pendiente de la rama antes de empujar, los ajustes manuales (p. ej. los del diseñador de e2e) viajan con el PR.
-
-## Flujo completo
+`/orqen:implement SIS-442` checks the linked request's stage before claiming it. In development, the agent applies the OpenSpec change and checks off each task in `tasks.md`, or follows the direct lane's approved plan. It runs tests for each criterion, submits the stage JSON with `orqen complete`, and hands off to the testing stage.
 
 ```mermaid
 flowchart LR
-    classDef agente fill:#dbeafe,stroke:#2563eb,color:#1e3a8a
-    classDef humano fill:#fef3c7,stroke:#d97706,color:#78350f
-    classDef final fill:#dcfce7,stroke:#16a34a,color:#14532d
-    classDef bloq fill:#fee2e2,stroke:#dc2626,color:#7f1d1d
-
-    ANALYSIS["ANALYSIS<br/>(analista + agente)"]:::agente
-    ESPERA["WAITING_CLIENT<br/>(máx. 3 rondas)"]:::humano
-    DESA["DEVELOPMENT"]:::agente
-    TEST["TESTING"]:::agente
-    REV["CODE_REVIEW<br/>(senior)"]:::humano
-    DELIVERY["DELIVERY"]:::agente
-    CONF["ACCEPTANCE<br/>(cliente)"]:::humano
-    CLOSED(["CLOSED"]):::final
-    BLOQ{{"BLOCKED"}}:::bloq
-
-    ANALYSIS <-->|preguntas / respuestas| ESPERA
-    ANALYSIS -->|"OK analista: carril + SIS"| DESA
-    DESA <-->|tests fallan / pasan| TEST
-    TEST --> REV
-    REV -->|/approve| DELIVERY
-    REV -.->|/reject| DESA
-    DELIVERY --> CONF
-    CONF -->|/approve| CLOSED
-    CONF -.->|"/reject: ronda 2"| ANALYSIS
-
-    ANALYSIS & DESA & TEST & DELIVERY -.->|error / sin reintentos| BLOQ
-    BLOQ -.->|"/approve &lt;indicaciones&gt;"| ANALYSIS
+    A[Analysis] <-->|Customer questions and answers| W[Waiting for customer]
+    A -->|Analyst approval| D[Development]
+    D --> T[Testing]
+    T -->|Failures| D
+    T -->|Pass| R[Code review]
+    R -->|Approve| E[Delivery]
+    R -->|Reject| D
+    E --> C[Customer acceptance]
+    C -->|Approve| F[Closed]
+    C -->|Reject| A
+    A -->|Operational| P[Prepare steps]
+    P --> H[Human approval and application]
+    H --> V[Verify]
+    V --> C
 ```
 
-**Azul**: etapas del agente · **Amarillo**: gates humanos en Jira · **Rojo**: bloqueado (lo destraba una persona).
-Jira, git, PR y `openspec archive` los ejecuta solo `orqen`; el agente produce contenido.
-Desaparecieron los gates `APROBACION_ANALISIS` y `APROBACION_SPEC`: el OK del analista en el grilling los reemplaza
-(y por eso `APPROVERS_SPEC` ya no existe).
+During development, `orqen take` starts the environment and `orqen complete` shuts it down. During testing, orqen starts the full environment, runs the configured suite, and shuts it down. Agents may run individual tests using `orqen env test`.
 
-| Estado         | Quién             | Qué pasa                                                                                                     | OpenSpec                                                                                                                                                      |
-| -------------- | ----------------- | ------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| ANALYSIS       | analista + agente | grilling → OK → carril → spec (si corresponde) → SIS vinculado al REC                                        | lee `openspec/specs`; liviano/completo: `orqen lane` crea el change y `orqen complete` exige `validate --strict`, artefactos completos y `(Nh)` en cada tarea |
-| WAITING_CLIENT | cliente           | responde en Jira (máx. 3 rondas)                                                                             | —                                                                                                                                                             |
-| DEVELOPMENT    | agente            | implementa; con spec tilda `tasks.md`, en directo sigue el `plan`                                            | flujo _apply_; `orqen` rechaza si queda alguna tarea sin tildar                                                                                               |
-| TESTING        | `orqen` + agente  | `orqen` corre la suite y el agente mapea test ↔ **cada Scenario** (directo: cada **criterio de aceptación**) | si falta alguno, se rechaza                                                                                                                                   |
-| CODE_REVIEW    | senior            | revisa el PR (cuerpo = `proposal.md`, o `analysis.md` en directo)                                            | —                                                                                                                                                             |
-| DELIVERY       | `orqen` + agente  | `orqen` archiva (si hubo spec) y el agente escribe notas y mensaje al cliente                                | `openspec archive` fusiona los deltas en `openspec/specs` dentro del mismo PR                                                                                 |
-| ACCEPTANCE     | cliente           | `/approve` cierra; `/reject` abre la ronda 2 (vuelve a ANALYSIS: nuevo carril, change y SIS)                 | nuevo change `…-r2`                                                                                                                                           |
+## Guarantees and limits
 
-Si se agotan los reintentos o hay un error, el REC pasa a **BLOCKED**. Una persona destraba con `/approve <indicaciones>`
-(`APPROVERS_ANALYSIS` + `APPROVERS_CODE`).
+- Stage outputs are validated with Zod and, when applicable, OpenSpec. If Jira fails partway through closing analysis, retrying `complete` resumes the operation without creating a duplicate SIS.
+- The agent records analyst approval in the required `analyst_ok` field. This is a workflow check. Use tool permissions to enforce Git and Jira access.
+- orqen manages Jira writes, branch transitions, pull requests, and OpenSpec archiving. Agents write stage outputs and implement approved changes.
+- Each checkout handles one request at a time. Use separate clones or worktrees for parallel work.
 
-## Instalación en un repo
+## Develop and publish
+
+- [CLI](cli/README.md) contains the commands and the request workflow.
+- `template/` contains the files installed by `orqen init`.
 
 ```sh
-# 1. copiar AGENTS.md (o fusionarlo con el existente), CLAUDE.md, cli/ y orqen/ en la raíz del repo
-npm ci --prefix cli
-npm i -g @fission-ai/openspec            # o definir OPENSPEC_CMD
-openspec init --tools claude,codex,cursor --language es   # elegí las herramientas del equipo
-#    → después fusioná template/openspec/config.yaml con openspec/config.yaml
-cp cli/.env.example cli/.env              # Jira, SIS, aprobadores, comando de tests, AGENT_CMD
-echo "cli/.state/" >> .gitignore         # orqen/work/ NO se ignora: es el registro versionado
+pnpm install
+./cli/bin/orqen --help  # Run from the checkout without linking
+pnpm enlazar     # Build and link the local CLI globally
+pnpm test
+pnpm typecheck
+pnpm build
 ```
 
-**Plugin para Claude Code** (da `/orqen:analyze`, `/orqen:implement`, `/orqen:e2e-review`, `/orqen:pr` y el skill de grilling), una vez por analista:
-
-```
-/plugin marketplace add ./          # raíz de este repo (tiene .claude-plugin/marketplace.json); o la URL git del kit
-/plugin install orqen@orqen
-```
-
-Recomendado: conectar también el MCP de Atlassian/Jira para que el grilling lea el REC y los relacionados. Es solo lectura:
-las escrituras las hace `orqen` con `JIRA_TOKEN`. `openspec init --tools …` instala los skills/comandos de OpenSpec
-(_propose_, _apply_…) y las guías de etapa los usan si existen (si no, recurren a `openspec instructions`).
-
-## Uso
-
-**Análisis (analista)**: en Claude Code, `/orqen:analyze REC-1234`. En otro agente: _"analizá el REC-1234"_ (el agente lee
-`AGENTS.md` y corre `orqen analyze` → grilling → `orqen lane` → `orqen complete`).
-
-**Implementación**: en Claude Code, `/orqen:implement SIS-442`. En otro agente: _"implementá el SIS-442"_ (`orqen status` → `orqen take` →
-apply de la spec o plan → `orqen complete`). `take`, `complete`, `status`, `block` y `release` aceptan la key del SIS o la del REC.
-
-**Validación de e2e**: en Claude Code, `/orqen:e2e-review SIS-3312`, a cargo del diseñador de testing e2e. En otro agente: _"preparame la revisión de e2e del SIS-3312"_ (el agente lee `AGENTS.md`).
-
-**PR a desarrollo**: en Claude Code, `/orqen:pr SIS-32`. En otro agente: _"abrí el PR a desarrollo del SIS-32"_ (`orqen pr` → explicación → `orqen pr <KEY> <archivo.md>`).
-
-**Resto de las etapas, interactivo**: _"procesá el REC REC-123"_ → `orqen take` → trabaja → `orqen complete`.
-
-**Desatendido** (cron, CI o servidor), solo etapas de agente — **nunca** ANALYSIS:
-
-```sh
-./cli/bin/orqen cycle --loop     # cada REC_INTERVAL_SEC: avanza gates y lanza AGENT_CMD por REC pendiente
-```
-
-Para cambiar de agente alcanza con cambiar `AGENT_CMD`, por ejemplo a `codex exec --full-auto {prompt}`.
-
-Otros comandos: `orqen pr <KEY> [explicación.md]`, `orqen pending` (separa _para analizar_ de _para un agente_), `orqen status [KEY]`, `orqen schema <ETAPA>`,
-`orqen block`, `orqen release`, `orqen search <JQL>`. Los REC nuevos ya no se toman solos: quedan en NEW hasta que un analista corre `analyze`.
-
-## Garantías y límites
-
-- Las salidas se validan con zod y con OpenSpec. Si algo no cumple, el agente recibe la lista de errores y reintenta. Nada avanza a medias:
-  el SIS no se crea hasta que el análisis (y la spec) están validados, y si Jira falla a mitad de camino, repetir `complete` retoma sin duplicar.
-- El OK del analista es un campo obligatorio de la salida (`analyst_ok`), pero **lo declara el agente**: `orqen` no puede comprobar que la persona
-  lo haya dado. Es una barrera de proceso, no de seguridad.
-- Hay un lock por REC (vence a los `REC_LOCK_MIN`, pero el mismo agente puede completar igual si nadie más lo tomó, porque el grilling puede ser largo).
-- Jira, git, PR y archive los ejecuta **solo** `orqen`. El agente tiene esa prohibición en `AGENTS.md`, pero
-  al ser agnóstico **no hay un hook que lo impida a la fuerza**. Hay que reforzarlo con el sandbox o los permisos de
-  cada herramienta (por ejemplo, denegar `git push` en `.claude/settings.json`, o permitir del MCP de Jira solo las herramientas de lectura).
-- El estado vive en `cli/.state/*.json` (ignorado por git, sobrevive a los cambios de rama) y en labels de Jira `rec-estado-*`; `orqen/work/<KEY>/` es su proyección versionada.
-- Usa un solo checkout, así que procesa un REC por vez por clon. Para trabajar en paralelo: un clon o worktree por agente.
-
-## Tests
-
-```sh
-cd cli && npm test        # e2e con OpenSpec y git reales + gates, carriles y SIS con fakes
-npm run typecheck
-```
+To publish the `orqen` and `orqen-kit` packages, bump the versions in `cli/package.json` and `template/package.json`, sign in with `npm login`, and run `pnpm build && pnpm -r publish --access public`.

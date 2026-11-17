@@ -1,38 +1,29 @@
 ---
 name: grilling
-description: Entrevista (grilling) a un analista sobre un requerimiento hasta tener un entendimiento compartido y verificable, explorando antes el repo y Jira para no preguntar lo que ya se sabe. Usar al analizar un REC (/orqen:analyze) o cuando haya que estresar un plan o diseño antes de especificar.
+description: Interview an analyst to reach a shared, testable understanding of a request. Read the repository and Jira first. Use during /orqen:analyze or before specifying a plan or design.
 ---
 
-# Grilling de un requerimiento
+# Interview the analyst
 
-Objetivo: salir con un entendimiento compartido, sin ambigüedades que cambien el diseño, y con criterios de aceptación que se puedan testear. El analista es quien decide; vos hacés las preguntas que él no se hizo todavía.
+The analyst makes the decisions. Ask questions that uncover ambiguities affecting the design and produce testable acceptance criteria.
 
-## Método
+## Method
 
-1. **Investigá primero.** Antes de la primera pregunta leé: el issue y sus comentarios, REC parecidos o vinculados, `openspec/specs` de las capacidades probables, y el código involucrado (solo lectura). Cada pregunta que se contesta leyendo no se hace.
-2. **Una pregunta por vez.** Máximo tres si son inseparables. Esperá la respuesta antes de seguir.
-3. **Siempre con tu recomendación.** Formato: la pregunta, "Yo haría X porque Y", y lo que cambia si la respuesta es otra. El analista confirma, corrige o descarta.
-4. **Recorré el árbol de decisiones en profundidad.** Si una respuesta abre otra duda, seguí por esa rama hasta cerrarla antes de pasar de tema. Orden sugerido:
-   - Objetivo y valor de negocio: qué problema tiene el cliente y cómo se mide que quedó resuelto.
-   - Alcance y **fuera de alcance** explícito.
-   - Quién lo usa, con qué permisos, en qué pantallas/procesos.
-   - Comportamiento actual (lo que encontraste en specs y código) vs. deseado: señalá contradicciones.
-   - Casos borde y errores: vacíos, duplicados, concurrencia, datos viejos, montos/fechas límite.
-   - Datos, migraciones e integraciones afectadas.
-   - No funcionales: rendimiento, auditoría, seguridad.
-   - **¿Se resuelve sin tocar código?** (script, dato, configuración). Si sí, es vía operativa.
-   - Riesgos y cómo revertir.
-5. **Separá lo que es del cliente.** Si solo el cliente puede contestarlo y bloquea el diseño, anotalo como pregunta abierta (máx. 5); no lo inventes ni se lo preguntes al analista como si lo supiera.
-6. **Llevá el registro.** Anotá cada decisión como `pregunta → respuesta`; va a `decisions` de la salida y a `orqen/work/<KEY>/`.
-7. **Cerrá con un resumen y pedí el OK.** Qué se hace, criterios de aceptación en Dado/Cuando/Entonces (observables y testeables), fuera de alcance, supuestos y riesgos. Sin OK explícito no hay carril ni SIS.
+1. Before asking questions, read the issue and comments, similar or linked requests, the relevant `openspec/specs`, and the existing implementation.
+2. Ask one question at a time, or up to three if inseparable. Wait for an answer before proceeding.
+3. Include your recommended answer, why you recommend it, and what changes if the analyst chooses differently.
+4. Resolve follow-up questions before moving to the next topic. Cover:
+   - Business goals and measurable outcomes.
+   - Scope and explicit exclusions.
+   - Users, permissions, and affected screens or processes.
+   - Current and desired behavior, including contradictions with the repository.
+   - Edge cases and errors such as empty input, duplicates, concurrency, old data, and amount or date limits.
+   - Data, migrations, integrations, performance, auditing, and security.
+   - Whether an operational change can resolve the issue, plus risks and rollback.
+5. Record up to five design-blocking questions only the customer can answer. Do not invent answers.
+6. Record decisions as question-and-answer pairs in `decisions` for `orqen/work/<KEY>/`.
+7. Summarize the scope, exclusions, risks, assumptions, and Given/When/Then acceptance criteria. Ask for explicit approval before proposing a lane or creating a SIS.
 
-## Estilo
+Use clear, direct English and closed questions where possible. If the analyst delegates a decision, record the recommended answer as an assumption. Resolve open design decisions before proposing the lane.
 
-- Español rioplatense, claro y directo; sin relleno ni elogios.
-- Preguntas cerradas siempre que se pueda (opciones con tu recomendada marcada).
-- Si el analista dice "lo que te parezca", tomá tu recomendación y dejala registrada como supuesto.
-- No avances a la propuesta de carril mientras queden ramas de decisión abiertas.
-
-## Después del OK
-
-Proponé el carril según la tabla de la etapa ANALYSIS (`./cli/bin/orqen analyze` la imprime), justificá en términos de tamaño, riesgo y alcance, y pedí confirmación. Ante la duda entre dos carriles, el de más rigor.
+After approval, use the table printed by `orqen analyze` to recommend a lane based on size, scope, and risk. Explain the choice and ask for confirmation. When unsure, recommend the more rigorous lane.

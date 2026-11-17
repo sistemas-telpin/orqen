@@ -4,11 +4,11 @@ import { existsSync, mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { loadConfig } from "../scripts/config.ts";
-import type { OpenSpecApi } from "../scripts/openspec.ts";
-import { Process, changeName } from "../scripts/process.ts";
-import { Store, newRec } from "../scripts/store.ts";
-import type { Workspace } from "../scripts/workspace.ts";
+import { loadConfig } from "../src/workflow/config.ts";
+import type { OpenSpecApi } from "../src/workflow/openspec.ts";
+import { Process, changeName } from "../src/workflow/process.ts";
+import { Store, newRec } from "../src/workflow/store.ts";
+import type { Workspace } from "../src/workflow/workspace.ts";
 import { FakeJira } from "./fakes.ts";
 
 const fakeOs: OpenSpecApi = {
@@ -55,7 +55,7 @@ test("analyst: client questions, mandatory OK, direct lane, SIS and orqen/work/"
   await p.analyze("REC-1", "codex", "Ana");
   assert.equal(est().state, "ANALYSIS");
   assert.equal(est().analyst, "Ana");
-  assert.match(jira.coms["REC-1"][0].body, /Ana inició el análisis/);
+  assert.match(jira.coms["REC-1"][0].body, /Ana started analyzing/);
   await assert.rejects(p.analyze("REC-1", "claude", "Bea"), /already taken by "codex"/);
   await assert.rejects(p.take("REC-1", "codex"), /driven by an analyst/);   // an agent does not analyze on its own
 
@@ -96,17 +96,17 @@ test("analyst: client questions, mandatory OK, direct lane, SIS and orqen/work/"
   assert.equal(jira.created.length, 1);
   assert.equal(jira.created[0].key, "SIS-1");
   assert.match(jira.created[0].title, /^\[REC-1\]/);
-  assert.match(jira.created[0].description, /Carril:\* direct/);
+  assert.match(jira.created[0].description, /Lane:\* direct/);
   assert.deepEqual((jira.created[0] as any).labels, ["origin-rec-1", "lane-direct"]);
   assert.deepEqual(jira.links, [["SIS-1", "REC-1", "Relates"]]);
   assert.equal(est().sis, "SIS-1");
-  assert.match(jira.coms["REC-1"].map((c) => c.body).join("\n"), /Creé SIS-1/);
+  assert.match(jira.coms["REC-1"].map((c) => c.body).join("\n"), /Track implementation in SIS-1/);
 
   // record in orqen/work/REC-1
   const f = join(cfg.factoryDir, "REC-1");
   const md = readFileSync(join(f, "round-1", "analysis.md"), "utf8");
-  assert.match(md, /Analista:\*\* Ana/);
-  assert.match(md, /Carril:\*\* direct/);
+  assert.match(md, /Analyst:\*\* Ana/);
+  assert.match(md, /Lane:\*\* direct/);
   assert.match(md, /SIS:\*\* SIS-1/);
   assert.match(md, /¿Qué formato\?\*\* → CSV/);
   assert.ok(existsSync(join(f, "round-1", "analysis.json")));
@@ -136,7 +136,7 @@ test("light lane: requires `orqen lane` and the change must match", async () => 
   assert.equal(est().change, "rec-1-algo");
   assert.equal(est().artifacts.estimated_hours, 5);                      // 2h + 3h from tasks.md
   assert.match(jira.created[0].description, /OpenSpec change:\* openspec\/changes\/rec-1-algo/);
-  assert.match(jira.created[0].description, /Estimación:\* 5 h/);
+  assert.match(jira.created[0].description, /Estimate:\* 5 h/);
 });
 
 test("testing that fails 3 times blocks; /approve retries (direct lane: criteria as scenarios)", async () => {
@@ -202,7 +202,7 @@ test("pr: sends the branch to the devel branch, records the explanation and is i
   assert.deepEqual(calls, ["commit", "push", "pr"]);
   assert.ok(cmd.endsWith("|desarrollo|orqen/work/REC-1/round-1/devel-pr.md"));
   assert.match(readFileSync(join(cfg.factoryDir, "REC-1", "round-1", "devel-pr.md"), "utf8"), /exportación a CSV/);
-  assert.match(jira.last("REC-1"), /PR a \*desarrollo\*/);
+  assert.match(jira.last("REC-1"), /PR to \*desarrollo\*/);
 
   const again = await flow.pr("REC-1", body);   // the PR already exists: only pushes
   assert.equal(again.created, false);

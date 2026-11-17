@@ -1,35 +1,33 @@
 ---
-description: Analiza un REC con vos (grilling), propone el carril, genera la spec si corresponde y crea el SIS en Jira
-argument-hint: REC-1234 [nombre del analista]
-allowed-tools: Bash(./cli/bin/orqen:*), Read, Grep, Glob, Write, Edit, Skill
+description: Analyze a customer request with the analyst, choose a lane, write a spec when needed, and create the linked Jira issue
+argument-hint: REC-1234 [analyst name]
+allowed-tools: Bash(orqen:*), Read, Grep, Glob, Write, Edit, Skill
 ---
 
-Vas a conducir el **análisis del REC `$ARGUMENTS`** junto con el analista que te invocó (el primer argumento es la key; si hay más texto, es el nombre del analista; si no, preguntáselo una vez y recordalo).
-Seguí el proceso de `AGENTS.md` ("Proceso REC"). Estás parado en la raíz del repo.
+Analyze the customer request in `$ARGUMENTS` with the analyst who invoked this command. The first argument is the issue key. Use any remaining text as the analyst's name, or ask once and remember it. Work from the repository root and follow the customer request workflow in `AGENTS.md`.
 
-## Reglas que no se negocian
+## Rules
 
-- **Jira es de solo lectura para vos.** Si tenés el MCP de Jira/Atlassian, usalo únicamente para leer (issue, comentarios, vinculados, búsquedas de REC parecidos). Crear el SIS, vincularlo y comentar lo hace `./cli/bin/orqen`, nunca el MCP.
-- Nada de `git commit/push/checkout/reset`, `openspec archive`, ni editar `cli/.state/` o `orqen/work/`: lo hace `orqen`.
-- No avanzás sin el **OK explícito del analista** al análisis y al carril. Si dudás de que lo haya dado, preguntá.
-- No inventes información del cliente: lo que falte es una pregunta o un supuesto marcado.
+- Use Jira MCP for read-only access. orqen creates and links the SIS and posts comments.
+- Leave Git operations, OpenSpec archiving, and writes to `orqen/state/` and `orqen/work/` to orqen.
+- Require the analyst's explicit approval of the analysis and lane. Record unknowns as open questions or labeled assumptions.
 
-## Pasos
+## Steps
 
-1. Validá que la key tenga forma `REC-<número>`; si no, pedila y cortá.
-2. Abrí el análisis (reserva el REC, crea `orqen/work/<KEY>/` e imprime las instrucciones, el contexto completo y el esquema de salida):
+1. Check that the argument is a REC issue key, such as `REC-1234`. If it is missing or invalid, ask for it and stop.
+2. Claim the request and load the stage instructions, context, and output schema:
    ```sh
-   ./cli/bin/orqen analyze <KEY> --analyst "<name>" --agent analista
+   orqen analyze <KEY> --analyst "<name>" --agent analyst
    ```
-   Si falla (REC ya analizado, esperando al cliente, sin credenciales de Jira), explicale al analista el motivo y frená.
-3. Cargá el skill **`orqen:grilling`** y entrevistá al analista como indica. Antes de preguntar, leé el REC (MCP de Jira si está, o el contexto de `orqen analyze`) y el repo (`openspec/specs`, código, historial): no preguntes lo que podés averiguar.
-4. Con el OK del analista, **proponé el carril** (`operational`, `direct`, `light` o `full`) con la tabla de criterios de la guía impresa en el paso 2, y pedí confirmación.
-5. Carril `light` o `full`: corré `./cli/bin/orqen lane <KEY> <lane> --agent analista` y escribí la spec con el analista siguiendo lo que imprime. Carril `direct` u `operational`: sin spec.
-6. Escribí la salida JSON y cerrá:
+   If this fails, explain the reason to the analyst and stop.
+3. Read the issue, comments, repository specs, code, and relevant history. Load `orqen:grilling` and interview the analyst about decisions that remain open.
+4. Once the analyst approves the analysis, propose `operational`, `direct`, `light`, or `full` using the criteria in the stage guide. Ask the analyst to confirm.
+5. For `light` or `full`, run `orqen lane <KEY> <lane> --agent analyst` and write the spec with the analyst. The other lanes skip the spec.
+6. Write the JSON output and submit it:
    ```sh
-   ./cli/bin/orqen complete <KEY> <archivo.json> --agent analista
+   orqen complete <KEY> <output.json> --agent analyst
    ```
-   Si lista errores, corregilos (la salida o la spec) y repetí hasta ver `✔`.
-7. Cerrá contándole al analista, en pocas líneas: carril elegido, el SIS creado y vinculado al REC (key), la ruta `orqen/work/<KEY>/`, y la etapa que sigue. Una etapa por vez: no sigas con el desarrollo.
+   Correct validation errors and retry until the command reports success.
+7. Report the lane, linked SIS key, `orqen/work/<KEY>/` record, and next stage. Stop after completing analysis.
 
-Si no se puede avanzar: `./cli/bin/orqen block <KEY> "motivo concreto"`.
+If you cannot proceed, run `orqen block <KEY> "<specific reason>"`.

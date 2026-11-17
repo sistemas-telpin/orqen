@@ -2,6 +2,6 @@
 # orqen CLI wrapper. Can be run from any folder of the repo.
 DIR="$(cd "$(dirname "$0")/.." && pwd)"
 if [ ! -x "$DIR/node_modules/.bin/tsx" ]; then
-  echo "Missing dependencies, run: npm ci --prefix \"$DIR\"" >&2; exit 1
+  echo "Missing dependencies, run: pnpm install" >&2; exit 1
 fi
-exec "$DIR/node_modules/.bin/tsx" "$DIR/scripts/cli.ts" "$@"
+exec "$DIR/node_modules/.bin/tsx" "$DIR/src/index.ts" "$@"

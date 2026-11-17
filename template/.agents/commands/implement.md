@@ -1,51 +1,40 @@
 ---
-description: Implementa un SIS (etapa DEVELOPMENT): aplica la spec de OpenSpec si la tiene, o el plan del análisis si es carril directo
+description: Implement a linked SIS issue using its OpenSpec change or the approved direct-lane plan
 argument-hint: SIS-442
-allowed-tools: Bash(./cli/bin/orqen:*), Bash(openspec:*), Bash(npm:*), Bash(npx:*), Read, Grep, Glob, Write, Edit, Skill
+allowed-tools: Bash(orqen:*), Bash(openspec:*), Bash(npm:*), Bash(npx:*), Read, Grep, Glob, Write, Edit, Skill
 ---
 
-Vas a **implementar el SIS `$ARGUMENTS`**: la etapa DEVELOPMENT del proceso REC (`AGENTS.md`, "Proceso REC"). Estás parado en la raíz del repo.
-El SIS es el issue de desarrollo que creó el análisis; `orqen` sabe a qué REC pertenece y trabaja con ese REC.
+Implement the request identified by `$ARGUMENTS` from the repository root. orqen resolves the SIS issue back to its customer request (REC). Follow the development stage in `AGENTS.md`.
 
-## Reglas que no se negocian
+## Rules
 
-- **Jira es de solo lectura para vos** (también por MCP). Los comentarios y las transiciones del REC y del SIS los hace `orqen`.
-- Prohibido: `git commit/push/checkout/reset/rebase`, cambiar de rama, `openspec archive`, editar `cli/.state/`, `orqen/work/` o los scripts de `cli/`.
-- No cambies el alcance: implementás lo que dicen la spec / el plan y los criterios de aceptación. Si algo no cierra o falta una decisión, no inventes: frená y preguntale al usuario, o bloqueá.
-- **Una etapa por vez**: al terminar DEVELOPMENT, `orqen complete` mueve el estado y vos cortás. No sigas con TESTING.
+- Use Jira and Jira MCP for read-only access. orqen posts comments and updates issue transitions.
+- Leave Git operations, branch changes, OpenSpec archiving, and writes to `orqen/state/`, `orqen/work/`, and orqen configuration to orqen.
+- Follow the approved scope, specifications or plan, and acceptance criteria. Ask the user or block the request if you need a decision to proceed.
+- Stop once `orqen complete` advances the request out of `DEVELOPMENT`.
 
-## Pasos
+## Steps
 
-1. Validá que el argumento tenga forma `SIS-<número>` (o el prefijo del proyecto SIS configurado); si no, pedilo y cortá. También se acepta la key del REC.
-2. Chequeá el estado **antes** de tomar nada:
+1. Check that the argument is a SIS or REC issue key. SIS keys use the configured project prefix. Ask for the key if it is missing or invalid.
+2. Run `orqen status <SIS>`. If the issue cannot be resolved, explain that it is not linked to a REC in this repository and stop. Claim work only in `DEVELOPMENT` for a development request. Otherwise:
+   - `ANALYSIS` or `WAITING_CLIENT`: Explain that analysis must finish first.
+   - `EXECUTION` or `VERIFICATION`: Explain that the request follows the operational workflow.
+   - `BLOCKED`: Report the reason from the status history.
+   - For any other stage, report it and explain how to proceed with `orqen take <KEY>`.
+3. Claim the stage, which prepares the branch and environment and prints instructions, context, and the output schema:
    ```sh
-   ./cli/bin/orqen status <SIS>
+   orqen take <SIS> --agent implementer
    ```
-   Si dice `desconocido` o falla la resolución, explicale al usuario que ese SIS no está asociado a ningún REC de este repo y frená.
-   Seguí solo si `estado` es `DEVELOPMENT` y la vía es de desarrollo (no `operational`). Si no:
-   - `ANALYSIS` / `WAITING_CLIENT`: todavía falta el análisis (`/orqen:analyze <REC>`).
-   - `TESTING`, `DELIVERY`, etc.: no es esta etapa; decile cuál es y cómo se sigue (`orqen take <KEY>`).
-   - `EXECUTION` / `VERIFICATION`: es carril operativo, no hay código que implementar.
-   - `BLOCKED`: contale el motivo (bitácora de `orqen status`).
-   Cortá sin tomar el REC.
-3. Tomá la etapa (reserva el REC, prepara la rama e imprime instrucciones, contexto y esquema de salida):
+   If this fails, report the reason and stop.
+4. Read `previous_stages.ANALYSIS` and the work record as needed. Address failures in `test_result`, prior `previous_stages.TESTING`, and review feedback in `human_feedback` first.
+   - For `light` or `full`, use `openspec-apply-change`, `/opsx:apply`, or `openspec instructions apply --change <change> --json`. Read the proposal, design, specs, and tasks, then check off completed tasks in `tasks.md`.
+   - For `direct`, follow the analysis `plan` in order.
+   - Follow repository conventions and current specs. Write automated tests for each Scenario or acceptance criterion. Run `orqen env test` and project linters. Use `environment.commands` and `environment.variables` from the context.
+5. Write the JSON output and submit it:
    ```sh
-   ./cli/bin/orqen take <SIS> --agent implementador
+   orqen complete <SIS> <output.json> --agent implementer
    ```
-   Si falla (lo tomó otro agente, etc.), explicá el motivo y frená.
-4. Seguí al pie de la letra las instrucciones de la etapa que imprimió el paso 3. En resumen:
-   - Leé `previous_stages.ANALYSIS` (resumen, criterios, decisiones, plan) y `orqen/work/<KEY>/` si necesitás detalle.
-   - **Carril `light` / `full`** (hay change de OpenSpec): cargá el skill `openspec-apply-change` (o `/opsx:apply`); si no está, `openspec instructions apply --change <change> --json`. Leé proposal, design, specs y tasks. Implementá las tareas en orden y **tildá cada una en `tasks.md` (`- [x]`) al terminarla**.
-   - **Carril `direct`** (sin change): implementá el `plan` del análisis en orden.
-   - Respetá las convenciones del repo y las specs de `openspec/specs/` (comportamiento actual).
-   - Escribí tests automáticos para **cada Scenario / criterio de aceptación**, nombrados de forma que se reconozca cuál verifican.
-   - Corré los tests y linters del proyecto antes de terminar.
-   - Si el contexto trae `test_result` fallido, `previous_stages.TESTING` o un rechazo en `human_feedback`, corregí eso primero.
-5. Escribí la salida JSON según el esquema impreso y cerrá:
-   ```sh
-   ./cli/bin/orqen complete <SIS> <archivo.json> --agent implementador
-   ```
-   Si lista errores (p. ej. tareas sin tildar), corregilos y repetí hasta ver `✔`.
-6. Cerrá contándole al usuario, en pocas líneas: qué se implementó, qué tests se agregaron y su resultado, y la etapa que sigue. Si hubo supuestos o desvíos de la spec, decilo explícitamente.
+   Correct validation errors and retry until the command reports success.
+6. Report the implementation, tests and results, assumptions or deviations, and the next stage.
 
-Si no se puede avanzar: `./cli/bin/orqen block <SIS> "motivo concreto"`.
+If you cannot proceed, run `orqen block <SIS> "<specific reason>"`.

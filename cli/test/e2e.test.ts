@@ -8,14 +8,14 @@ import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { REC_DIR, loadConfig } from "../scripts/config.ts";
-import { OpenSpecCli } from "../scripts/openspec.ts";
-import { Process } from "../scripts/process.ts";
-import { Store } from "../scripts/store.ts";
-import { GitWorkspace } from "../scripts/workspace.ts";
+import { REC_DIR, loadConfig } from "../src/workflow/config.ts";
+import { OpenSpecCli } from "../src/workflow/openspec.ts";
+import { Process } from "../src/workflow/process.ts";
+import { Store } from "../src/workflow/store.ts";
+import { GitWorkspace } from "../src/workflow/workspace.ts";
 import { FakeJira } from "./fakes.ts";
 
-const OPENSPEC = join(REC_DIR, "node_modules", ".bin", "openspec");
+const OPENSPEC = join(REC_DIR, "node_modules", ".bin", process.platform === "win32" ? "openspec.cmd" : "openspec");
 
 function tempRepo() {
   const dir = mkdtempSync(join(tmpdir(), "rec-e2e-"));
@@ -85,7 +85,7 @@ test("full REC with real OpenSpec", { skip: !existsSync(OPENSPEC) && "openspec m
   r = await p.complete("REC-7", analysis, "analyst-bot");
   assert.deepEqual(r, { ok: true, next: "DEVELOPMENT" });   // the analyst's OK replaces the analysis and spec gates
   assert.equal(state(), "DEVELOPMENT");
-  assert.match(jira.coms["REC-7"].map((x) => x.body).join("\n"), /3 h estimadas/);
+  assert.match(jira.coms["REC-7"].map((x) => x.body).join("\n"), /3 estimated hours/);
   assert.match(git("log", "--format=%s"), /spec OpenSpec/);
 
   // ---- orqen/work/REC-7 was committed on the branch and the tree is clean (branches can be switched)
@@ -104,7 +104,7 @@ test("full REC with real OpenSpec", { skip: !existsSync(OPENSPEC) && "openspec m
   assert.match(jira.created[0].title, /^\[REC-7\]/);
   assert.deepEqual(jira.links, [["SIS-1", "REC-7", "Relates"]]);
   assert.equal(new Store(cfg.stateDir).get("REC-7")!.sis, "SIS-1");
-  assert.match(jira.coms["REC-7"].map((c) => c.body).join("\n"), /Creé SIS-1/);
+  assert.match(jira.coms["REC-7"].map((c) => c.body).join("\n"), /Track implementation in SIS-1/);
 
   // ---- DEVELOPMENT
   await p.take("REC-7");
@@ -115,7 +115,7 @@ test("full REC with real OpenSpec", { skip: !existsSync(OPENSPEC) && "openspec m
   writeFileSync(join(cdir, "tasks.md"), readFileSync(join(cdir, "tasks.md"), "utf8").replaceAll("- [ ]", "- [x]"));
   r = await p.complete("REC-7", dev);
   assert.deepEqual(r, { ok: true, next: "TESTING" });
-  assert.match(jira.last("SIS-1"), /Desarrollo listo/);   // the technical milestone is mirrored on the SIS
+  assert.match(jira.last("SIS-1"), /Development complete/);   // the technical milestone is mirrored on the SIS
 
   // ---- TESTING (real tests pass)
   const t = await p.take("REC-7");

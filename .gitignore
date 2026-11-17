@@ -1,3 +1,6 @@
-cli/node_modules/
+node_modules/
+dist/
+*.tgz
+cli/.estado/
 cli/.state/
 cli/.env

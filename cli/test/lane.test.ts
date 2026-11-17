@@ -4,12 +4,12 @@ import { existsSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { loadConfig } from "../scripts/config.ts";
-import type { OpenSpecApi } from "../scripts/openspec.ts";
-import { Process } from "../scripts/process.ts";
-import { reviewSql } from "../scripts/sql.ts";
-import { Store } from "../scripts/store.ts";
-import type { Workspace } from "../scripts/workspace.ts";
+import { loadConfig } from "../src/workflow/config.ts";
+import type { OpenSpecApi } from "../src/workflow/openspec.ts";
+import { Process } from "../src/workflow/process.ts";
+import { reviewSql } from "../src/workflow/sql.ts";
+import { Store } from "../src/workflow/store.ts";
+import type { Workspace } from "../src/workflow/workspace.ts";
 import { FakeJira } from "./fakes.ts";
 
 const fakeOs: OpenSpecApi = {
@@ -70,7 +70,7 @@ test("full operational route: SIS when the analysis closes, no branch, with huma
   assert.deepEqual(await p.complete("REC-1", EXEC()), { ok: true, next: "EXECUTION_APPROVAL" });
   assert.ok(existsSync(join(cfg.factoryDir, "REC-1", "round-1", "execution", "script.sql")));
   assert.ok(existsSync(join(cfg.factoryDir, "REC-1", "round-1", "analysis.md")));
-  assert.match(jira.last("REC-1"), /Script SQL/);
+  assert.match(jira.last("REC-1"), /SQL script/);
 
   jira.human("REC-1", "pm", "/approve");                      // not an execution approver
   await p.review();

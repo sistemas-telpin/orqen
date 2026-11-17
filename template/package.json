@@ -1,0 +1,28 @@
+{
+  "name": "orqen-kit",
+  "version": "0.1.0",
+  "description": "Repository templates for the orqen workflow, including agent instructions, stage guides, a Claude Code plugin, and OpenSpec rules",
+  "type": "module",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "files": [
+    "index.js",
+    "index.d.ts",
+    "AGENTS.md",
+    ".agents/",
+    "env.example",
+    "openspec/",
+    "orqen/",
+    "stages/"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "node -e 0",
+    "test": "node -e 0",
+    "typecheck": "node -e 0"
+  },
+  "license": "UNLICENSED",
+  "author": "Telpin"
+}

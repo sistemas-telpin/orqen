@@ -21,14 +21,14 @@ El análisis lo conduce un **analista** con el agente (`/orqen:analyze REC-1234`
 
 ```mermaid
 flowchart TD
-    A["/orqen:analyze REC-1234"] --> B["orqen analizar: reserva el REC,<br/>crea orqen/work/REC-1234/"]
+    A["/orqen:analyze REC-1234"] --> B["orqen analyze: reserva el REC,<br/>crea orqen/work/REC-1234/"]
     B --> C["Grilling con el analista<br/>(skill orqen:grilling + repo + Jira por MCP, solo lectura)"]
     C -->|"lo contesta el cliente"| W["ESPERA_CLIENTE"] -->|"responde"| C
     C -->|"OK del analista"| D{"Propuesta de carril<br/>(el analista confirma)"}
     D -->|"directo<br/>sin spec"| G
-    D -->|"liviano / completo"| E["orqen carril: rama + change de OpenSpec<br/>→ el agente escribe la spec con el analista"] --> G
+    D -->|"liviano / completo"| E["orqen lane: rama + change de OpenSpec<br/>→ el agente escribe la spec con el analista"] --> G
     D -->|"operativa<br/>(sin código)"| G
-    G["orqen completar: valida · crea el SIS · lo vincula al REC<br/>· registra en orqen/work/ · commit de la spec"] --> H(["DESARROLLO · o EJECUCION si es operativa"])
+    G["orqen complete: valida · crea el SIS · lo vincula al REC<br/>· registra en orqen/work/ · commit de la spec"] --> H(["DESARROLLO · o EJECUCION si es operativa"])
 ```
 
 El agente **no escribe en Jira** (el MCP es solo lectura): la creación del SIS, el vínculo `SIS ↔ REC`, los comentarios y los
@@ -67,18 +67,18 @@ pertenece (el SIS vigente de la ronda actual).
 
 ```mermaid
 flowchart TD
-    A["/orqen:implement SIS-442"] --> B["orqen estado SIS-442<br/>(resuelve SIS → REC y mira el estado)"]
+    A["/orqen:implement SIS-442"] --> B["orqen status SIS-442<br/>(resuelve SIS → REC y mira el estado)"]
     B -->|"no es DESARROLLO,<br/>o es vía operativa"| X(["Se explica qué etapa sigue<br/>y se corta sin reservar el REC"])
-    B -->|"DESARROLLO"| C["orqen tomar SIS-442: reserva el REC,<br/>prepara la rama e imprime contexto + esquema"]
+    B -->|"DESARROLLO"| C["orqen take SIS-442: reserva el REC,<br/>prepara la rama e imprime contexto + esquema"]
     C --> D{"Carril"}
     D -->|"liviano / completo"| E["Apply de OpenSpec<br/>(openspec-apply-change)<br/>proposal + design + specs + tasks<br/>→ tilda cada tarea en tasks.md"]
     D -->|"directo<br/>sin spec"| F["Implementa el plan del análisis<br/>en orden"]
     E --> G
     F --> G["Tests por cada Scenario / criterio de aceptación<br/>+ corre tests y linters"]
     G -->|"falla algo"| G
-    G --> H["orqen completar SIS-442 salida.json<br/>(rechaza si quedan tareas sin tildar)"]
+    G --> H["orqen complete SIS-442 salida.json<br/>(rechaza si quedan tareas sin tildar)"]
     H --> I(["TESTING<br/>una etapa por vez: el agente corta acá"])
-    G -.->|"no se puede avanzar"| Z{{"orqen bloquear SIS-442 'motivo'"}}
+    G -.->|"no se puede avanzar"| Z{{"orqen block SIS-442 'motivo'"}}
 ```
 
 Mismas reglas que el análisis: Jira de solo lectura para el agente, sin `git commit/push/checkout`, sin `openspec archive`
@@ -125,7 +125,7 @@ Desaparecieron los gates `APROBACION_ANALISIS` y `APROBACION_SPEC`: el OK del an
 
 | Estado          | Quién             | Qué pasa                                                                                                   | OpenSpec                                                                                                                                                     |
 | --------------- | ----------------- | ---------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| ANALISIS        | analista + agente | grilling → OK → carril → spec (si corresponde) → SIS vinculado al REC                                      | lee `openspec/specs`; liviano/completo: `orqen carril` crea el change y `orqen completar` exige `validate --strict`, artefactos completos y `(Nh)` en cada tarea |
+| ANALISIS        | analista + agente | grilling → OK → carril → spec (si corresponde) → SIS vinculado al REC                                      | lee `openspec/specs`; liviano/completo: `orqen lane` crea el change y `orqen complete` exige `validate --strict`, artefactos completos y `(Nh)` en cada tarea |
 | ESPERA_CLIENTE  | cliente           | responde en Jira (máx. 3 rondas)                                                                           | —                                                                                                                                                            |
 | DESARROLLO      | agente            | implementa; con spec tilda `tasks.md`, en directo sigue el `plan`                                          | flujo _apply_; `orqen` rechaza si queda alguna tarea sin tildar                                                                                                |
 | TESTING         | `orqen` + agente    | `orqen` corre la suite y el agente mapea test ↔ **cada Scenario** (directo: cada **criterio de aceptación**) | si falta alguno, se rechaza                                                                                                                                  |
@@ -162,23 +162,23 @@ las escrituras las hace `orqen` con `JIRA_TOKEN`. `openspec init --tools …` in
 ## Uso
 
 **Análisis (analista)**: en Claude Code, `/orqen:analyze REC-1234`. En otro agente: _"analizá el REC-1234"_ (el agente lee
-`AGENTS.md` y corre `orqen analizar` → grilling → `orqen carril` → `orqen completar`).
+`AGENTS.md` y corre `orqen analyze` → grilling → `orqen lane` → `orqen complete`).
 
-**Implementación**: en Claude Code, `/orqen:implement SIS-442`. En otro agente: _"implementá el SIS-442"_ (`orqen estado` → `orqen tomar` →
-apply de la spec o plan → `orqen completar`). `tomar`, `completar`, `estado`, `bloquear` y `liberar` aceptan la key del SIS o la del REC.
+**Implementación**: en Claude Code, `/orqen:implement SIS-442`. En otro agente: _"implementá el SIS-442"_ (`orqen status` → `orqen take` →
+apply de la spec o plan → `orqen complete`). `take`, `complete`, `status`, `block` y `release` aceptan la key del SIS o la del REC.
 
-**Resto de las etapas, interactivo**: _"procesá el REC REC-123"_ → `orqen tomar` → trabaja → `orqen completar`.
+**Resto de las etapas, interactivo**: _"procesá el REC REC-123"_ → `orqen take` → trabaja → `orqen complete`.
 
 **Desatendido** (cron, CI o servidor), solo etapas de agente — **nunca** ANALISIS:
 
 ```sh
-./cli/bin/orqen ciclo --loop     # cada REC_INTERVALO_SEG: avanza gates y lanza AGENTE_CMD por REC pendiente
+./cli/bin/orqen cycle --loop     # cada REC_INTERVALO_SEG: avanza gates y lanza AGENTE_CMD por REC pendiente
 ```
 
 Para cambiar de agente alcanza con cambiar `AGENTE_CMD`, por ejemplo a `codex exec --full-auto {prompt}`.
 
-Otros comandos: `orqen pendientes` (separa _para analizar_ de _para un agente_), `orqen estado [KEY]`, `orqen esquema <ETAPA>`,
-`orqen bloquear`, `orqen liberar`, `orqen buscar <JQL>`. Los REC nuevos ya no se toman solos: quedan en NUEVO hasta que un analista corre `analizar`.
+Otros comandos: `orqen pending` (separa _para analizar_ de _para un agente_), `orqen status [KEY]`, `orqen schema <ETAPA>`,
+`orqen block`, `orqen release`, `orqen search <JQL>`. Los REC nuevos ya no se toman solos: quedan en NUEVO hasta que un analista corre `analyze`.
 
 ## Garantías y límites
 

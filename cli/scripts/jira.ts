@@ -1,4 +1,4 @@
-/** Cliente mínimo de Jira. Lectura para el agente (vía `orqen tomar`/`orqen buscar`); escritura solo desde el proceso. */
+/** Cliente mínimo de Jira. Lectura para el agente (vía `orqen take`/`orqen search`); escritura solo desde el proceso. */
 import type { Config } from "./config.ts";
 
 export const BOT_MARCA = "[rec-agente]";

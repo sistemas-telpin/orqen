@@ -35,4 +35,4 @@ Objetivo: salir con un entendimiento compartido, sin ambigüedades que cambien e
 
 ## Después del OK
 
-Proponé el carril según la tabla de la etapa ANALISIS (`./cli/bin/orqen analizar` la imprime), justificá en términos de tamaño, riesgo y alcance, y pedí confirmación. Ante la duda entre dos carriles, el de más rigor.
+Proponé el carril según la tabla de la etapa ANALISIS (`./cli/bin/orqen analyze` la imprime), justificá en términos de tamaño, riesgo y alcance, y pedí confirmación. Ante la duda entre dos carriles, el de más rigor.

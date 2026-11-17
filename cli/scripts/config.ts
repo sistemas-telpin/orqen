@@ -61,7 +61,7 @@ export function cargarConfig(over: Partial<Config> = {}): Config {
     openspecCmd: env("OPENSPEC_CMD", "openspec"),
     estadoDir: env("REC_ESTADO_DIR", join(REC_DIR, ".estado")),
     lockMinutos: Number(env("REC_LOCK_MIN", "90")),
-    // Comando headless del agente para `orqen ciclo`. {prompt} se reemplaza (ya escapado).
+    // Comando headless del agente para `orqen cycle`. {prompt} se reemplaza (ya escapado).
     agenteCmd: env("AGENTE_CMD", "claude -p {prompt} --permission-mode acceptEdits"),
     intervaloSeg: Number(env("REC_INTERVALO_SEG", "120")),
     ...over,

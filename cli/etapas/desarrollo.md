@@ -4,7 +4,7 @@ Ya estás en la rama del REC (`rama` en el contexto). El análisis ya se cerró 
 
 1. Leé `etapas_previas.ANALISIS` (resumen, criterios, decisiones, plan) y `orqen/work/<KEY>/` si necesitás el detalle.
 2. Según el carril:
-   - **liviano / completo**: seguí el flujo **apply** de OpenSpec (skill `openspec-apply-change` / `/opsx:apply`; si no: `openspec instructions apply --change <cambio> --json`). Leé proposal, design, specs y tasks del change. Tildá cada tarea en `tasks.md` (`- [x]`) a medida que la terminás: `orqen completar` rechaza la salida si queda alguna sin tildar.
+   - **liviano / completo**: seguí el flujo **apply** de OpenSpec (skill `openspec-apply-change` / `/opsx:apply`; si no: `openspec instructions apply --change <cambio> --json`). Leé proposal, design, specs y tasks del change. Tildá cada tarea en `tasks.md` (`- [x]`) a medida que la terminás: `orqen complete` rechaza la salida si queda alguna sin tildar.
    - **directo** (no hay change): implementá el `plan` del análisis en orden. No hay `tasks.md` que tildar.
 3. Respetá las convenciones del repo (y su AGENTS.md / CLAUDE.md).
 4. Escribí tests automáticos para **cada criterio de aceptación / Scenario**, nombrados de forma que se reconozca cuál verifican.

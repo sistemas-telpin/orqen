@@ -115,7 +115,7 @@ test("analista: preguntas al cliente, OK obligatorio, carril directo, SIS y orqe
   assert.match(readFileSync(join(f, "bitacora.md"), "utf8"), /ANALISIS → DESARROLLO/);
 });
 
-test("carril liviano: exige `orqen carril` y que el change coincida", async () => {
+test("carril liviano: exige `orqen lane` y que el change coincida", async () => {
   const { p, jira, est } = armar();
   await p.analizar("REC-1", "codex", "Ana");
   const spec = { cambio: "rec-1-algo", resumen: "Resumen de la propuesta.", supuestos: ["s"] };
@@ -123,8 +123,8 @@ test("carril liviano: exige `orqen carril` y que el change coincida", async () =
 
   let r = await p.completar("REC-1", liviano({ especificacion: undefined }), "codex");
   assert.match((r as any).errores.join(), /necesitan la spec/);
-  r = await p.completar("REC-1", liviano(), "codex");                    // no corrió `orqen carril`
-  assert.match((r as any).errores.join(), /orqen carril REC-1 liviano/);
+  r = await p.completar("REC-1", liviano(), "codex");                    // no corrió `orqen lane`
+  assert.match((r as any).errores.join(), /orqen lane REC-1 liviano/);
   await assert.rejects(p.carril("REC-1", "gigante", "codex"), /Carril inválido/);
 
   assert.deepEqual(await p.carril("REC-1", "liviano", "codex"),

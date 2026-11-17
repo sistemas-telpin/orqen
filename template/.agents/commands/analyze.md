@@ -19,17 +19,17 @@ Seguí el proceso de `AGENTS.md` ("Proceso REC"). Estás parado en la raíz del 
 1. Validá que la key tenga forma `REC-<número>`; si no, pedila y cortá.
 2. Abrí el análisis (reserva el REC, crea `orqen/work/<KEY>/` e imprime las instrucciones, el contexto completo y el esquema de salida):
    ```sh
-   ./cli/bin/orqen analizar <KEY> --analista "<nombre>" --agente analista
+   ./cli/bin/orqen analyze <KEY> --analyst "<nombre>" --agent analista
    ```
    Si falla (REC ya analizado, esperando al cliente, sin credenciales de Jira), explicale al analista el motivo y frená.
 3. Cargá el skill **`orqen:grilling`** y entrevistá al analista como indica. Antes de preguntar, leé el REC (MCP de Jira si está, o el contexto de `orqen analize`) y el repo (`openspec/specs`, código, historial): no preguntes lo que podés averiguar.
 4. Con el OK del analista, **proponé el carril** (`operativa`, `directo`, `liviano` o `completo`) con la tabla de criterios de la guía impresa en el paso 2, y pedí confirmación.
-5. Carril `liviano` o `completo`: corré `./cli/bin/orqen carril <KEY> <carril> --agente analista` y escribí la spec con el analista siguiendo lo que imprime. Carril `directo` u `operativa`: sin spec.
+5. Carril `liviano` o `completo`: corré `./cli/bin/orqen lane <KEY> <carril> --agent analista` y escribí la spec con el analista siguiendo lo que imprime. Carril `directo` u `operativa`: sin spec.
 6. Escribí la salida JSON y cerrá:
    ```sh
-   ./cli/bin/orqen completar <KEY> <archivo.json> --agente analista
+   ./cli/bin/orqen complete <KEY> <archivo.json> --agent analista
    ```
    Si lista errores, corregilos (la salida o la spec) y repetí hasta ver `✔`.
 7. Cerrá contándole al analista, en pocas líneas: carril elegido, el SIS creado y vinculado al REC (key), la ruta `orqen/work/<KEY>/`, y la etapa que sigue. Una etapa por vez: no sigas con el desarrollo.
 
-Si no se puede avanzar: `./cli/bin/orqen bloquear <KEY> "motivo concreto"`.
+Si no se puede avanzar: `./cli/bin/orqen block <KEY> "motivo concreto"`.

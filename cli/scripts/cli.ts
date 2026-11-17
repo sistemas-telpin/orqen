@@ -1,18 +1,18 @@
 /**
  * CLI del proceso REC.  Uso:  ./cli/bin/orqen <comando>
  *
- *   pendientes [--json]            Avanza gates y lista los REC con trabajo: para analista (NUEVO/ANALISIS) y para agente
- *   analizar <KEY> [--analista N]  Abre el análisis con un analista (grilling): imprime instrucciones + contexto + esquema
- *   carril <KEY> <directo|liviano|completo>   Registra el carril; liviano/completo crean la rama y el change de OpenSpec
- *   tomar <KEY> [--agente N]       (etapas de agente) Reserva el REC, prepara rama/tests e imprime instrucciones + contexto
- *                                  (tomar/completar/estado/bloquear/liberar aceptan también la key del SIS: SIS-442)
- *   completar <KEY> <salida.json|-> [--agente N]   Valida la salida de la etapa y avanza el proceso
- *   esquema <ETAPA>                JSON Schema de la salida de una etapa
- *   bloquear <KEY> <motivo>        Escala a un humano
- *   liberar <KEY>                  Quita la reserva de un REC
- *   buscar <JQL>                   Busca issues (antecedentes / relacionados)
- *   estado [KEY]                   Estado actual y bitácora
- *   ciclo [--loop]                 Modo desatendido: lanza AGENTE_CMD para cada REC pendiente
+ *   pending [--json]            Avanza gates y lista los REC con trabajo: para analista (NUEVO/ANALISIS) y para agente
+ *   analyze <KEY> [--analyst N]  Abre el análisis con un analista (grilling): imprime instrucciones + contexto + esquema
+ *   lane <KEY> <directo|liviano|completo>   Registra el carril; liviano/completo crean la rama y el change de OpenSpec
+ *   take <KEY> [--agent N]       (etapas de agente) Reserva el REC, prepara rama/tests e imprime instrucciones + contexto
+ *                                  (take/complete/status/block/release aceptan también la key del SIS: SIS-442)
+ *   complete <KEY> <salida.json|-> [--agent N]   Valida la salida de la etapa y avanza el proceso
+ *   schema <ETAPA>                JSON Schema de la salida de una etapa
+ *   block <KEY> <motivo>        Escala a un humano
+ *   release <KEY>                  Quita la reserva de un REC
+ *   search <JQL>                   Busca issues (antecedentes / relacionados)
+ *   status [KEY]                   Estado actual y bitácora
+ *   cycle [--loop]                 Modo desatendido: lanza AGENTE_CMD para cada REC pendiente
  */
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
@@ -34,8 +34,8 @@ const proceso = new Proceso(cfg, jira, store, new GitWorkspace(cfg), new OpenSpe
 const [cmd, ...resto] = process.argv.slice(2);
 const flag = (n: string) => { const i = resto.indexOf(`--${n}`); return i >= 0 ? (resto.splice(i, 2)[1] ?? "") : undefined; };
 const tiene = (n: string) => { const i = resto.indexOf(`--${n}`); if (i >= 0) resto.splice(i, 1); return i >= 0; };
-const agente = flag("agente") ?? process.env.REC_AGENTE ?? "agente";
-const analista = flag("analista") ?? process.env.REC_ANALISTA ?? "";
+const agente = flag("agent") ?? process.env.REC_AGENTE ?? "agente";
+const analista = flag("analyst") ?? process.env.REC_ANALISTA ?? "";
 
 /** Acepta la key del REC o la de su SIS (el SIS vigente del REC) y devuelve siempre la del REC. */
 function aRec(key?: string): string {
@@ -63,7 +63,7 @@ function guia(estado: EstadoAgente) {
 function renderTomar(key: string, ctx: Record<string, any>) {
   const e = ctx.estado as EstadoAgente;
   const carril = e === "ANALISIS"
-    ? ["", "## Carril (cuando el analista dé el OK)", `Con el carril confirmado: \`./cli/bin/orqen carril ${key} <${CARRILES.join("|")}> --agente ${agente}\`.`,
+    ? ["", "## Carril (cuando el analista dé el OK)", `Con el carril confirmado: \`./cli/bin/orqen lane ${key} <${CARRILES.join("|")}> --agent ${agente}\`.`,
        "Liviano/completo: te crea la rama y el change de OpenSpec e imprime cómo escribir la spec. Directo: no hace falta spec."]
     : [];
   return [
@@ -81,9 +81,9 @@ function renderTomar(key: string, ctx: Record<string, any>) {
     "",
     "## Para terminar",
     `Escribí la salida en un archivo (ej. \`/tmp/${key}-${e.toLowerCase()}.json\`) y corré:`,
-    "```sh", `./cli/bin/orqen completar ${key} /tmp/${key}-${e.toLowerCase()}.json --agente ${agente}`, "```",
+    "```sh", `./cli/bin/orqen complete ${key} /tmp/${key}-${e.toLowerCase()}.json --agent ${agente}`, "```",
     "Si la salida no es válida, el comando lista los errores: corregí y volvé a correrlo.",
-    `Si no podés avanzar: \`./cli/bin/orqen bloquear ${key} "motivo"\`.`,
+    `Si no podés avanzar: \`./cli/bin/orqen block ${key} "motivo"\`.`,
   ].join("\n");
 }
 
@@ -91,7 +91,7 @@ async function ciclo() {
   const pend = (await proceso.revisar()).filter((p) => p.para === "agente" && !p.tomadoPor);
   for (const p of pend) {
     const prompt = `Procesá el REC ${p.key} siguiendo la sección "Proceso REC" de AGENTS.md. ` +
-      `Empezá corriendo: ./cli/bin/orqen tomar ${p.key} --agente ciclo`;
+      `Empezá corriendo: ./cli/bin/orqen take ${p.key} --agent ciclo`;
     const comando = cfg.agenteCmd.replace("{prompt}", `'${prompt.replace(/'/g, `'\\''`)}'`);
     console.log(`→ ${p.key} (${p.estado}): ${comando}`);
     const r = spawnSync(comando, { shell: true, cwd: cfg.repoPath, stdio: "inherit", env: { ...process.env, REC_AGENTE: "ciclo" } });
@@ -104,21 +104,21 @@ async function ciclo() {
 
 async function main() {
   switch (cmd) {
-    case "pendientes": {
+    case "pending": {
       const p = await proceso.revisar();
       if (tiene("json")) return console.log(JSON.stringify(p, null, 2));
       if (!p.length) return console.log("No hay REC con trabajo pendiente.");
       for (const para of ["analista", "agente"] as const) {
         const xs = p.filter((x) => x.para === para);
         if (!xs.length) continue;
-        console.log(para === "analista" ? "Para analizar (/orqen:analyze <KEY>):" : "Para un agente (orqen tomar <KEY>):");
+        console.log(para === "analista" ? "Para analizar (/orqen:analyze <KEY>):" : "Para un agente (orqen take <KEY>):");
         for (const x of xs) console.log(`  ${x.key.padEnd(12)} ${x.estado.padEnd(15)} ${x.tomadoPor ? `(tomado por ${x.tomadoPor})` : ""}`);
       }
       return;
     }
-    case "analizar": {
+    case "analyze": {
       const key = resto[0];
-      if (!key) { console.error("Uso: orqen analizar <KEY> [--analista NOMBRE]"); process.exitCode = 1; return; }
+      if (!key) { console.error("Uso: orqen analyze <KEY> [--analyst NOMBRE]"); process.exitCode = 1; return; }
       try {
         const { contexto } = await proceso.analizar(key, agente, analista || agente);
         console.log(renderTomar(key, contexto));
@@ -128,7 +128,7 @@ async function main() {
       }
       return;
     }
-    case "carril": {
+    case "lane": {
       const [key, c] = resto;
       try {
         const r = await proceso.carril(key, c, agente);
@@ -143,7 +143,7 @@ async function main() {
       }
       return;
     }
-    case "tomar": {
+    case "take": {
       try {
         const key = aRec(resto[0]);
         const { contexto } = await proceso.tomar(key, agente);
@@ -154,7 +154,7 @@ async function main() {
       }
       return;
     }
-    case "completar": {
+    case "complete": {
       const [clave, archivo] = resto;
       let key: string;
       try { key = aRec(clave); } catch (e) { console.error(`✘ ${(e as Error).message}`); process.exitCode = 1; return; }
@@ -166,14 +166,14 @@ async function main() {
       else { console.error(`✘ La salida no se aceptó:\n- ${r.errores.join("\n- ")}`); process.exitCode = 1; }
       return;
     }
-    case "esquema": {
+    case "schema": {
       const e = resto[0]?.toUpperCase() as EstadoAgente;
       if (!ESTADOS_AGENTE.includes(e)) throw new Error(`Etapa inválida. Opciones: ${ESTADOS_AGENTE.join(", ")}`);
       return console.log(JSON.stringify(esquemaJson(e), null, 2));
     }
-    case "bloquear": await proceso.bloquear(aRec(resto[0]), resto.slice(1).join(" "), agente); return console.log("✔ bloqueado");
-    case "liberar": proceso.liberar(aRec(resto[0])); return console.log("✔ liberado");
-    case "buscar": {
+    case "block": await proceso.bloquear(aRec(resto[0]), resto.slice(1).join(" "), agente); return console.log("✔ bloqueado");
+    case "release": proceso.liberar(aRec(resto[0])); return console.log("✔ liberado");
+    case "search": {
       const keys = (await jira.buscarKeys(resto.join(" "))).slice(0, 20);
       const out = await Promise.all(keys.map(async (k: string) => {
         const i = await jira.issue(k);
@@ -181,7 +181,7 @@ async function main() {
       }));
       return console.log(JSON.stringify(out, null, 2));
     }
-    case "estado": {
+    case "status": {
       if (resto[0]) {
         const key = aRec(resto[0]);
         const rec = store.get(key);
@@ -190,7 +190,7 @@ async function main() {
       } else for (const r of store.todos()) console.log(`${r.key.padEnd(12)} ${r.estado.padEnd(15)} ${(r.sis ?? "").padEnd(12)} ${r.cambio ?? ""}`);
       return;
     }
-    case "ciclo":
+    case "cycle":
       if (!tiene("loop")) return ciclo();
       for (;;) { await ciclo(); await new Promise((r) => setTimeout(r, cfg.intervaloSeg * 1000)); }
     default:

@@ -10,9 +10,9 @@ ANALISIS ⇄ ESPERA_CLIENTE ──(OK del analista: carril + spec si corresponde
 ```
 
 **El análisis lo conduce un analista.** Se dispara con `/orqen:analyze REC-1234` (plugin `orqen`; en otros agentes:
-_"analizá el REC-1234"_, que equivale a `./cli/bin/orqen analizar REC-1234`). No es un trámite automático:
+_"analizá el REC-1234"_, que equivale a `./cli/bin/orqen analyze REC-1234`). No es un trámite automático:
 
-1. **Grilling**: leés el REC (Jira por MCP **solo lectura**, o `orqen buscar`) y el repo, y entrevistás al analista
+1. **Grilling**: leés el REC (Jira por MCP **solo lectura**, o `orqen search`) y el repo, y entrevistás al analista
    (skill `orqen:grilling`) hasta cerrar las dudas. Lo que solo puede contestar el cliente va como pregunta (ESPERA_CLIENTE).
 2. **OK del analista** al análisis. Sin OK explícito no se avanza.
 3. **Propuesta de carril** (el analista confirma):
@@ -23,11 +23,11 @@ _"analizá el REC-1234"_, que equivale a `./cli/bin/orqen analizar REC-1234`). N
    | `liviano`  | Cambia comportamiento pero es acotado (1–2 capacidades, ≲ 2 días)                                      | Change de OpenSpec compacto (proposal + deltas + tasks; design mínimo)      |
    | `completo` | Varias capacidades, datos/integraciones, seguridad o facturación, > 2 días, decisiones de arquitectura | Change de OpenSpec completo (proposal + specs + design + tasks)             |
 
-   Con `liviano`/`completo`: `orqen carril <KEY> <carril>` crea la rama y el change, y escribís la spec con el analista.
+   Con `liviano`/`completo`: `orqen lane <KEY> <carril>` crea la rama y el change, y escribís la spec con el analista.
 
-4. **Cierre** (`orqen completar`): crea el **SIS** (issue de desarrollo en `SIS_PROYECTO`), lo **vincula al REC**, deja el
+4. **Cierre** (`orqen complete`): crea el **SIS** (issue de desarrollo en `SIS_PROYECTO`), lo **vincula al REC**, deja el
    registro en **`orqen/work/<KEY>/`** y pasa a DESARROLLO. El REC sigue siendo el dueño de la conversación con el cliente
-   (vinculado hasta `CONFORMIDAD`); el SIS recibe el seguimiento técnico (`TRANSICIONES_SIS`). `orqen tomar` lo informa en el contexto (`sis`).
+   (vinculado hasta `CONFORMIDAD`); el SIS recibe el seguimiento técnico (`TRANSICIONES_SIS`). `orqen take` lo informa en el contexto (`sis`).
    Si el cliente rechaza la conformidad, la ronda nueva vuelve a ANALISIS y genera un SIS nuevo.
 
 **Carril operativo (`via: operativa`).** Si el REC se resuelve sin cambiar código (script SQL, corrección de datos,
@@ -51,14 +51,14 @@ La especificación se hace con **OpenSpec**: en los carriles liviano y completo 
 
 ### Cómo trabajar un REC
 
-1. `./cli/bin/orqen pendientes` → lista los REC con trabajo, separados entre _para analizar_ y _para un agente_.
-2. **Análisis**: `./cli/bin/orqen analizar <KEY> --analista "<nombre>"` → reserva el REC e imprime las instrucciones, el contexto
+1. `./cli/bin/orqen pending` → lista los REC con trabajo, separados entre _para analizar_ y _para un agente_.
+2. **Análisis**: `./cli/bin/orqen analyze <KEY> --analyst "<nombre>"` → reserva el REC e imprime las instrucciones, el contexto
    completo (issue, comentarios, feedback) y el JSON Schema de la salida. Seguilas al pie de la letra.
-   **Otras etapas**: `./cli/bin/orqen tomar <KEY>` (hace lo mismo y además prepara rama y tests). `tomar` no sirve para ANALISIS.
-3. Escribí tu salida en un archivo JSON y corré `./cli/bin/orqen completar <KEY> <archivo.json>`.
+   **Otras etapas**: `./cli/bin/orqen take <KEY>` (hace lo mismo y además prepara rama y tests). `take` no sirve para ANALISIS.
+3. Escribí tu salida en un archivo JSON y corré `./cli/bin/orqen complete <KEY> <archivo.json>`.
    Si responde con errores, corregí (la salida o los archivos de OpenSpec) y repetí hasta que diga `✔`.
 4. Una etapa por vez: después de `completar`, terminá. No sigas con la etapa siguiente aunque esté disponible.
-5. Si no podés avanzar: `./cli/bin/orqen bloquear <KEY> "motivo concreto"`.
+5. Si no podés avanzar: `./cli/bin/orqen block <KEY> "motivo concreto"`.
 
 ### Reglas
 

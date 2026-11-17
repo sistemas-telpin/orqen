@@ -50,7 +50,7 @@ test("REC completo con OpenSpec real", { skip: !existsSync(OPENSPEC) && "falta o
   await p.analizar("REC-7", "analista-bot", "Ana");
   assert.equal(git("rev-parse", "--abbrev-ref", "HEAD").trim(), "main");   // el grilling no toca la rama
 
-  // carril completo: `orqen carril` crea rama + change de OpenSpec
+  // carril completo: `orqen lane` crea rama + change de OpenSpec
   const c = await p.carril("REC-7", "completo", "analista-bot");
   const cambio = c.openspec!.cambio;
   assert.equal(cambio, "rec-7-exportar-facturas-csv");

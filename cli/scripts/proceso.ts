@@ -58,7 +58,7 @@ export class Proceso {
   async analizar(key: string, agente = "agente", analista = agente) {
     const rec = this.store.get(key) ?? recNuevo(key);
     if (rec.estado === "ESPERA_CLIENTE")
-      throw new Error(`${key} está esperando respuestas del cliente en Jira. Cuando respondan vuelve a ANALISIS (\`orqen pendientes\`).`);
+      throw new Error(`${key} está esperando respuestas del cliente en Jira. Cuando respondan vuelve a ANALISIS (\`orqen pending\`).`);
     if (rec.estado !== "NUEVO" && rec.estado !== "ANALISIS")
       throw new Error(`${key} ya pasó el análisis (estado: ${rec.estado}). Si hay que rehacerlo, el rechazo o la escalada lo devuelven a ANALISIS.`);
     if (rec.estado === "NUEVO") {
@@ -76,7 +76,7 @@ export class Proceso {
     const rec = this.store.get(key);
     if (!rec || rec.estado !== "ANALISIS") throw new Error(`${key} no está en ANALISIS (estado: ${rec?.estado ?? "desconocido"}).`);
     const lock = this.lockVigente(rec) ?? (rec.lock?.agente === agente ? rec.lock : undefined);
-    if (!lock || lock.agente !== agente) throw new Error(`Primero corré \`orqen analizar ${key}\``);
+    if (!lock || lock.agente !== agente) throw new Error(`Primero corré \`orqen analyze ${key}\``);
     if (!CARRILES.includes(carril as Carril)) throw new Error(`Carril inválido "${carril}". Opciones: ${CARRILES.join(", ")}`);
     rec.carril = carril as Carril;
     if (rec.carril === "directo") {
@@ -97,9 +97,9 @@ export class Proceso {
   async tomar(key: string, agente = "agente", desdeAnalizar = false) {
     const rec = this.store.get(key);
     if (!rec || !esEstadoAgente(rec.estado))
-      throw new Error(`${key} no tiene trabajo para el agente (estado: ${rec?.estado ?? "desconocido"}). Corré \`orqen pendientes\`.`);
+      throw new Error(`${key} no tiene trabajo para el agente (estado: ${rec?.estado ?? "desconocido"}). Corré \`orqen pending\`.`);
     if (rec.estado === "ANALISIS" && !desdeAnalizar)
-      throw new Error(`El análisis de ${key} lo conduce un analista: usá /orqen:analyze ${key} (o \`orqen analizar ${key}\`).`);
+      throw new Error(`El análisis de ${key} lo conduce un analista: usá /orqen:analyze ${key} (o \`orqen analyze ${key}\`).`);
     const lock = this.lockVigente(rec);
     if (lock && lock.agente !== agente) throw new Error(`${key} ya lo tomó "${lock.agente}" desde ${lock.desde}.`);
     rec.lock = { agente, desde: new Date().toISOString() };
@@ -108,7 +108,7 @@ export class Proceso {
     const issue = await this.jira.issue(key);
     const estado = rec.estado;
 
-    // ANALISIS (liviano/completo la crea `orqen carril`) y el carril rápido (EJECUCION/VERIFICACION) no preparan rama acá
+    // ANALISIS (liviano/completo la crea `orqen lane`) y el carril rápido (EJECUCION/VERIFICACION) no preparan rama acá
     if (["DESARROLLO", "TESTING", "ENTREGA"].includes(estado)) rec.rama = this.ws.prepararRama(key);
     if (estado === "TESTING") {
       rec.artefactos.resultado_tests = this.ws.correrTests();
@@ -192,8 +192,8 @@ export class Proceso {
   private validarContraOpenSpec(rec: Rec, estado: EstadoAgente, s: Record<string, any>): string[] {
     const err: string[] = [];
     if (estado === "ANALISIS" && s.listo && s.via === "desarrollo" && s.carril !== "directo") {
-      if (rec.carril !== s.carril) err.push(`El carril del análisis ("${s.carril}") no coincide con el registrado (${rec.carril ?? "ninguno"}): corré \`orqen carril ${rec.key} ${s.carril}\` y escribí la spec`);
-      else if (!rec.cambio) err.push(`Falta el change: corré \`orqen carril ${rec.key} ${s.carril}\``);
+      if (rec.carril !== s.carril) err.push(`El carril del análisis ("${s.carril}") no coincide con el registrado (${rec.carril ?? "ninguno"}): corré \`orqen lane ${rec.key} ${s.carril}\` y escribí la spec`);
+      else if (!rec.cambio) err.push(`Falta el change: corré \`orqen lane ${rec.key} ${s.carril}\``);
       else {
         if (s.especificacion.cambio !== rec.cambio) err.push(`especificacion.cambio debe ser "${rec.cambio}"`);
         const v = this.os.validar(rec.cambio);
@@ -206,7 +206,7 @@ export class Proceso {
       }
     }
     if (estado === "ANALISIS" && s.listo && s.carril === "directo" && rec.carril && rec.carril !== "directo" && rec.cambio)
-      err.push(`Registraste el carril ${rec.carril} y ya hay un change (${rec.cambio}); elegí uno u otro (si cambió la decisión corré \`orqen carril ${rec.key} directo\` y no uses el change).`);
+      err.push(`Registraste el carril ${rec.carril} y ya hay un change (${rec.cambio}); elegí uno u otro (si cambió la decisión corré \`orqen lane ${rec.key} directo\` y no uses el change).`);
     if (estado === "DESARROLLO" && s.completado && rec.cambio) {
       const pendientes = this.os.tareas(rec.cambio).filter((t) => !t.hecha);
       if (pendientes.length) err.push(`Quedan tareas sin tildar en tasks.md: ${pendientes.map((t) => t.descripcion).join(" | ")}`);

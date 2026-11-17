@@ -1,6 +1,6 @@
 /**
- * Modelo del stack de un proyecto: lo llena la detección determinística y lo completa / corrige el agente.
- * Es la base para generar docker-compose.orqen.yml y los comandos de entorno de orqen/config.yaml.
+ * Project stack model populated by detection and refined by the agent.
+ * Used to generate Docker Compose and repository environment commands.
  */
 import { z } from "zod";
 
@@ -13,13 +13,13 @@ export const TIPOS_SERVICIO = [
 const opcional = z.string().min(1).nullish();
 
 export const Componente = z.object({
-  nombre: z.string().min(1).describe("Identificador corto, en minúsculas (se usa como nombre del servicio de compose)"),
+  nombre: z.string().min(1).describe("Short lowercase identifier used as the Compose service name"),
   tipo: z.enum(TIPOS_COMPONENTE),
-  ruta: z.string().describe("Carpeta relativa a la raíz del repo ('.' si es la raíz)"),
-  lenguaje: z.string().describe("ej. typescript, java, python, csharp, go"),
-  framework: opcional.describe("ej. react+vite, next, angular, nestjs, express, spring-boot, django, fastapi, aspnet"),
+  ruta: z.string().describe("Directory relative to the repository root ('.' for the root)"),
+  lenguaje: z.string().describe("e.g. typescript, java, python, csharp, go"),
+  framework: opcional.describe("e.g. react+vite, next, angular, nestjs, express, spring-boot, django, fastapi, aspnet"),
   puerto: z.number().int().positive().nullish(),
-  dockerfile: opcional.describe("Ruta relativa al Dockerfile si existe"),
+  dockerfile: opcional.describe("Relative path to the Dockerfile, if present"),
   comandos: z.object({
     instalar: opcional,
     dev: opcional,
@@ -30,12 +30,12 @@ export const Componente = z.object({
 export type Componente = z.infer<typeof Componente>;
 
 export const Servicio = z.object({
-  nombre: z.string().min(1).describe("Nombre del servicio de compose, ej. db, cache, cola"),
+  nombre: z.string().min(1).describe("Compose service name, such as db, cache, or queue"),
   tipo: z.enum(TIPOS_SERVICIO),
-  imagen: opcional.describe("Imagen de Docker; si se omite se usa la del catálogo de orqen"),
+  imagen: opcional.describe("Docker image. Defaults to the image in the orqen catalog."),
   puerto: z.number().int().positive().nullish(),
   variables: z.record(z.string(), z.string()).default({}),
-  motivo: opcional.describe("Por qué hace falta (dependencia, archivo donde se detectó)"),
+  motivo: opcional.describe("Why the service is needed, including the relevant dependency or file"),
 });
 export type Servicio = z.infer<typeof Servicio>;
 
@@ -43,22 +43,22 @@ export const Tests = z.object({
   unitarios: opcional,
   integracion: opcional,
   e2e: opcional,
-  visual: opcional.describe("Tests visuales / de UI (ej. Playwright con screenshots)"),
+  visual: opcional.describe("Visual or UI tests (e.g. Playwright screenshots)"),
 });
 export type Tests = z.infer<typeof Tests>;
 
 export const Stack = z.object({
-  resumen: z.string().describe("Una o dos oraciones sobre qué es el proyecto y cómo está armado"),
+  resumen: z.string().describe("One or two sentences describing the project and its structure"),
   gestor_paquetes: opcional.describe("pnpm, npm, yarn, bun, maven, gradle, pip, poetry, uv, dotnet, go..."),
-  instalar: opcional.describe("Comando para instalar dependencias desde la raíz (monorepos); reemplaza los de cada componente de ese ecosistema"),
+  instalar: opcional.describe("Root dependency installation command for a monorepo, replacing the per-component commands for that ecosystem"),
   componentes: z.array(Componente).default([]),
   servicios: z.array(Servicio).default([]),
   tests: Tests.default({}),
-  migraciones: opcional.describe("Comando para aplicar migraciones contra los servicios levantados"),
-  seed: opcional.describe("Comando para cargar datos de prueba"),
+  migraciones: opcional.describe("Command to apply migrations against running services"),
+  seed: opcional.describe("Command to seed test data"),
   variables: z.record(z.string(), z.string()).default({})
-    .describe("Variables que necesitan las apps y los tests para conectarse a los servicios desde la máquina (localhost)"),
-  notas: z.array(z.string()).default([]).describe("Supuestos, riesgos o cosas que una persona tiene que completar"),
+    .describe("Variables for apps and tests connecting to services from the host (localhost)"),
+  notas: z.array(z.string()).default([]).describe("Assumptions, risks, or remaining manual setup"),
 });
 export type Stack = z.infer<typeof Stack>;
 
@@ -68,7 +68,7 @@ export function esquemaStackJson() {
   return z.toJSONSchema(Stack, { io: "input" });
 }
 
-/** Catálogo de servicios conocidos: imagen, puerto, variables y healthcheck. */
+/** Service catalog containing images, ports, variables, and health checks. */
 export interface DefServicio {
   imagen: string; puerto: number; variables: Record<string, string>;
   healthcheck?: string[]; url?: (host: string, puerto: number) => Record<string, string>;
@@ -148,7 +148,7 @@ export function defServicio(s: Servicio): DefServicio | undefined {
   return s.tipo === "otro" ? undefined : CATALOGO[s.tipo];
 }
 
-/** Variables para conectarse desde la máquina (localhost) a los servicios levantados. */
+/** Host connection variables for running services. */
 export function variablesHost(stack: Stack): Record<string, string> {
   const out: Record<string, string> = {};
   for (const s of stack.servicios) {
@@ -159,20 +159,20 @@ export function variablesHost(stack: Stack): Record<string, string> {
   return { ...out, ...stack.variables };
 }
 
-/** Resumen en markdown (va a AGENTS.md y a la pantalla). */
+/** Render the stack summary for AGENTS.md and the CLI. */
 export function resumenStack(stack: Stack): string {
   const l: string[] = [];
   if (stack.resumen) l.push(stack.resumen, "");
   if (stack.componentes.length) {
-    l.push("| Componente | Tipo | Ruta | Tecnología | Puerto |", "|---|---|---|---|---|");
+    l.push("| Component | Type | Path | Technology | Port |", "|---|---|---|---|---|");
     for (const c of stack.componentes)
       l.push(`| ${c.nombre} | ${c.tipo} | \`${c.ruta}\` | ${[c.lenguaje, c.framework].filter(Boolean).join(" / ")} | ${c.puerto ?? "—"} |`);
     l.push("");
   }
   if (stack.servicios.length)
-    l.push(`Servicios: ${stack.servicios.map((s) => `${s.nombre} (${s.tipo})`).join(", ")}.`, "");
+    l.push(`Services: ${stack.servicios.map((s) => `${s.nombre} (${s.tipo})`).join(", ")}.`, "");
   const t = Object.entries(stack.tests).filter(([, v]) => v);
   if (t.length) l.push("Tests:", ...t.map(([k, v]) => `- ${k}: \`${v}\``), "");
-  if (stack.notas.length) l.push("Notas:", ...stack.notas.map((n) => `- ${n}`), "");
-  return l.join("\n").trim() || "_Sin stack detectado: completá `orqen/config.yaml`._";
+  if (stack.notas.length) l.push("Notes:", ...stack.notas.map((n) => `- ${n}`), "");
+  return l.join("\n").trim() || "_No stack detected. Fill in `orqen/config.yaml`._";
 }

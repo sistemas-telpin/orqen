@@ -1,43 +1,37 @@
 #!/usr/bin/env node
-/**
- * ORQEN CLI.
- *   orqen init [dir]      inicializa orqen en un repo (stack + entornos con IA, OpenSpec, kit)
- *   orqen update [dir]    actualiza la CLI, OpenSpec y el kit sin pisar lo que editó el equipo
- *   orqen env <cmd>   levantar / tests / estado / bajar (lo usan los agentes)
- *   orqen analyze | carril | tomar | completar | estado | ciclo …   proceso REC (ver comandos/proceso.ts)
- */
+/** ORQEN command-line entry point. */
 import { parseArgs } from "node:util";
-import { entorno } from "./comandos/entorno.ts";
-import { init } from "./comandos/init.ts";
-import { AYUDA_PROCESO, COMANDOS_PROCESO, proceso } from "./comandos/proceso.ts";
-import { update } from "./comandos/update.ts";
-import { VERSION_CLI } from "./lib/sistema.ts";
+import { entorno } from "./commands/environment.ts";
+import { init } from "./commands/init.ts";
+import { AYUDA_PROCESO, COMANDOS_PROCESO, proceso } from "./commands/workflow.ts";
+import { update } from "./commands/update.ts";
+import { VERSION_CLI } from "./lib/system.ts";
 import { logo } from "./ui/logo.ts";
 
 
 const AYUDA = `
-Uso: orqen <comando> [opciones]
+Usage: orqen <command> [options]
 
-Comandos:
-  init [dir]              Inicializa ORQEN en el repo (por defecto, la carpeta actual)
-      --yes, -y           No pregunta: usa los valores por defecto (conflictos → deja .orqen-nuevo)
-      --no-ai             No usa un agente; solo detección automática
-      --deep              El agente explora el repo con sus herramientas (más preciso, tarda minutos)
-      --no-animation      Logo estático
-      --agent "<cmd>"     Comando headless del agente (ej. "claude -p --permission-mode acceptEdits")
-      --tools a,b         Herramientas para \`openspec init\` (claude,codex,cursor,github-copilot...)
-      --no-openspec       No instala ni inicializa OpenSpec
-  update [dir]            Actualiza la CLI, OpenSpec y el kit
+Commands:
+  init [dir]              Initialize ORQEN in a repository (default: current directory)
+      --yes, -y           Use defaults and write conflicts alongside the originals
+      --no-ai             Use automatic detection only
+      --deep              Let the agent explore the repository in depth
+      --no-animation      Show the static logo
+      --agent "<cmd>"     Headless agent command (e.g. "claude -p --permission-mode acceptEdits")
+      --tools a,b         Tools for \`openspec init\` (claude,codex,cursor,github-copilot...)
+      --no-openspec       Skip OpenSpec installation and initialization
+  update [dir]            Update the CLI, OpenSpec, and kit
       --yes, -y  --no-cli  --no-openspec  --no-kit
-  env <cmd>               setup | up [--apps] | test [tipo...] | status | down
-  --version, -v           Versión
-  --help, -h              Esta ayuda
+  env <cmd>               setup | up [--apps] | test [type...] | status | down
+  --version, -v           Show version
+  --help, -h              Show this help
 
 ${AYUDA_PROCESO}
 `;
 
 async function main() {
-  // Los comandos del proceso REC tienen sus propios flags (--agent, --analyst, --json, --loop).
+  // Request commands parse their own flags (--agent, --analyst, --json, --loop).
   const crudos = process.argv.slice(2);
   if (COMANDOS_PROCESO.includes(crudos[0])) return proceso(crudos[0], crudos.slice(1));
   const { values: v, positionals } = parseArgs({
@@ -75,7 +69,7 @@ async function main() {
     case "env":
       return entorno(resto[0], resto.slice(1), { dir: v.dir as string | undefined, apps: !!v.apps });
     default:
-      console.error(`Comando desconocido: ${cmd}\n${AYUDA}`);
+      console.error(`Unknown command: ${cmd}\n${AYUDA}`);
       process.exitCode = 1;
   }
 }

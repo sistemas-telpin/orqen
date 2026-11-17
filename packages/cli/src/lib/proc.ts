@@ -1,6 +1,6 @@
 /**
- * Ejecución de procesos portable (Windows / Linux / macOS).
- * cross-spawn resuelve los shims .cmd de Windows (pnpm, npx, claude, codex...) y escapa argumentos.
+ * Portable child process execution for Windows, Linux, and macOS.
+ * cross-spawn resolves Windows command shims and escapes arguments.
  */
 import spawn from "cross-spawn";
 import { spawn as spawnNode, type SpawnOptions } from "node:child_process";
@@ -12,7 +12,7 @@ export interface OpcionesEjecutar {
   env?: NodeJS.ProcessEnv;
   entrada?: string;
   timeoutMs?: number;
-  /** Muestra la salida en la terminal en vez de capturarla. */
+  /** Send output directly to the terminal. */
   heredar?: boolean;
 }
 
@@ -35,7 +35,7 @@ export function ejecutar(cmd: string, args: string[], o: OpcionesEjecutar = {}):
   };
 }
 
-/** Versión asíncrona (para no congelar el spinner mientras corre el agente). */
+/** Run asynchronously so the spinner can update while the agent runs. */
 export function ejecutarAsync(cmd: string, args: string[], o: OpcionesEjecutar = {}): Promise<Resultado> {
   return new Promise((resolve) => {
     let stdout = "", stderr = "", terminado = false;
@@ -52,7 +52,7 @@ export function ejecutarAsync(cmd: string, args: string[], o: OpcionesEjecutar =
   });
 }
 
-/** Corre una línea de comando del usuario (orqen/config.yaml) con la shell del sistema: cmd.exe en Windows, sh en el resto. */
+/** Run a configured command in cmd.exe on Windows or sh elsewhere. */
 export function ejecutarLinea(linea: string, o: OpcionesEjecutar = {}): Promise<number> {
   return new Promise((resolve) => {
     const opts: SpawnOptions = { cwd: o.cwd, env: o.env ?? process.env, shell: true, stdio: "inherit", windowsHide: true };
@@ -62,14 +62,14 @@ export function ejecutarLinea(linea: string, o: OpcionesEjecutar = {}): Promise<
   });
 }
 
-/** ¿Existe el comando? Devuelve la primera línea de `--version` o null. */
+/** Return the first line of --version output or null when the command is unavailable. */
 export function version(cmd: string, args = ["--version"], cwd?: string): string | null {
   const r = ejecutar(cmd, args, { cwd, timeoutMs: 20_000 });
   if (r.error || r.codigo !== 0) return null;
   return (r.stdout || r.stderr).trim().split(/\r?\n/)[0] ?? "";
 }
 
-/** Separa "claude -p --permission-mode acceptEdits" en argv respetando comillas simples y dobles. */
+/** Parse an argument vector while respecting single and double quotes. */
 export function partirComando(linea: string): string[] {
   const out: string[] = [];
   let actual = "", comilla: string | null = null, hay = false;

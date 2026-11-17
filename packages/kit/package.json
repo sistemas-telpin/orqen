@@ -1,14 +1,14 @@
 {
   "name": "orqen-kit",
   "version": "0.1.0",
-  "description": "Plantillas que orqen instala en cada repo: AGENTS.md, guías de etapas, plugin de Claude Code y reglas de OpenSpec",
+  "description": "Repository templates for the orqen workflow, including agent instructions, stage guides, a Claude Code plugin, and OpenSpec rules",
   "type": "module",
   "main": "index.js",
   "types": "index.d.ts",
   "files": [
     "index.js",
     "index.d.ts",
-    "plantillas"
+    "templates"
   ],
   "publishConfig": {
     "access": "public"

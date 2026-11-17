@@ -1,98 +1,63 @@
-# orqen — CLI
+# orqen CLI
 
 ```sh
-pnpm add -g orqen        # o: npm i -g orqen
-orqen init                       # en la raíz del repo a inicializar
+pnpm add -g orqen         # or: npm i -g orqen
+orqen init               # Run from the repository you want to initialize
 ```
 
-Es un paquete público de npm: no necesita token ni configuración.
+## Initialize a repository
 
-## `orqen init`
+`orqen init [dir]` runs the following setup:
 
-1. Pantalla de bienvenida animada en loop a ~60 fps, dibujada por píxeles: partículas que convergen, el hexágono entra
-   girando en 3D, una onda expansiva enciende "ORQEN" con aberración cromática, y queda vivo (degradado que gira, cometa,
-   halo, satélites en órbita 3D, estrellas, giro + onda cada pocos segundos) hasta presionar Enter. Necesita una terminal
-   de ≥ 92 columnas y ≥ 23 filas; si no, o sin TTY, en CI, con `--yes` o `--no-animation`, muestra el logo estático. Después chequea Node ≥ 20.12, git, pnpm/npm y Docker (Docker es opcional: si falta, avisa).
-2. **Detección automática** del stack: manifiestos (`package.json`, `pom.xml`, `build.gradle`, `requirements.txt`,
-   `pyproject.toml`, `*.csproj`, `go.mod`, `composer.json`, `Gemfile`), Dockerfiles, `docker-compose` existentes,
-   Prisma, `.env.example` y dependencias que delatan servicios (Postgres, MySQL, SQL Server, Mongo, Redis, RabbitMQ, Kafka…).
-3. **Análisis con IA (rápido)**: arma un resumen del repo (árbol + archivos clave recortados) y se lo pasa en un solo
-   turno al agente instalado, con su modelo más veloz (`claude -p --model haiku`, `codex exec`, `gemini`). Corre en
-   **segundo plano** mientras se resuelve OpenSpec, así que casi no se espera. La propuesta se valida con zod.
-   Si hace falta más precisión: `--deep`, o la opción "Que el agente explore el repo a fondo" al revisar el stack
-   (el agente recorre el repo con sus herramientas; tarda minutos).
-4. Muestra el stack y deja aceptarlo o ajustarlo (componentes, servicios, comandos de tests, migraciones y seed).
-5. **OpenSpec**: detecta si está y qué versión. Si falta o no es compatible (orqen requiere `>=2.0.0 <3`), lo instala como
-   devDependency del repo (o global si el repo no es Node) y corre `openspec init --tools … --language es`.
-6. Pide los datos de `orqen/.env` (URL, tipo, usuario y token de Jira, proyectos REC y SIS, y opcionalmente los aprobadores)
-   y genera el archivo. No se commitea. Con `--yes` lo genera con valores de ejemplo; si ya existe, pregunta antes de tocarlo.
-7. Escribe:
-   - `orqen/config.yaml`: configuración (stack, entornos, versión del kit, agente, OpenSpec);
-   - `docker-compose.orqen.yml`: servicios con healthcheck y las apps bajo el perfil `apps`;
-   - `AGENTS.md`: bloque administrado entre `<!-- orqen:inicio -->` y `<!-- orqen:fin -->` (lo demás es del equipo);
-   - `CLAUDE.md` (`@AGENTS.md`), `.gitignore`, `.claude-plugin/marketplace.json`;
-   - `orqen/stages/`, `orqen/plugin/` (plugin de Claude Code), `orqen/.env.example` y `orqen/.env` (ignorado);
-   - reglas del proceso REC fusionadas en `openspec/config.yaml` (sin borrar lo que haya);
-   - `orqen/manifest.json`: hash de cada archivo que escribió orqen (para que `update` sepa qué editó el equipo).
+1. Displays the ORQEN logo and checks Node (20.12 or later), Git, a package manager, and optional Docker. The animation needs a terminal with at least 92 columns and 23 rows. Press Enter to continue. Non-interactive terminals, CI, `--yes`, and `--no-animation` use the static logo.
+2. Detects components and services from manifests such as `package.json`, `pom.xml`, and `pyproject.toml`, as well as Dockerfiles, existing Compose files, Prisma, and `.env.example`.
+3. Uses an installed AI agent to review a short repository summary in the background. It validates the proposal with Zod. Use `--deep` to let the agent explore the repository or `--no-ai` to use automatic detection only.
+4. Lets you confirm or edit components, services, tests, migrations, and seed commands.
+5. Finds a compatible OpenSpec installation (version 2.x), installs it if needed, and runs `openspec init` for the selected tools with English artifact output.
+6. Collects Jira connection settings, REC and SIS projects, and approvers in the ignored `orqen/.env`. With `--yes`, it uses example values for a new file.
+7. Writes the environment configuration, Compose file, agent instructions, plugin, stage guides, and manifest. It merges the OpenSpec workflow rules with the repository's existing configuration.
 
-Opciones: `--yes` (sin preguntas; ante un conflicto deja la versión nueva al lado), `--no-ai`, `--deep`, `--no-animation`, `--agent "<cmd>"`,
-`--tools claude,codex`, `--no-openspec`. Si la terminal no es interactiva (CI), se comporta como `--yes`.
+Other options include `--agent "<command>"`, `--tools claude,codex`, and `--no-openspec`. Non-interactive runs use the defaults. If a managed file conflicts, `--yes` writes the proposed version alongside the original.
 
-## `orqen update`
+## Update an installation
 
-1. **CLI**: si hay una versión nueva de `orqen`, la instala (con pnpm o npm, según cómo se instaló) y pide volver a correr `orqen update`.
-2. **OpenSpec**: si hay una versión compatible más nueva, la instala y corre `openspec update`.
-3. **Kit**: los archivos que nadie tocó se reemplazan; los que el equipo editó muestran el diff y se elige
-   *dejar la versión de orqen al lado* (`.orqen-nuevo`), *sobrescribir* o *mantener*.
+`orqen update [dir]` checks for a newer CLI, a compatible OpenSpec update, and kit changes. The kit updates files that still match the manifest. For edited files, you can keep the existing version, replace it, or write a copy with the `.orqen-new` suffix.
 
-No vuelve a explorar el stack ni regenera `docker-compose.orqen.yml` (para eso: `orqen init` otra vez).
-Opciones: `--yes`, `--no-cli`, `--no-openspec`, `--no-kit`.
+Use `--no-cli`, `--no-openspec`, or `--no-kit` to skip a step. Run `orqen init` again when you need to detect the stack or regenerate the environment.
 
-## `orqen env`
-
-Lo usan los agentes para no depender de una persona:
+## Work with an environment
 
 ```sh
-orqen env setup                  # instala dependencias
-orqen env up [--apps]         # docker compose up --wait + migraciones + seed
+orqen env setup
+orqen env up [--apps]
 orqen env test [unitarios|integracion|e2e|visual]
 orqen env status
-orqen env down                     # down -v
+orqen env down
 ```
 
-Los tests corren con las variables de `entornos.variables` (ej. `DATABASE_URL` apuntando a `localhost`).
+`up` waits for services, then runs migrations and seed commands. The test commands receive variables from `entornos.variables` in `orqen/config.yaml`. The values `unitarios` and `integracion` select unit and integration tests.
 
-## Proceso REC
-
-Los comandos que antes eran `./rec/bin/rec …` ahora son de `orqen` (el estado vive en `orqen/state/`, las guías en `orqen/stages/`
-y la configuración en `orqen/.env` + `orqen/config.yaml`):
+## Process a request
 
 ```sh
-orqen pending                     # REC con trabajo: para analista y para agente
-orqen analyze REC-1234              # lo usa /orqen:analyze
-orqen take SIS-442                  # lo usa /orqen:implement
-orqen complete SIS-442 salida.json
-orqen status [KEY] · esquema <ETAPA> · bloquear · liberar · buscar <JQL>
-orqen cycle --loop                   # desatendido: lanza el agente (AGENTE_CMD) por cada REC pendiente
+orqen pending
+orqen analyze REC-1234
+orqen status SIS-442
+orqen take SIS-442
+orqen complete SIS-442 output.json
+orqen cycle --loop
 ```
 
-**Entornos automáticos.** Nadie tiene que correr `orqen env …` a mano durante el proceso:
+`orqen take` in `DESARROLLO` prepares the branch, dependencies, and services. The agent context includes connection variables and test commands under `entorno`. If preparation fails, see `entorno.detalle` or `entorno.salida`. `orqen complete` stops the environment after development.
 
-| Momento | Qué hace orqen |
-|---|---|
-| `orqen take` en DESARROLLO (`/orqen:implement`) | instala dependencias, levanta los servicios (DB, colas…) con Docker, espera los healthchecks, migra y carga datos. El contexto del agente trae `entorno` (`ok`, `detalle`, `variables`, `comandos`) |
-| mientras implementa | el agente corre `orqen env test …` contra ese entorno |
-| `orqen complete` (sale de DESARROLLO) | baja el entorno |
-| `orqen take` en TESTING | levanta todo (también las apps), corre **todos** los tests de `orqen/config.yaml` con sus variables y lo baja |
+In `TESTING`, taking the stage starts the full environment, runs the configured suite, and shuts everything down. `orqen cycle --loop` dispatches eligible requests using `AGENTE_CMD`. Analysis always requires an analyst.
 
-Si algo del entorno falla, el agente lo ve en `entorno.detalle` / `entorno.salida` y lo corrige o bloquea el REC.
-
-## Desarrollo
+## Develop locally
 
 ```sh
 pnpm install
-pnpm enlazar                                            # build + npm link: deja el comando `orqen` global apuntando a este código
-pnpm test                                               # detección, compose, kit, agente (falso) y e2e de la CLI
-pnpm typecheck && pnpm build
-pnpm -r publish --access public                         # publica orqen-kit y orqen en npm (requiere `npm login`)
+pnpm enlazar
+pnpm test
+pnpm typecheck
+pnpm build
 ```

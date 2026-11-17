@@ -1,18 +1,18 @@
 /**
- * Logo de ORQEN para la terminal y su pantalla de bienvenida animada.
+ * ORQEN terminal logo and animated welcome screen.
  *
- * Toda la marca (isotipo hexagonal + "ORQEN") se dibuja por código en un lienzo de píxeles: cada celda de la
- * terminal son dos píxeles (medio bloque ▀ con color de frente y de fondo), con antialiasing por intensidad.
- * Sobre ese lienzo corre una escena en tiempo real:
+ * Draw the hexagon and wordmark on a pixel canvas using two pixels per
+ * terminal cell, with foreground and background colors on the upper half block (▀).
+ * The scene is rendered in real time.
  *
- *   intro   partículas (los agentes) convergen → el hexágono entra girando en 3D → impacto: destello, halo y una
- *           onda expansiva que, al pasar, enciende las letras con aberración cromática (azul / magenta que convergen)
- *   loop    degradado de la marca girando por el anillo, cometa con estela, halo que respira, satélites en órbitas 3D
- *           (pasan por detrás y por delante), campo de estrellas con paralaje, pulso que viaja por el subrayado y,
- *           cada pocos segundos, un giro 3D del hexágono con una nueva onda que tiñe las letras
+ *   Intro: particles converge, the hexagon rotates into view, and a flash and halo
+ *           highlight the wordmark with a blue and magenta color shift.
+ *   Loop: a rotating gradient, comet trail, pulsing halo, orbiting satellites,
+ *           parallax stars, and an underline pulse. The hexagon rotates again
+ *           every few seconds and sends another wave across the wordmark.
  *
- * Todo depende del tiempo transcurrido (no del número de cuadro) y solo se reescriben los tramos de pantalla que
- * cambiaron: ~60 fps sin acumular lag. Sin TTY / NO_COLOR / CI / terminal chica: logo estático.
+ * Animation uses elapsed time and redraws only changed screen segments.
+ * Non-interactive, NO_COLOR, CI, and small terminals use the static logo.
  */
 import { emitKeypressEvents } from "node:readline";
 
@@ -22,8 +22,8 @@ const MAGENTA: RGB = [0xff, 0x2d, 0x9a];
 const GRIS: RGB = [0x94, 0xa3, 0xb8];
 const BLANCO: RGB = [0xf4, 0xf6, 0xfa];
 
-const LEMA = "Del requerimiento a producción.";
-const SUB = "La capa que coordina el desarrollo autónomo.";
+const LEMA = "From request to production.";
+const SUB = "Orchestrate autonomous development.";
 const SUBTITULO = "A U T O N O M O U S   S Y S T E M S";
 
 /* ───────────────────────── utilidades ───────────────────────── */
@@ -52,19 +52,19 @@ function azar(semilla: number) {
   return () => ((s = (Math.imul(s, 1664525) + 1013904223) >>> 0) / 4294967296);
 }
 
-/* ───────────────────────── geometría del lienzo ───────────────────────── */
+/* ───────────────────────── canvas geometry ───────────────────────── */
 
 const W = 90, FILAS = 12, H = FILAS * 2;          // 90 × 24 px
-const CX = 13, CY = 12;                           // centro del hexágono
+const CX = 13, CY = 12;                           // hexagon center
 const APOTEMA = 6.9, GROSOR = 2.5;
-const X0 = 28, Y0 = 5;                            // esquina de "ORQEN"
+const X0 = 28, Y0 = 5;                            // Wordmark origin.
 const LETRA_W = 10, LETRA_H = 12, PASO = 12;
 const ANCHO_PALABRA = PASO * 4 + LETRA_W;         // 58
 const Y_SUBRAYADO = 19;                           // px
 const FILA_SUBTITULO = 10;
 const COL_SUBTITULO = X0 + Math.floor((ANCHO_PALABRA - SUBTITULO.length) / 2);
 
-/** "ORQEN" como fuente de píxeles (10 × 12, trazo de 3). */
+/** Pixel font for ORQEN (10 × 12 with a 3-pixel stroke). */
 const FUENTE = [
   ["..######..", ".########.", "##########", "###....###", "###....###", "###....###", "###....###", "###....###", "###....###", "##########", ".########.", "..######.."],
   ["########..", "#########.", "##########", "###....###", "###....###", "#########.", "########..", "###.###...", "###..###..", "###...###.", "###....###", "###....###"],
@@ -72,7 +72,7 @@ const FUENTE = [
   ["##########", "##########", "##########", "###.......", "###.......", "########..", "########..", "###.......", "###.......", "##########", "##########", "##########"],
   ["###....###", "####...###", "#####..###", "#####..###", "######.###", "###.######", "###.######", "###..#####", "###..#####", "###...####", "###....###", "###....###"],
 ];
-/** ¿Hay tinta de la palabra en el píxel (x, y) del lienzo? */
+/** Check if the wordmark covers a canvas pixel. */
 function tinta(x: number, y: number): boolean {
   const lx = x - X0, ly = y - Y0;
   if (lx < 0 || ly < 0 || ly >= LETRA_H || lx >= ANCHO_PALABRA) return false;
@@ -92,10 +92,10 @@ function sdSegmento(x: number, y: number, x1: number, y1: number, x2: number, y2
 
 /* ───────────────────────── guion (segundos) ───────────────────────── */
 
-const T_HEX = 0.7;          // el hexágono empieza a entrar
+const T_HEX = 0.7;          // Hexagon entry starts.
 const T_IMPACTO = 1.5;      // queda armado: destello + primera onda
-const CICLO = 6.5;          // cada cuánto gira y lanza otra onda
-const T_GIRO = 1.1;         // duración del giro 3D previo a cada onda
+const CICLO = 6.5;          // Time between rotations and waves.
+const T_GIRO = 1.1;         // Duration of the rotation before each wave.
 const VEL_ONDA = 105;       // px/s
 const DUR_ONDA = 1.15;
 const T_LISTO = 2.9;        // todo armado
@@ -118,9 +118,9 @@ const ESCENA = (() => {
   return { estrellas, agentes, satelites };
 })();
 
-/* ───────────────────────── render de un cuadro ───────────────────────── */
+/* ───────────────────────── frame rendering ───────────────────────── */
 
-/** Píxeles del lienzo (RGB premultiplicado sobre negro). `t` indefinido = pose de reposo (logo estático). */
+/** Canvas pixels are RGB premultiplied over black. Undefined time renders the static pose. */
 function pixeles(t?: number): Float32Array {
   const buf = new Float32Array(W * H * 3);
   const reposo = t === undefined;
@@ -132,7 +132,7 @@ function pixeles(t?: number): Float32Array {
     if (c[1] * k > buf[o + 1]) buf[o + 1] = c[1] * k;
     if (c[2] * k > buf[o + 2]) buf[o + 2] = c[2] * k;
   };
-  /** Disco con antialiasing en una posición fraccionaria (lo que hace que el movimiento se vea continuo). */
+  /** Draw an antialiased disk with a subpixel center. */
   const disco = (x: number, y: number, radio: number, c: RGB, k: number) => {
     if (k <= 0.02) return;
     for (let py = Math.floor(y - radio - 1); py <= y + radio + 1; py++)
@@ -140,7 +140,7 @@ function pixeles(t?: number): Float32Array {
         poner(px, py, c, limitar(radio + 0.5 - Math.hypot(px + 0.5 - x, py + 0.5 - y)) * k);
   };
 
-  // Ondas activas (la primera en el impacto; después una por ciclo)
+  // Active waves at impact and once per cycle.
   const ondas: number[] = [];
   if (!reposo) for (let n = Math.max(0, Math.floor((tt - T_IMPACTO) / CICLO) - 1); ; n++) {
     const tn = T_IMPACTO + n * CICLO;
@@ -149,19 +149,19 @@ function pixeles(t?: number): Float32Array {
   }
   const ultimaOnda = ondas.at(-1) ?? Infinity;
 
-  // ── Fondo: estrellas con paralaje ──
+  // ── Background parallax stars ──
   if (!reposo) {
     const entrada = limitar(tt / 1.2);
     for (const e of ESCENA.estrellas) {
       const x = (((e.x - tt * e.vel) % W) + W) % W;
       const b = e.brillo * (0.65 + 0.35 * Math.sin(tt * 1.7 + e.fase)) * entrada;
       const c = mezclar(GRIS, marca(e.tono), 0.5);
-      const xi = Math.floor(x), f = x - xi, y = e.y | 0;                    // reparte el brillo entre dos píxeles: desliza sin saltos
+      const xi = Math.floor(x), f = x - xi, y = e.y | 0;                    // Interpolate brightness between adjacent pixels.
       poner(xi, y, c, b * (1 - f)); poner((xi + 1) % W, y, c, b * f);
     }
   }
 
-  // ── Intro: los agentes convergen hacia el centro ──
+  // ── Intro: particles converge at the center ──
   if (!reposo && tt < 1.2) for (const a of ESCENA.agentes) {
     for (let k = 0; k < 6; k++) {
       const p = entradaCubica((tt - k * 0.035) / a.llega);
@@ -172,13 +172,13 @@ function pixeles(t?: number): Float32Array {
     }
   }
 
-  // ── Estado del hexágono: escala de entrada, giro 3D, halo ──
+  // ── Hexagon entry scale, rotation, and halo ──
   const escala = reposo ? 1 : tt < T_HEX ? 0 : salidaRebote((tt - T_HEX) / 0.75);
   let giro = 0;
   if (!reposo) {
     if (tt < T_IMPACTO + 0.2) giro = (1 - salidaCubica((tt - T_HEX) / (T_IMPACTO - T_HEX + 0.2))) * Math.PI * 3;
     else {
-      const enCiclo = (tt - T_IMPACTO) % CICLO;                              // el giro termina justo cuando sale la onda
+      const enCiclo = (tt - T_IMPACTO) % CICLO;                              // The rotation finishes when the wave begins.
       if (enCiclo > CICLO - T_GIRO) giro = entradaSalida((enCiclo - (CICLO - T_GIRO)) / T_GIRO) * Math.PI * 2;
     }
   }
@@ -190,16 +190,16 @@ function pixeles(t?: number): Float32Array {
   const respiro = reposo ? 0 : 0.2 * Math.sin(tt * 1.7);
   const cola = reposo ? 1 : salidaCubica((tt - (T_IMPACTO - 0.1)) / 0.4);
   const cometa = reposo || tt < T_IMPACTO ? -1 : frac(tt / 2.6);
-  const luz = 0.6 + 0.4 * sx;                                               // el canto del hexágono, al girar, se oscurece
+  const luz = 0.6 + 0.4 * sx;                                               // Darken the hexagon when viewed edge-on.
   const aMedio = APOTEMA + respiro - GROSOR / 2;
 
-  // ── Satélites (posición 3D → pantalla); los de atrás se dibujan antes que el anillo ──
+  // ── Project satellites into screen space and draw the far side before the ring. ──
   const entradaSat = reposo ? 0 : limitar((tt - 1.9) / 0.9);
   const dibujarSatelites = (frente: boolean) => {
     if (entradaSat <= 0) return;
     for (const s of ESCENA.satelites) for (let k = 0; k < 8; k++) {
       const a = s.fase + s.vel * (tt - k * 0.04);
-      const z = Math.sin(a);                                                 // > 0: delante del hexágono
+      const z = Math.sin(a);                                                 // > 0: in front of the hexagon
       if ((z > 0) !== frente) continue;
       const ex = Math.cos(a) * s.radio, ey = z * s.radio * s.achate;
       const x = CX + ex * Math.cos(s.incl) - ey * Math.sin(s.incl), y = CY + ex * Math.sin(s.incl) + ey * Math.cos(s.incl);
@@ -208,10 +208,10 @@ function pixeles(t?: number): Float32Array {
   };
   dibujarSatelites(false);
 
-  // ── Hexágono: halo + anillo + colita de la Q ──
+  // ── Hexagon halo, ring, and Q tail ──
   if (escala > 0.02) for (let py = 0; py < H; py++) for (let px = 0; px < X0 - 1; px++) {
     const x = (px + 0.5 - CX) / (sx * escala), y = (py + 0.5 - CY) / escala;
-    const k = escala * Math.max(sx, 0.4);                                    // de unidades del hexágono a píxeles (aprox. al girar)
+    const k = escala * Math.max(sx, 0.4);                                    // Convert hexagon units to pixels as it rotates.
     const dAnillo = (Math.abs(sdHex(x, y, aMedio)) - GROSOR / 2) * k;
     const xc = 2.1 + 4.2 * cola, yc = 3.0 + 5.2 * cola;
     const dCola = cola > 0 ? (sdSegmento(x, y, 2.1, 3.0, xc, yc) - 1.15) * k : 99;
@@ -224,24 +224,24 @@ function pixeles(t?: number): Float32Array {
     if (cob > 0) {
       if (cometa >= 0 && dAnillo < dCola) col = mezclar(col, [255, 255, 255], Math.exp(-frac(cometa - ang) * 11) * 0.85);
       col = mezclar(col, [255, 255, 255], destello * 0.7);
-      const o = (py * W + px) * 3, q = cob * luz;                            // el anillo tapa lo que hay detrás
+      const o = (py * W + px) * 3, q = cob * luz;                            // The ring covers pixels behind it.
       buf[o] = buf[o] * (1 - cob) + col[0] * q; buf[o + 1] = buf[o + 1] * (1 - cob) + col[1] * q; buf[o + 2] = buf[o + 2] * (1 - cob) + col[2] * q;
     }
   }
   dibujarSatelites(true);
 
-  // ── "ORQEN": cada onda que pasa enciende / tiñe las letras, con aberración cromática ──
+  // ── Waves light the ORQEN letters with a chromatic shift ──
   for (let py = Y0 - 4; py < Y0 + LETRA_H + 4; py++) for (let px = X0 - 6; px < X0 + ANCHO_PALABRA + 6; px++) {
     if (px < 0 || px >= W || py < 0 || py >= H) continue;
     if (reposo) { if (tinta(px, py)) poner(px, py, BLANCO, 1); continue; }
     const dist = Math.hypot(px + 0.5 - CX, py + 0.5 - CY);
-    const edad = tt - (T_IMPACTO + dist / VEL_ONDA);                         // desde que la primera onda llegó a este píxel
+    const edad = tt - (T_IMPACTO + dist / VEL_ONDA);                         // Time since the first wave reached this pixel.
     if (edad < -0.12) continue;
     const e = limitar(edad / 0.5);
-    // Ondas siguientes: un destello de color que se apaga
+    // Later waves produce a fading color flash.
     let flash = 0;
     for (const tn of ondas) if (tn > T_IMPACTO) { const d2 = tt - (tn + dist / VEL_ONDA); if (d2 >= 0) flash = Math.max(flash, Math.exp(-d2 * 4.2)); }
-    const corr = Math.round(5 * (1 - e) * (1 - e) + 2 * flash);              // separación azul / magenta
+    const corr = Math.round(5 * (1 - e) * (1 - e) + 2 * flash);              // Blue and magenta separation.
     const sube = Math.round(3 * (1 - salidaCubica(e)));
     const u = (px - X0) / ANCHO_PALABRA;
     if (corr > 0) {
@@ -250,14 +250,14 @@ function pixeles(t?: number): Float32Array {
       if (tinta(px - corr, py + sube)) poner(px, py, MAGENTA, fantasma);
     }
     if (edad >= 0 && tinta(px, py + sube)) {
-      // Barrido de luz entre onda y onda
+      // Color sweep between waves.
       const frente = -20 + frac((tt - T_LISTO) / CICLO + 0.5) * (ANCHO_PALABRA + 90);
       const barrido = tt > T_LISTO ? entradaSalida(1 - Math.abs(px - X0 + (py - Y0) * 1.3 - frente) / 9) : 0;
       poner(px, py, mezclar(mezclar(marca(u), BLANCO, e), marca(u), Math.max(flash * 0.95, barrido * 0.85)), Math.pow(e, 0.5));
     }
   }
 
-  // ── Subrayado con un pulso que lo recorre ──
+  // ── Traveling underline pulse ──
   {
     const p = reposo ? 1 : salidaCubica((tt - 2.1) / 0.7);
     if (p > 0) {
@@ -282,11 +282,11 @@ function pixeles(t?: number): Float32Array {
   return buf;
 }
 
-const TRAMO = 6;   // celdas por tramo: cada tramo se reescribe solo si cambió
+const TRAMO = 6;   // Cells per segment. Redraw only changed segments.
 
 /**
- * Convierte el lienzo en FILAS líneas, cada una partida en tramos autocontenidos [columna (1-based), texto].
- * El subtítulo va como texto real superpuesto.
+ * Convert the canvas to rows of segments with one-based column positions.
+ * Overlay the subtitle as text.
  */
 function filasLienzo(t?: number): [number, string][][] {
   const buf = pixeles(t);
@@ -296,7 +296,7 @@ function filasLienzo(t?: number): [number, string][][] {
     for (let c0 = 0; c0 < W; c0 += TRAMO) {
       let s = "", fg = "", bg = "";
       for (let col = c0; col < Math.min(W, c0 + TRAMO); col++) {
-        // Subtítulo: texto que se "tipea"
+        // Reveal the subtitle one character at a time.
         if (fila === FILA_SUBTITULO && col >= COL_SUBTITULO && col < COL_SUBTITULO + SUBTITULO.length) {
           const i = col - COL_SUBTITULO, ch = SUBTITULO[i];
           const k = t === undefined ? 1 : limitar((t - 2.35 - i * 0.016) / 0.25);
@@ -331,9 +331,9 @@ function lineaLema(color: boolean, brillo = 1): string {
     : `  // ${LEMA}  ${SUB}`;
 }
 
-/* ───────────────────────── logo estático ───────────────────────── */
+/* ───────────────────────── static logo ───────────────────────── */
 
-/** Versión en caracteres (sin color, o terminales de ancho medio). */
+/** Text version for terminals without color or with limited width. */
 const ISO = [
   "     ▄▄████▄▄     ",
   " ▄▄██▀▀    ▀▀██▄▄ ",
@@ -365,15 +365,15 @@ function logoCaracteres(color: boolean): string {
 }
 
 /**
- * Logo estático (multilínea). Con color y una terminal de ≥ 92 columnas usa el lienzo de píxeles en reposo;
- * si no, la versión en caracteres.
+ * Use the pixel canvas for color terminals at least 92 columns wide.
+ * Use text on smaller terminals.
  */
 export function logo(color = hayColor(), columnas = process.stdout.columns ?? 100): string {
   if (!color || columnas < W + 2) return logoCaracteres(color);
   return ["", ...filasLienzo().map((tramos) => tramos.map(([, s]) => s).join("")), "", lineaLema(true), ""].join("\n");
 }
 
-/** Versión para terminales angostas. */
+/** Text version for narrow terminals. */
 function logoCompacto(color: boolean, columnas: number): string {
   if (columnas >= LETRAS[0].length + 4) {
     const filas = LETRAS.map((l, i) => `  ${color ? pintar(i === LETRAS.length - 1 ? GRIS : mezclar(AZUL, MAGENTA, i / LETRAS.length), l) + RESET : l}`);
@@ -385,19 +385,19 @@ function logoCompacto(color: boolean, columnas: number): string {
 /* ───────────────────────── pantalla animada ───────────────────────── */
 
 export interface OpcionesLogo {
-  /** Animar (si la terminal lo permite). */
+  /** Animate when the terminal supports it. */
   animar?: boolean;
-  /** Seguir en loop hasta que la persona presione Enter (pantalla de bienvenida). */
+  /** Loop until the user presses Enter. */
   esperarTecla?: boolean;
-  /** Líneas de bienvenida debajo del lema (solo mientras se espera la tecla). */
+  /** Welcome text displayed under the tagline while waiting for Enter. */
   bienvenida?: string[];
   stream?: NodeJS.WriteStream;
   entrada?: NodeJS.ReadStream;
 }
 
 /**
- * Pantalla para el instante t: una lista de líneas, cada una como tramos [columna (1-based), contenido].
- * El renderizador solo reescribe los tramos que cambiaron respecto del cuadro anterior. Expuesto para tests.
+ * Render the frame at time t as rows of one-based column positions and text.
+ * The renderer redraws changed segments. Exported for tests.
  */
 export function escena(t: number, bienvenida: string[] = [], conTecla = false): [number, string][][] {
   const lineas = filasLienzo(t);
@@ -412,7 +412,7 @@ export function escena(t: number, bienvenida: string[] = [], conTecla = false): 
     lineas.push([[1, ""]]);
     const inicio = T_LISTO + 0.2 + bienvenida.length * 0.16;
     const pulso = 0.6 + 0.4 * Math.sin((t - inicio) * 3);
-    lineas.push([[1, t > inicio ? `  ${pintar(atenuar(marca(0.5 + 0.5 * Math.sin(t * 1.3)), pulso), "▸")} ${pintar(atenuar(BLANCO, 0.55 + 0.45 * pulso), "Enter para comenzar")}${RESET}` : ""]]);
+    lineas.push([[1, t > inicio ? `  ${pintar(atenuar(marca(0.5 + 0.5 * Math.sin(t * 1.3)), pulso), "▸")} ${pintar(atenuar(BLANCO, 0.55 + 0.45 * pulso), "Press Enter to begin")}${RESET}` : ""]]);
   }
   return lineas;
 }
@@ -423,8 +423,8 @@ export function puedeAnimar(stream: NodeJS.WriteStream = process.stdout, lineas 
 }
 
 /**
- * Muestra el logo. Con terminal interactiva lo anima a ~60 fps y, si `esperarTecla`, queda en loop hasta Enter.
- * Al terminar deja el logo estático en pantalla (queda en el historial de la terminal).
+ * Show the logo and animate it at roughly 60 fps in an interactive terminal.
+ * When waiting for input, loop until Enter, then leave the static logo in the terminal.
  */
 export async function mostrarLogo(o: OpcionesLogo | boolean = {}): Promise<void> {
   const op: OpcionesLogo = typeof o === "boolean" ? { animar: o } : o;
@@ -439,8 +439,8 @@ export async function mostrarLogo(o: OpcionesLogo | boolean = {}): Promise<void>
   if (op.animar === false || !puedeAnimar(stream, total)) { stream.write(logo(color, columnas) + "\n"); return; }
 
   let terminar = false, salir = false;
-  // Eventos `keypress` de readline (el mismo mecanismo que usan los prompts que vienen después):
-  // mezclar un listener crudo de `data` rompe flechas y espacio en Windows.
+  // Use readline keypress events, as do the prompts that follow.
+  // A raw data listener interferes with arrow keys and space on Windows.
   const alTeclear = (_s: string, tecla: { name?: string; ctrl?: boolean } = {}) => {
     if (tecla.ctrl && tecla.name === "c") { salir = true; terminar = true; }
     else if (tecla.name === "return" || tecla.name === "enter" || tecla.name === "space") terminar = true;
@@ -461,7 +461,7 @@ export async function mostrarLogo(o: OpcionesLogo | boolean = {}): Promise<void>
       const ahora = performance.now();
       const t = (ahora - inicio) / 1000;
       if (terminar || (!loop && t > T_LISTO + 0.9)) break;
-      // Si la terminal todavía no terminó de dibujar el cuadro anterior, este se saltea (no se acumula lag).
+      // Skip this frame if the terminal is still drawing the previous one.
       if (ahora >= proximo && !stream.writableNeedDrain) {
         proximo = Math.max(proximo + INTERVALO, ahora);
         let salida = "";
@@ -470,21 +470,21 @@ export async function mostrarLogo(o: OpcionesLogo | boolean = {}): Promise<void>
           tramos.forEach(([col, texto], k) => {
             if (previo[f]?.[k] === texto) return;
             (previo[f] ??= [])[k] = texto;
-            // Una sola línea de texto por fila: limpia lo que quede a la derecha.
+            // Clear any leftover text to the right.
             fila += `\x1b[${col}G${texto}${tramos.length === 1 ? "\x1b[K" : ""}`;
           });
           if (fila) salida += `\x1b[${total - f}A${fila}\x1b[${total - f}B`;
         });
-        // 2026: salida sincronizada (la terminal presenta el cuadro entero de una vez, sin tearing).
+        // Synchronized output displays each frame at once.
         if (salida) stream.write(`\x1b[?2026h${salida}\r\x1b[?2026l`);
       }
-      // En Windows el timer avanza de a ~15,6 ms: pedir 1 ms da ~64 fps estables. En el resto, dormir hasta el próximo cuadro.
+      // Request a 1 ms delay on Windows for its roughly 15.6 ms timer resolution. Elsewhere, wait until the next frame.
       await new Promise((r) => setTimeout(r, process.platform === "win32" ? 1 : Math.max(1, proximo - performance.now())));
     }
   } finally {
     if (loop) { entrada.off("keypress", alTeclear); entrada.setRawMode(false); entrada.pause(); }
     stream.off("resize", alRedimensionar);
-    // Cuadro final: el logo en reposo; se borra la bienvenida y el cursor queda justo debajo del lema.
+    // Leave the static logo, clear the welcome text, and put the cursor below the tagline.
     const final = logo(true, columnas).split("\n").slice(1);
     stream.write(`\x1b[${total}A\r` + final.map((l) => `${l}\x1b[K\n`).join("") + "\x1b[J");
     restaurar();

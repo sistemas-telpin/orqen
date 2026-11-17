@@ -1,5 +1,5 @@
 /**
- * orqen/.env: credenciales y datos del proceso (Jira, SIS, aprobadores). No se commitea.
+ * Read and write Git-ignored Jira credentials, project settings, and approvers in orqen/.env.
  * `orqen init` lo genera a partir de orqen/.env.example con lo que la persona contesta.
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -9,7 +9,7 @@ export const RUTA_ENV = "orqen/.env";
 
 const LINEA = /^([A-Z][A-Z0-9_]*)=(.*)$/;
 
-/** Separa el valor del comentario al final de la línea (` # ...`), respetando comillas. */
+/** Separate the value from an inline comment while respecting quotes. */
 function partirValor(resto: string): { valor: string; comentario: string } {
   const t = resto.trimStart();
   if (t.startsWith('"') || t.startsWith("'")) {
@@ -31,7 +31,7 @@ export function parsearEnv(texto: string): Record<string, string> {
 
 const escribirValor = (v: string) => (/#|^\s|\s$|"/.test(v) ? `'${v}'` : v);
 
-/** Reemplaza en la plantilla los valores indicados, conservando comentarios y el resto de las líneas. */
+/** Replace selected values while preserving comments and other lines. */
 export function completarEnv(plantilla: string, valores: Record<string, string | undefined>): string {
   const usados = new Set<string>();
   const lineas = plantilla.replace(/\r\n/g, "\n").split("\n").map((l) => {

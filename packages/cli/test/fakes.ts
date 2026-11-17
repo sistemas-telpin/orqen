@@ -1,5 +1,5 @@
-import type { Comentario, Issue, JiraApi } from "../src/proceso/jira.ts";
-import { BOT_MARCA } from "../src/proceso/jira.ts";
+import type { Comentario, Issue, JiraApi } from "../src/workflow/jira.ts";
+import { BOT_MARCA } from "../src/workflow/jira.ts";
 
 let id = 0;
 

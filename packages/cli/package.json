@@ -1,7 +1,7 @@
 {
   "name": "orqen",
   "version": "0.1.0",
-  "description": "ORQEN \u2014 orquestaci\u00f3n multiagente sobre OpenSpec. Del requerimiento a producci\u00f3n.",
+  "description": "ORQEN multi-agent orchestration on OpenSpec, from customer request to production.",
   "type": "module",
   "bin": {
     "orqen": "dist/index.js"

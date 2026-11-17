@@ -1,16 +1,16 @@
 /**
- * OpenSpec en el repo destino: detecta si está y qué versión, lo instala (devDependency del repo, o global si el
- * repo no es Node), corre `openspec init` / `openspec update` y fusiona las reglas de orqen en openspec/config.yaml.
+ * Find and install a compatible OpenSpec version, initialize or update it,
+ * and merge orqen's rules into the project configuration.
  */
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import semver from "semver";
 import { isMap, isScalar, isSeq, parseDocument, YAMLMap, YAMLSeq } from "yaml";
-import { gestorNode } from "./detectar.ts";
+import { gestorNode } from "./detect.ts";
 import { ejecutar, version } from "./proc.ts";
 
 export const PAQUETE_OPENSPEC = "@fission-ai/openspec";
-/** Rango de OpenSpec con el que orqen es compatible (usa --json de validate/status/instructions de la v2). */
+/** Supported OpenSpec versions with JSON validation, status, and instructions. */
 export const RANGO_OPENSPEC = ">=2.0.0 <3.0.0";
 export const VERSION_MINIMA = "2.0.0";
 
@@ -18,12 +18,12 @@ export type Instalacion = "devDependency" | "global";
 
 export interface EstadoOpenSpec {
   instalacion: Instalacion | null;
-  /** Versión efectivamente instalada (node_modules o global). */
+  /** Installed version, local or global. */
   version: string | null;
-  /** Rango declarado en package.json (si es devDependency). */
+  /** Version range declared in package.json for a local install. */
   declarada: string | null;
   compatible: boolean;
-  inicializado: boolean;  // existe openspec/
+  inicializado: boolean;  // The openspec directory exists.
 }
 
 const leerJson = (p: string): any => { try { return JSON.parse(readFileSync(p, "utf8")); } catch { return undefined; } };
@@ -46,7 +46,7 @@ export function estadoOpenSpec(repo: string): EstadoOpenSpec {
   };
 }
 
-/** Última versión compatible publicada (null si no hay red / registry). */
+/** Latest compatible version, or null when the registry is unavailable. */
 export function ultimaVersionOpenSpec(cwd?: string): string | null {
   const r = ejecutar("npm", ["view", `${PAQUETE_OPENSPEC}@${RANGO_OPENSPEC}`, "version", "--json"], { cwd, timeoutMs: 30_000 });
   if (r.codigo !== 0) return null;
@@ -67,7 +67,7 @@ export function comandoAgregarDev(repo: string, paquete: string): [string, strin
   }
 }
 
-/** Cómo invocar el binario openspec en el repo según dónde esté instalado. */
+/** Select the OpenSpec command for the installation and package manager. */
 export function comandoOpenSpec(repo: string, instalacion: Instalacion): [string, string[]] {
   if (instalacion === "global") return ["openspec", []];
   const pm = gestorNode(repo);
@@ -83,28 +83,28 @@ export function instalarOpenSpec(repo: string, instalacion: Instalacion, version
     ? comandoAgregarDev(repo, paquete)
     : (version("pnpm") ? ["pnpm", ["add", "-g", paquete]] as [string, string[]] : ["npm", ["install", "-g", paquete]] as [string, string[]]);
   const r = ejecutar(cmd, args, { cwd: repo, timeoutMs: 10 * 60_000 });
-  if (r.codigo !== 0) throw new Error(`Falló \`${cmd} ${args.join(" ")}\`:\n${(r.stderr || r.stdout).trim().slice(-2000)}`);
+  if (r.codigo !== 0) throw new Error(`Failed to run \`${cmd} ${args.join(" ")}\`:\n${(r.stderr || r.stdout).trim().slice(-2000)}`);
   return `${cmd} ${args.join(" ")}`;
 }
 
 export function inicializarOpenSpec(repo: string, instalacion: Instalacion, herramientas: string[]) {
   const [cmd, base] = comandoOpenSpec(repo, instalacion);
-  const args = [...base, "init", "--tools", herramientas.length ? herramientas.join(",") : "none", "--language", "es", "--no-animation", "--no-copilot-cloud"];
+  const args = [...base, "init", "--tools", herramientas.length ? herramientas.join(",") : "none", "--language", "English", "--no-animation", "--no-copilot-cloud"];
   const r = ejecutar(cmd, args, { cwd: repo, timeoutMs: 5 * 60_000, entrada: "" });
-  if (r.codigo !== 0) throw new Error(`Falló \`openspec init\`:\n${(r.stderr || r.stdout).trim().slice(-2000)}`);
+  if (r.codigo !== 0) throw new Error(`Failed to run \`openspec init\`:\n${(r.stderr || r.stdout).trim().slice(-2000)}`);
 }
 
 export function actualizarArchivosOpenSpec(repo: string, instalacion: Instalacion) {
   const [cmd, base] = comandoOpenSpec(repo, instalacion);
   const r = ejecutar(cmd, [...base, "update"], { cwd: repo, timeoutMs: 5 * 60_000, entrada: "" });
-  if (r.codigo !== 0) throw new Error(`Falló \`openspec update\`:\n${(r.stderr || r.stdout).trim().slice(-2000)}`);
+  if (r.codigo !== 0) throw new Error(`Failed to run \`openspec update\`:\n${(r.stderr || r.stdout).trim().slice(-2000)}`);
 }
 
 /**
- * Fusiona el fragmento de orqen (context + rules + operations) en openspec/config.yaml, preservando comentarios.
- * - context: agrega las líneas que falten al final.
- * - rules / operations: listas de strings, agrega las que falten (no borra ninguna).
- * Devuelve el texto nuevo (o el mismo si no hubo cambios).
+ * Merge orqen's context, rules, and operations while preserving comments.
+ * - Append context lines that are missing.
+ * - Append rules and operation guidance that are missing.
+
  */
 export function fusionarConfigOpenSpec(actual: string, fragmento: string): string {
   const doc = parseDocument(actual || "schema: spec-driven\n");

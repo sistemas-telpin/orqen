@@ -1,24 +1,25 @@
 /**
- * Instala / actualiza el kit de orqen en un repo sin pisar lo que el equipo personalizó.
+ * Install and update the kit while preserving project edits.
  *
- * Cada archivo administrado se registra en orqen/manifest.json con el hash de lo que orqen escribió.
- * Al actualizar:
- *  - si el archivo no existe → se crea;
- *  - si su contenido es igual al nuevo → nada;
- *  - si su hash coincide con el del manifest (nadie lo tocó) → se reemplaza;
- *  - si no → conflicto: se le pregunta a la persona (sobrescribir / mantener / dejar la versión nueva al lado).
- * AGENTS.md se maneja como un bloque entre marcadores (el resto del archivo es del equipo).
- * openspec/config.yaml, CLAUDE.md, .gitignore y marketplace.json se fusionan (solo agregan).
+ * Record the last installed content hash in orqen/manifest.json.
+ * During update:
+ *  - Create missing files.
+ *  - Skip files already up to date.
+ *  - Replace files that match the saved hash.
+ *  - Ask the user how to handle local edits.
+ * Manage only the marked AGENTS.md block.
+ * Merge additions into OpenSpec config, CLAUDE.md, .gitignore, and marketplace.json.
  */
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
-import { DIR_PLANTILLAS, VERSION_KIT } from "orqen-kit";
+import { TEMPLATES_DIR, VERSION_KIT } from "orqen-kit";
 import { fusionarConfigOpenSpec } from "./openspec.ts";
+import { stageGuideFile } from "./stage-guides.ts";
 
 export const DIR_ORQEN = "orqen";
 export const ARCHIVO_MANIFEST = "orqen/manifest.json";
-export const INICIO_BLOQUE = "<!-- orqen:inicio — bloque administrado por orqen (`orqen update` lo actualiza; editá fuera del bloque) -->";
+export const INICIO_BLOQUE = "<!-- orqen:inicio — managed by orqen (edit outside this block; `orqen update` refreshes it) -->";
 export const FIN_BLOQUE = "<!-- orqen:fin -->";
 export const IGNORAR_GIT = ["orqen/state/", "orqen/tmp/", "orqen/.env"];
 
@@ -28,15 +29,15 @@ export interface VariablesKit { RESUMEN_STACK: string; RAMA_BASE: string; AGENTE
 export type Accion = "crear" | "actualizar" | "igual" | "conflicto";
 export type Modo = "archivo" | "bloque" | "fusion";
 export interface Cambio {
-  ruta: string;            // relativa al repo, con /
+  ruta: string;            // Repository-relative path with forward slashes.
   modo: Modo;
   accion: Accion;
-  nuevo: string;           // contenido final que se escribiría (archivo completo)
-  actual?: string;         // contenido actual (archivo completo)
-  /** Para conflictos de bloque: lo que hay hoy y lo que habría dentro del bloque. */
+  nuevo: string;           // Proposed full file content.
+  actual?: string;         // Current full file content.
+  /** Current and proposed content for a managed block conflict. */
   parteActual?: string;
   parteNueva?: string;
-  hashNuevo?: string;      // lo que se guarda en el manifest (null para fusiones)
+  hashNuevo?: string;      // Hash saved to the manifest for managed files.
 }
 
 export type Decision = "sobrescribir" | "mantener" | "nuevo";
@@ -72,21 +73,21 @@ function listar(dir: string): string[] {
   return out.sort();
 }
 
-/** Archivos completos que vienen del kit: ruta en el repo → contenido. */
-export function archivosDelKit(vars: VariablesKit): Record<string, string> {
+/** Map repository paths to rendered kit contents. */
+export function archivosDelKit(vars: VariablesKit, repo: string): Record<string, string> {
   const out: Record<string, string> = {};
-  for (const f of listar(join(DIR_PLANTILLAS, "etapas"))) out[`${DIR_ORQEN}/stages/${f}`] = render(readFileSync(join(DIR_PLANTILLAS, "etapas", f), "utf8"), vars);
-  for (const f of listar(join(DIR_PLANTILLAS, "plugin"))) out[`${DIR_ORQEN}/plugin/${f}`] = render(readFileSync(join(DIR_PLANTILLAS, "plugin", f), "utf8"), vars);
-  out[`${DIR_ORQEN}/work/README.md`] = render(readFileSync(join(DIR_PLANTILLAS, "work", "README.md"), "utf8"), vars);
-  out[`${DIR_ORQEN}/.env.example`] = render(readFileSync(join(DIR_PLANTILLAS, "env.example"), "utf8"), vars);
+  for (const f of listar(join(TEMPLATES_DIR, "stages"))) out[`${DIR_ORQEN}/stages/${stageGuideFile(join(repo, DIR_ORQEN, "stages"), f)}`] = render(readFileSync(join(TEMPLATES_DIR, "stages", f), "utf8"), vars);
+  for (const f of listar(join(TEMPLATES_DIR, "plugin"))) out[`${DIR_ORQEN}/plugin/${f}`] = render(readFileSync(join(TEMPLATES_DIR, "plugin", f), "utf8"), vars);
+  out[`${DIR_ORQEN}/work/README.md`] = render(readFileSync(join(TEMPLATES_DIR, "work", "README.md"), "utf8"), vars);
+  out[`${DIR_ORQEN}/.env.example`] = render(readFileSync(join(TEMPLATES_DIR, "env.example"), "utf8"), vars);
   return out;
 }
 
 export function bloqueAgents(vars: VariablesKit): string {
-  return render(readFileSync(join(DIR_PLANTILLAS, "AGENTS.md"), "utf8"), vars).trim();
+  return render(readFileSync(join(TEMPLATES_DIR, "AGENTS.md"), "utf8"), vars).trim();
 }
 
-/** Extrae el bloque de orqen de un AGENTS.md (o undefined si no lo tiene). */
+/** Extract the marked orqen block if present. */
 export function extraerBloque(texto: string): string | undefined {
   const t = normalizar(texto);
   const i = t.indexOf("<!-- orqen:inicio"), f = t.indexOf(FIN_BLOQUE);
@@ -114,7 +115,7 @@ function gitignore(actual: string | undefined) {
   const lineas = t.split("\n").map((l) => l.trim());
   const faltan = IGNORAR_GIT.filter((l) => !lineas.includes(l));
   if (!faltan.length) return t;
-  return (t.trimEnd() ? t.trimEnd() + "\n\n" : "") + "# orqen (estado local y temporales)\n" + faltan.join("\n") + "\n";
+  return (t.trimEnd() ? t.trimEnd() + "\n\n" : "") + "# orqen (local state and temporary files)\n" + faltan.join("\n") + "\n";
 }
 
 export const MARKETPLACE = ".claude-plugin/marketplace.json";
@@ -126,7 +127,7 @@ export function marketplace(actual: string | undefined): { texto: string; nombre
   j.plugins = Array.isArray(j.plugins) ? j.plugins : [];
   const entrada = {
     name: "orqen", source: `./${DIR_ORQEN}/plugin`,
-    description: "ORQEN: /orqen:analyze (grilling con el analista, carril, spec, SIS) y /orqen:implement",
+    description: "ORQEN: /orqen:analyze (analyst interview, lane, spec, and SIS) and /orqen:implement",
   };
   const i = j.plugins.findIndex((p: any) => p?.name === "orqen");
   if (i >= 0) j.plugins[i] = { ...j.plugins[i], ...entrada }; else j.plugins.push(entrada);
@@ -134,9 +135,9 @@ export function marketplace(actual: string | undefined): { texto: string; nombre
 }
 
 export interface OpcionesPlan {
-  /** Archivos completos generados fuera del kit (ej. docker-compose.orqen.yml en init). */
+  /** Additional files generated outside the kit, such as Compose configuration. */
   extra?: Record<string, string>;
-  /** Incluir las fusiones de archivos del equipo (openspec/config.yaml, CLAUDE.md, .gitignore, marketplace). */
+  /** Include merges into user-managed files. */
   fusiones?: boolean;
 }
 
@@ -144,7 +145,7 @@ export function planificar(repo: string, vars: VariablesKit, o: OpcionesPlan = {
   const manifest = leerManifest(repo);
   const cambios: Cambio[] = [];
 
-  const archivos = { ...archivosDelKit(vars), ...o.extra };
+  const archivos = { ...archivosDelKit(vars, repo), ...o.extra };
   for (const [ruta, nuevo] of Object.entries(archivos)) {
     const actual = leer(join(repo, ruta));
     const h = hash(nuevo);
@@ -156,7 +157,7 @@ export function planificar(repo: string, vars: VariablesKit, o: OpcionesPlan = {
     cambios.push({ ruta, modo: "archivo", accion, nuevo, actual, hashNuevo: h });
   }
 
-  // AGENTS.md (bloque)
+  // Managed AGENTS.md block
   {
     const ruta = "AGENTS.md", clave = "AGENTS.md#orqen";
     const actual = leer(join(repo, ruta));
@@ -181,7 +182,7 @@ export function planificar(repo: string, vars: VariablesKit, o: OpcionesPlan = {
     fusion(".gitignore", gitignore);
     fusion(MARKETPLACE, (a) => marketplace(a).texto);
     if (existsSync(join(repo, "openspec"))) {
-      const frag = readFileSync(join(DIR_PLANTILLAS, "openspec", "config.yaml"), "utf8");
+      const frag = readFileSync(join(TEMPLATES_DIR, "openspec", "config.yaml"), "utf8");
       fusion("openspec/config.yaml", (a) => fusionarConfigOpenSpec(a ?? "", frag));
     }
   }
@@ -191,7 +192,7 @@ export function planificar(repo: string, vars: VariablesKit, o: OpcionesPlan = {
 export interface Resultado { ruta: string; accion: Accion | "mantenido" | "guardado-al-lado"; detalle?: string }
 
 /**
- * Aplica el plan. `resolver` decide cada conflicto (en modo no interactivo conviene "nuevo": no pisa nada).
+ * Apply the plan using the supplied conflict resolver.
  */
 export async function aplicar(
   repo: string,
@@ -211,7 +212,7 @@ export async function aplicar(
       const d = await resolver(c);
       if (d === "mantener") { out.push({ ruta: c.ruta, accion: "mantenido" }); continue; }
       if (d === "nuevo") {
-        const lado = c.modo === "bloque" ? `${c.ruta}.orqen-nuevo.md` : `${c.ruta}.orqen-nuevo`;
+        const lado = c.modo === "bloque" ? `${c.ruta}.orqen-new.md` : `${c.ruta}.orqen-new`;
         escribir(repo, lado, c.modo === "bloque" ? c.parteNueva! + "\n" : c.nuevo);
         out.push({ ruta: c.ruta, accion: "guardado-al-lado", detalle: lado });
         continue;
@@ -224,7 +225,7 @@ export async function aplicar(
   manifest.kit = VERSION_KIT;
   escribir(repo, ARCHIVO_MANIFEST, JSON.stringify(manifest, null, 2) + "\n");
 
-  // orqen/.env local (ignorado por git) a partir del ejemplo
+  // Create a Git-ignored orqen/.env from the example if needed.
   const env = join(repo, DIR_ORQEN, ".env"), ejemplo = join(repo, DIR_ORQEN, ".env.example");
   if (!existsSync(env) && existsSync(ejemplo)) writeFileSync(env, readFileSync(ejemplo, "utf8"));
   return out;

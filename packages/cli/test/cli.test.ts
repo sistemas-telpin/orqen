@@ -1,7 +1,7 @@
 /** End-to-end de la CLI: `orqen init --yes` y `orqen update --yes` en repos temporales (sin red ni Docker). */
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
@@ -19,63 +19,64 @@ function orqen(cwd: string, ...args: string[]) {
 
 test("orqen init --yes deja configurado el repo", () => {
   const repo = repoTemporal(MONOREPO);
-  const r = orqen(repo, "init", "--yes", "--sin-ia", "--sin-openspec");
+  const r = orqen(repo, "init", "--yes", "--no-ai", "--no-openspec");
   assert.equal(r.codigo, 0, r.salida);
   assert.match(r.salida, /A U T O N O M O U S/);
 
-  const cfg = parse(readFileSync(join(repo, "orqen.yaml"), "utf8"));
+  const cfg = parse(readFileSync(join(repo, "orqen/config.yaml"), "utf8"));
   assert.equal(cfg.version, 1);
   assert.equal(cfg.proyecto.rama_base, "main");
   assert.equal(cfg.entornos.compose, "docker-compose.orqen.yml");
   assert.equal(cfg.entornos.tests.e2e, "pnpm exec playwright test");
-  assert.ok(!JSON.stringify(cfg).includes("null"), "sin nulls en orqen.yaml");
+  assert.ok(!JSON.stringify(cfg).includes("null"), "sin nulls en orqen/config.yaml");
 
   const compose = parse(readFileSync(join(repo, "docker-compose.orqen.yml"), "utf8"));
   assert.ok(compose.services.db && compose.services.cache);
-  assert.match(readFileSync(join(repo, "AGENTS.md"), "utf8"), /orqen entorno levantar/);
-  assert.ok(existsSync(join(repo, ".orqen/manifest.json")));
+  assert.match(readFileSync(join(repo, "AGENTS.md"), "utf8"), /orqen env up/);
+  assert.ok(existsSync(join(repo, "orqen/manifest.json")));
 });
 
 test("orqen init sin git falla con un mensaje claro", () => {
   const repo = repoTemporal({ "README.md": "x" }, false);
-  const r = orqen(repo, "init", "--yes", "--sin-ia", "--sin-openspec");
+  const r = orqen(repo, "init", "--yes", "--no-ai", "--no-openspec");
   assert.equal(r.codigo, 1);
   assert.match(r.salida, /git init/);
 });
 
 test("orqen update --yes: al día, y si el equipo editó un archivo no lo pisa", () => {
   const repo = repoTemporal(MONOREPO);
-  assert.equal(orqen(repo, "init", "--yes", "--sin-ia", "--sin-openspec").codigo, 0);
+  assert.equal(orqen(repo, "init", "--yes", "--no-ai", "--no-openspec").codigo, 0);
 
-  const r1 = orqen(repo, "update", "--yes", "--sin-cli", "--sin-openspec");
+  const r1 = orqen(repo, "update", "--yes", "--no-cli", "--no-openspec");
   assert.equal(r1.codigo, 0, r1.salida);
   assert.match(r1.salida, /al día/);
 
   // El equipo edita una guía y el kit "viejo" tenía otra versión de .env.example
-  writeFileSync(join(repo, ".orqen/etapas/entrega.md"), "# Entrega a nuestra manera\n");
-  const manifest = JSON.parse(readFileSync(join(repo, ".orqen/manifest.json"), "utf8"));
-  writeFileSync(join(repo, ".orqen/.env.example"), "VIEJO=1\n");
-  manifest.archivos[".orqen/.env.example"] = hash("VIEJO=1\n");
+  writeFileSync(join(repo, "orqen/stages/entrega.md"), "# Entrega a nuestra manera\n");
+  const manifest = JSON.parse(readFileSync(join(repo, "orqen/manifest.json"), "utf8"));
+  writeFileSync(join(repo, "orqen/.env.example"), "VIEJO=1\n");
+  manifest.archivos["orqen/.env.example"] = hash("VIEJO=1\n");
   manifest.kit = "0.0.9";
-  writeFileSync(join(repo, ".orqen/manifest.json"), JSON.stringify(manifest));
+  writeFileSync(join(repo, "orqen/manifest.json"), JSON.stringify(manifest));
 
-  const r2 = orqen(repo, "update", "--yes", "--sin-cli", "--sin-openspec");
+  const r2 = orqen(repo, "update", "--yes", "--no-cli", "--no-openspec");
   assert.equal(r2.codigo, 0, r2.salida);
   assert.match(r2.salida, /Kit 0\.0\.9 → 0\.1\.0/);
-  assert.equal(readFileSync(join(repo, ".orqen/etapas/entrega.md"), "utf8"), "# Entrega a nuestra manera\n");
-  assert.ok(existsSync(join(repo, ".orqen/etapas/entrega.md.orqen-nuevo")));
-  assert.match(readFileSync(join(repo, ".orqen/.env.example"), "utf8"), /JIRA_URL/);
+  assert.equal(readFileSync(join(repo, "orqen/stages/entrega.md"), "utf8"), "# Entrega a nuestra manera\n");
+  assert.ok(existsSync(join(repo, "orqen/stages/entrega.md.orqen-nuevo")));
+  assert.match(readFileSync(join(repo, "orqen/.env.example"), "utf8"), /JIRA_URL/);
 });
 
-test("orqen update sin orqen.yaml pide init", () => {
-  const r = orqen(repoTemporal(), "update", "--yes", "--sin-cli");
+test("orqen update sin orqen/config.yaml pide init", () => {
+  const r = orqen(repoTemporal(), "update", "--yes", "--no-cli");
   assert.equal(r.codigo, 1);
   assert.match(r.salida, /orqen init/);
 });
 
-test("orqen entorno tests corre los comandos con las variables de orqen.yaml", () => {
+test("orqen env test corre los comandos con las variables de orqen/config.yaml", () => {
   const repo = repoTemporal({ "README.md": "x" });
-  writeFileSync(join(repo, "orqen.yaml"), stringify({
+  mkdirSync(join(repo, "orqen"), { recursive: true });
+  writeFileSync(join(repo, "orqen/config.yaml"), stringify({
     version: 1, orqen: { cli: "0.1.0", kit: "0.1.0" }, proyecto: { nombre: "x", rama_base: "main" },
     openspec: { instalacion: "global" }, stack: { resumen: "x" },
     entornos: {
@@ -83,9 +84,9 @@ test("orqen entorno tests corre los comandos con las variables de orqen.yaml", (
       tests: { unitarios: `node -e "process.exit(process.env.SALUDO === 'hola' ? 0 : 1)"`, e2e: `node -e "process.exit(2)"` },
     },
   }));
-  const ok = orqen(repo, "entorno", "tests", "unitarios");
+  const ok = orqen(repo, "env", "test", "unitarios");
   assert.equal(ok.codigo, 0, ok.salida);
-  const mal = orqen(repo, "entorno", "tests");
+  const mal = orqen(repo, "env", "test");
   assert.equal(mal.codigo, 1);
   assert.match(mal.salida, /✘ e2e/);
 });

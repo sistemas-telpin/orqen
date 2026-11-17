@@ -1,6 +1,6 @@
 /**
  * Modelo del stack de un proyecto: lo llena la detección determinística y lo completa / corrige el agente.
- * Es la base para generar docker-compose.orqen.yml y los comandos de entorno de orqen.yaml.
+ * Es la base para generar docker-compose.orqen.yml y los comandos de entorno de orqen/config.yaml.
  */
 import { z } from "zod";
 
@@ -174,5 +174,5 @@ export function resumenStack(stack: Stack): string {
   const t = Object.entries(stack.tests).filter(([, v]) => v);
   if (t.length) l.push("Tests:", ...t.map(([k, v]) => `- ${k}: \`${v}\``), "");
   if (stack.notas.length) l.push("Notas:", ...stack.notas.map((n) => `- ${n}`), "");
-  return l.join("\n").trim() || "_Sin stack detectado: completá `orqen.yaml`._";
+  return l.join("\n").trim() || "_Sin stack detectado: completá `orqen/config.yaml`._";
 }

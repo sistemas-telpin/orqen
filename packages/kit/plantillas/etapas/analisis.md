@@ -6,7 +6,7 @@ Si tu herramienta tiene el skill `orqen:grilling`, usalo: define el método de l
 ### 1. Prepará el terreno (antes de preguntar)
 
 - Leé el issue y **toda** la conversación del contexto. Los comentarios con `es_del_agente: true` son de rondas anteriores; `feedback_humano` trae respuestas del cliente o el rechazo que motivó esta ronda.
-- Si tenés el MCP de Jira, usalo **solo para leer** (issue, comentarios, vinculados, REC parecidos). Sin MCP: `orqen buscar '<JQL>'`. **No escribas en Jira**: lo hace `orqen`.
+- Si tenés el MCP de Jira, usalo **solo para leer** (issue, comentarios, vinculados, REC parecidos). Sin MCP: `orqen search '<JQL>'`. **No escribas en Jira**: lo hace `orqen`.
 - Entendé el comportamiento actual: `openspec list --specs` y `openspec show <capacidad>` (fuente de verdad) y, si hace falta, el código (solo lectura).
 - Todo lo que puedas contestar leyendo el repo o Jira **no se le pregunta al analista**.
 
@@ -38,7 +38,7 @@ Ante la duda entre dos, elegí el de **más** rigor y decilo. Una vez confirmado
 ### 5. Ejecutá el carril
 
 - `operativa` o `directo`: no hay spec. Pasá a producir la salida.
-- `liviano` o `completo`: corré `orqen carril <KEY> <carril>`. Crea la rama y el change de OpenSpec e imprime cómo escribir la spec (el analista revisa lo que escribís; ajustá lo que pida). No hagas commits: `orqen` los hace.
+- `liviano` o `completo`: corré `orqen lane <KEY> <carril>`. Crea la rama y el change de OpenSpec e imprime cómo escribir la spec (el analista revisa lo que escribís; ajustá lo que pida). No hagas commits: `orqen` los hace.
 
 ### 6. Salida
 
@@ -46,7 +46,7 @@ Producí el JSON del esquema:
 - `resumen`, `tipo`, `criterios_aceptacion`, `capacidades_afectadas`, `decisiones`, `riesgos`, `preguntas_abiertas`.
 - `listo: true` + `analista_ok: true` + `via` + `carril` + `justificacion_carril` solo con el OK del analista (vía operativa ⇒ `carril: "directo"`).
 - Carril directo: `plan` (pasos en orden) y `estimacion_horas`.
-- Carril liviano/completo: `especificacion` (`cambio` = el que asignó `orqen carril`, `resumen`, `supuestos`).
+- Carril liviano/completo: `especificacion` (`cambio` = el que asignó `orqen lane`, `resumen`, `supuestos`).
 
-`orqen completar` valida todo (y con spec: `openspec validate --strict`, artefactos completos y horas en cada tarea). Si pasa, crea el **SIS**, lo vincula al REC, deja el registro en `factory/<KEY>/` y mueve el REC a la etapa siguiente.
-No toques `.orqen/estado/`. No hagas commit/push/checkout.
+`orqen complete` valida todo (y con spec: `openspec validate --strict`, artefactos completos y horas en cada tarea). Si pasa, crea el **SIS**, lo vincula al REC, deja el registro en `orqen/work/<KEY>/` y mueve el REC a la etapa siguiente.
+No toques `orqen/state/`. No hagas commit/push/checkout.

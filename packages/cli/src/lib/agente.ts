@@ -1,11 +1,14 @@
 /**
  * Exploración del repo con el agente de IA que la persona ya tiene instalado (Claude Code, Codex, Gemini...)
  * en modo headless. El agente recibe la detección determinística + el JSON Schema del stack y escribe su
- * propuesta en .orqen/tmp/stack-propuesto.json. orqen la valida con zod y, si no cumple, reintenta una vez
+ * propuesta en orqen/tmp/stack-propuesto.json. orqen la valida con zod y, si no cumple, reintenta una vez
  * pasándole los errores.
  */
-import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
-import { join } from "node:path";
+import { spawn } from "node:child_process";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
 import { ejecutarAsync, partirComando, version } from "./proc.ts";
 import { resumenComoTexto, resumirRepo } from "./resumen-repo.ts";
 import { Stack, esquemaStackJson } from "./stack.ts";
@@ -35,7 +38,7 @@ export function agentesInstalados(): (AgenteConocido & { version: string })[] {
   });
 }
 
-export const RUTA_PROPUESTA = ".orqen/tmp/stack-propuesto.json";
+export const RUTA_PROPUESTA = "orqen/tmp/stack-propuesto.json";
 
 export function promptExploracion(deteccion: { stack: Stack; evidencias: string[] }, errores?: string[]): string {
   return [
@@ -93,7 +96,7 @@ export async function explorarConAgente(
   o: { timeoutMs?: number; alReintentar?: (errores: string[]) => void } = {},
 ): Promise<ResultadoExploracion> {
   const archivo = join(repo, RUTA_PROPUESTA);
-  mkdirSync(join(repo, ".orqen", "tmp"), { recursive: true });
+  mkdirSync(join(repo, "orqen", "tmp"), { recursive: true });
   let errores: string[] | undefined;
   let salida = "";
   for (let intento = 0; intento < 2; intento++) {
@@ -186,4 +189,62 @@ export async function explorarRapido(
     errores = v.error.issues.map((i) => `${i.path.join(".") || "(raíz)"}: ${i.message}`);
   }
   return { ok: false, errores: errores ?? [], salida };
+}
+
+/**
+ * Lanza el análisis rápido en un proceso aparte, totalmente desacoplado de esta terminal (ver trabajador-ia.ts).
+ * Devuelve una promesa que se resuelve cuando el resultado está listo; `cancelar()` corta el proceso.
+ */
+export function explorarRapidoAislado(
+  repo: string,
+  comando: string,
+  deteccion: { stack: Stack; evidencias: string[] },
+  o: { timeoutMs?: number } = {},
+): { resultado: Promise<ResultadoExploracion>; cancelar: () => void } {
+  const timeoutMs = o.timeoutMs ?? 90_000;
+  const dir = mkdtempSync(join(tmpdir(), "orqen-ia-"));
+  const salida = join(dir, "resultado.json"), archivoTrabajo = join(dir, "trabajo.json");
+  writeFileSync(archivoTrabajo, JSON.stringify({ repo, comando, deteccion, salida, timeoutMs }));
+  const enTs = import.meta.url.endsWith(".ts");          // corriendo desde el código (tsx) o compilado
+  const script = fileURLToPath(new URL(`../trabajador-ia.${enTs ? "ts" : "js"}`, import.meta.url));
+  const cargadores: string[] = [];                      // solo los loaders (tsx), no flags como --test
+  process.execArgv.forEach((a, i, xs) => {
+    if (/^--(import|require|loader|experimental-loader)$/.test(a) && xs[i + 1]) cargadores.push(a, xs[i + 1]);
+    else if (/^--(import|require|loader|experimental-loader)=/.test(a)) cargadores.push(a);
+  });
+  const hijo = spawn(process.execPath, [...cargadores, script, archivoTrabajo], {
+    // cwd: la carpeta del paquete, para que los loaders (tsx) se resuelvan; el trabajador usa `repo` explícitamente.
+    detached: true, stdio: "ignore", windowsHide: true, cwd: dirname(script),
+  });
+  hijo.unref();
+  let terminado = false, temporizador: NodeJS.Timeout | undefined;
+  const limpiar = () => { try { rmSync(dir, { recursive: true, force: true }); } catch { /* */ } };
+  const cancelar = () => {
+    if (terminado) return;
+    terminado = true;
+    clearInterval(temporizador);
+    try { if (hijo.pid) process.kill(hijo.pid); } catch { /* ya terminó */ }
+    limpiar();
+  };
+  process.once("exit", cancelar);
+  const resultado = new Promise<ResultadoExploracion>((resolve) => {
+    const inicio = Date.now();
+    let error: string | undefined, salioEn: number | undefined;
+    hijo.once("error", (e) => { error = e.message; });
+    hijo.once("exit", (codigo) => { salioEn = Date.now(); if (codigo) error = `el proceso de análisis terminó con código ${codigo}`; });
+    temporizador = setInterval(() => {
+      let r: ResultadoExploracion | undefined;
+      if (existsSync(salida)) { try { r = JSON.parse(readFileSync(salida, "utf8")); } catch { /* todavía no */ } }
+      else if (error) r = { ok: false, errores: [`No pude completar el análisis: ${error}`], salida: "" };
+      else if (salioEn && Date.now() - salioEn > 1000) r = { ok: false, errores: ["El proceso de análisis terminó sin resultado"], salida: "" };
+      else if (Date.now() - inicio > timeoutMs * 2 + 10_000) r = { ok: false, errores: ["El análisis tardó demasiado"], salida: "" };
+      if (!r) return;
+      clearInterval(temporizador);
+      terminado = true;
+      process.removeListener("exit", cancelar);
+      limpiar();
+      resolve(r);
+    }, 150);
+  });
+  return { resultado, cancelar };
 }

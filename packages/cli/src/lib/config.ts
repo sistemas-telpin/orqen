@@ -1,14 +1,14 @@
 /**
- * orqen.yaml: la configuración de orqen en el repo (versionada). La lee `orqen entorno` y la usará el resto de los comandos.
+ * orqen/config.yaml: la configuración de orqen en el repo (versionada). La lee `orqen env` y la usará el resto de los comandos.
  */
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { parseDocument, stringify } from "yaml";
 import { z } from "zod";
 import { ARCHIVO_COMPOSE } from "./compose.ts";
 import { Stack, variablesHost } from "./stack.ts";
 
-export const ARCHIVO_CONFIG = "orqen.yaml";
+export const ARCHIVO_CONFIG = "orqen/config.yaml";
 
 export const Config = z.object({
   version: z.literal(1),
@@ -75,12 +75,13 @@ export function serializarConfig(c: Config): string {
   const limpio = JSON.parse(JSON.stringify(c, (_k, v) => (v === null ? undefined : v))); // saca null / undefined
   return [
     "# Configuración de ORQEN para este repo. Generada por `orqen init`; editala libremente.",
-    "# entornos: lo que usan los agentes para levantar el proyecto y correr tests (`orqen entorno ...`).",
+    "# entornos: lo que usan los agentes para levantar el proyecto y correr tests (`orqen env ...`).",
     stringify(limpio, { lineWidth: 0 }),
   ].join("\n");
 }
 
 export function escribirConfig(repo: string, c: Config) {
+  mkdirSync(dirname(rutaConfig(repo)), { recursive: true });
   writeFileSync(rutaConfig(repo), serializarConfig(c));
 }
 

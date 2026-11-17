@@ -17,14 +17,14 @@ test("instala el kit en un repo limpio y la segunda pasada no cambia nada", asyn
   assert.ok(plan.every((c) => c.accion === "crear"));
   await aplicar(repo, plan, siempre("sobrescribir"));
 
-  assert.ok(existsSync(join(repo, ".orqen/etapas/desarrollo.md")));
-  assert.ok(existsSync(join(repo, ".orqen/plugin/.claude-plugin/plugin.json")));
-  assert.ok(existsSync(join(repo, ".orqen/.env")), ".env local creado desde el ejemplo");
+  assert.ok(existsSync(join(repo, "orqen/stages/desarrollo.md")));
+  assert.ok(existsSync(join(repo, "orqen/plugin/.claude-plugin/plugin.json")));
+  assert.ok(existsSync(join(repo, "orqen/.env")), ".env local creado desde el ejemplo");
   assert.match(leer(repo, "AGENTS.md"), /orqen:inicio[\s\S]*Stack de prueba\.[\s\S]*orqen:fin/);
   assert.equal(leer(repo, "CLAUDE.md"), "@AGENTS.md\n");
-  assert.match(leer(repo, ".gitignore"), /\.orqen\/estado\//);
-  assert.equal(JSON.parse(leer(repo, ".claude-plugin/marketplace.json")).plugins[0].source, "./.orqen/plugin");
-  assert.match(leer(repo, ".orqen/.env.example"), /AGENTE_CMD=claude -p/);
+  assert.match(leer(repo, ".gitignore"), /orqen\/state\//);
+  assert.equal(JSON.parse(leer(repo, ".claude-plugin/marketplace.json")).plugins[0].source, "./orqen/plugin");
+  assert.match(leer(repo, "orqen/.env.example"), /AGENTE_CMD=claude -p/);
   assert.ok(Object.keys(leerManifest(repo).archivos).includes("AGENTS.md#orqen"));
 
   const otra = planificar(repo, vars, { extra: { "docker-compose.orqen.yml": "services: {}\n" } });
@@ -50,20 +50,20 @@ test("respeta el AGENTS.md y el CLAUDE.md del equipo y solo maneja su bloque", a
 test("archivo editado por el equipo: conflicto, y cada decisión hace lo que dice", async () => {
   const repo = repoTemporal();
   await aplicar(repo, planificar(repo, vars), siempre("sobrescribir"));
-  const ruta = ".orqen/etapas/testing.md";
+  const ruta = "orqen/stages/testing.md";
   writeFileSync(join(repo, ruta), "# Mi guía de testing\n");
 
   // Simula una versión nueva del kit: otro AGENTE_CMD cambia .env.example (no editado) → actualizar
   const nuevas = { ...vars, AGENTE_CMD: "codex exec --full-auto -" };
   const plan = planificar(repo, nuevas);
-  assert.equal(plan.find((c) => c.ruta === ".orqen/.env.example")!.accion, "actualizar");
+  assert.equal(plan.find((c) => c.ruta === "orqen/.env.example")!.accion, "actualizar");
   assert.equal(plan.find((c) => c.ruta === ruta)!.accion, "conflicto");
 
   const res = await aplicar(repo, plan, siempre("nuevo"));
   assert.equal(leer(repo, ruta), "# Mi guía de testing\n", "no pisa lo del equipo");
   assert.ok(existsSync(join(repo, `${ruta}.orqen-nuevo`)));
   assert.equal(res.find((r) => r.ruta === ruta)!.accion, "guardado-al-lado");
-  assert.match(leer(repo, ".orqen/.env.example"), /codex exec/);
+  assert.match(leer(repo, "orqen/.env.example"), /codex exec/);
 
   await aplicar(repo, planificar(repo, nuevas), siempre("mantener"));
   assert.equal(leer(repo, ruta), "# Mi guía de testing\n");

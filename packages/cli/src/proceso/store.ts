@@ -1,4 +1,4 @@
-/** Estado de cada REC en archivos JSON (rec/.estado/, ignorado por git → sobrevive a los checkouts de rama). */
+/** Estado de cada REC en archivos JSON (orqen/state/, ignorado por git → sobrevive a los checkouts de rama). */
 import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Carril, Estado, Via } from "./estados.ts";

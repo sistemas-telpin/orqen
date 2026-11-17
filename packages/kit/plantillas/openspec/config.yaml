@@ -25,7 +25,7 @@ operations:
     guidance:
       - Escribí un test por Scenario y nombralo de forma que se reconozca el escenario.
       - Tildá cada tarea en tasks.md al terminarla. No hagas commits; los hace orqen.
-      - Para correr tests usá `orqen entorno tests` (levanta lo que haga falta con `orqen entorno levantar`).
+      - Para correr tests usá `orqen env test` (levanta lo que haga falta con `orqen env up`).
   archive:
     guidance:
       - El archivado lo ejecuta orqen en la etapa ENTREGA; los agentes no archivan.

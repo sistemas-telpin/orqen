@@ -4,11 +4,11 @@
  *  2. detección determinística del stack + análisis rápido con el agente de IA local, en segundo plano
  *  3. OpenSpec: detecta versión, instala (devDependency o global) y corre `openspec init`
  *  4. la persona confirma o ajusta el stack (o pide la exploración a fondo)
- *  5. escribe orqen.yaml, docker-compose.orqen.yml y el kit (AGENTS.md, etapas, plugin, reglas de OpenSpec)
+ *  5. escribe orqen/config.yaml, docker-compose.orqen.yml y el kit (AGENTS.md, etapas, plugin, reglas de OpenSpec)
  */
 import { basename, resolve } from "node:path";
 import { VERSION_KIT } from "orqen-kit";
-import { agentesInstalados, comandoRapido, explorarConAgente, explorarRapido, type ResultadoExploracion } from "../lib/agente.ts";
+import { agentesInstalados, comandoRapido, explorarConAgente, explorarRapidoAislado, type ResultadoExploracion } from "../lib/agente.ts";
 import { ARCHIVO_COMPOSE, generarCompose } from "../lib/compose.ts";
 import { ARCHIVO_CONFIG, entornosDesdeStack, escribirConfig, existeConfig, type Config } from "../lib/config.ts";
 import { detectar } from "../lib/detectar.ts";
@@ -119,8 +119,8 @@ export async function init(o: OpcionesInit) {
   const inicioIa = Date.now();
   let enCurso: Promise<ResultadoExploracion> | undefined;
   if (comandoAgente && !o.profundo) {
-    enCurso = explorarRapido(repo, comandoRapido(comandoAgente), deteccion)
-      .catch((e): ResultadoExploracion => ({ ok: false, errores: [(e as Error).message], salida: "" }));
+    // En un proceso aparte, desacoplado de la terminal: el agente no puede interferir con las preguntas.
+    enCurso = explorarRapidoAislado(repo, comandoRapido(comandoAgente), deteccion).resultado;
     p.log.step(`${comandoAgente.split(" ")[0]} está analizando el stack en segundo plano; mientras tanto, sigamos.`);
   } else if (comandoAgente) {
     stack = (await explorarAFondo(repo, comandoAgente, deteccion)) ?? stack;
@@ -132,7 +132,7 @@ export async function init(o: OpcionesInit) {
   if (!o.sinOpenspec) openspecCfg = await prepararOpenSpec(repo, agentes.map((a) => a.id), o.herramientas, yes);
   const rama = await texto("Rama base del repo (para ramas y PRs)", ramaBase(repo), yes);
 
-  // Datos del proceso para .orqen/.env (también mientras el agente trabaja)
+  // Datos del proceso para orqen/.env (también mientras el agente trabaja)
   const datosEnv = await pedirEnv(repo, yes);
 
   // 4. Propuesta del agente + confirmar / ajustar
@@ -173,7 +173,7 @@ export async function init(o: OpcionesInit) {
   escribirConfig(repo, config);
   const res = await aplicar(repo, plan, (c) => resolverConflicto(c, yes));
   if (datosEnv) {
-    escribirEnv(repo, readFileSync(join(repo, ".orqen", ".env.example"), "utf8"), datosEnv);
+    escribirEnv(repo, readFileSync(join(repo, "orqen", ".env.example"), "utf8"), datosEnv);
     p.log.success(`${RUTA_ENV} generado ${gris("(no se commitea)")}`);
   }
   const env = leerEnv(repo) ?? {};
@@ -185,16 +185,16 @@ export async function init(o: OpcionesInit) {
   const mk = marketplace(existsSync(join(repo, MARKETPLACE)) ? readFileSync(join(repo, MARKETPLACE), "utf8") : undefined).nombre;
   const pasos = [
     ...(faltanEnv.length ? [`Completá ${pc.cyan(RUTA_ENV)}: falta ${faltanEnv.join(", ")}. No se commitea.`] : []),
-    `Revisá ${pc.cyan(ARCHIVO_CONFIG)} y ${pc.cyan(ARCHIVO_COMPOSE)}, y probá: ${pc.cyan("orqen entorno levantar")} · ${pc.cyan("orqen entorno tests")}`,
+    `Revisá ${pc.cyan(ARCHIVO_CONFIG)} y ${pc.cyan(ARCHIVO_COMPOSE)}, y probá: ${pc.cyan("orqen env up")} · ${pc.cyan("orqen env test")}`,
     `En Claude Code: ${pc.cyan("/plugin marketplace add ./")} y ${pc.cyan(`/plugin install orqen@${mk}`)}`,
-    `Commiteá los cambios (orqen.yaml, compose, AGENTS.md, .orqen/, openspec/).`,
+    `Commiteá los cambios (orqen/config.yaml, compose, AGENTS.md, orqen/, openspec/).`,
   ];
   p.note(pasos.map((x, i) => `${pc.bold(`${i + 1}.`)} ${x}`).join("\n"), "Próximos pasos");
   p.outro(`${magenta("//")} ${pc.bold("Del requerimiento a producción.")}`);
 }
 
 /**
- * Pide los datos de .orqen/.env (Jira, SIS, aprobadores). Devuelve los valores a escribir, o undefined si
+ * Pide los datos de orqen/.env (Jira, SIS, aprobadores). Devuelve los valores a escribir, o undefined si
  * hay que dejar el .env como está (ya existe y la persona no lo quiere tocar).
  * Con --yes no pregunta: si no hay .env se genera con los valores de ejemplo.
  */
@@ -321,13 +321,13 @@ function resumenPlan(plan: Cambio[], config: Config): string {
   const icono: Record<string, string> = { crear: pc.green("+"), actualizar: pc.yellow("~"), igual: gris("="), conflicto: pc.red("!") };
   const filas = [
     `${pc.green("+")} ${ARCHIVO_CONFIG}`,
-    ...plan.filter((c) => c.accion !== "igual" && !c.ruta.startsWith(".orqen/etapas/") && !c.ruta.startsWith(".orqen/plugin/"))
+    ...plan.filter((c) => c.accion !== "igual" && !c.ruta.startsWith("orqen/stages/") && !c.ruta.startsWith("orqen/plugin/"))
       .map((c) => `${icono[c.accion]} ${c.ruta}${c.accion === "conflicto" ? pc.red("  (lo editaste: te pregunto)") : ""}`),
   ];
-  const etapas = plan.filter((c) => c.ruta.startsWith(".orqen/etapas/") && c.accion !== "igual").length;
-  const plugin = plan.filter((c) => c.ruta.startsWith(".orqen/plugin/") && c.accion !== "igual").length;
-  if (etapas) filas.push(`${pc.green("+")} .orqen/etapas/ ${gris(`(${etapas} guías de etapa)`)}`);
-  if (plugin) filas.push(`${pc.green("+")} .orqen/plugin/ ${gris(`(${plugin} archivos del plugin de Claude Code)`)}`);
+  const etapas = plan.filter((c) => c.ruta.startsWith("orqen/stages/") && c.accion !== "igual").length;
+  const plugin = plan.filter((c) => c.ruta.startsWith("orqen/plugin/") && c.accion !== "igual").length;
+  if (etapas) filas.push(`${pc.green("+")} orqen/stages/ ${gris(`(${etapas} guías de etapa)`)}`);
+  if (plugin) filas.push(`${pc.green("+")} orqen/plugin/ ${gris(`(${plugin} archivos del plugin de Claude Code)`)}`);
   filas.push("", gris(`Entornos: ${config.stack.servicios.length} servicio(s) · tests: ${Object.entries(config.entornos.tests).filter(([, v]) => v).map(([k]) => k).join(", ") || "ninguno"}`));
   return filas.join("\n");
 }

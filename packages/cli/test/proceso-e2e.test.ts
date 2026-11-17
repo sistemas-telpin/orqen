@@ -8,14 +8,16 @@ import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { REC_DIR, cargarConfig } from "../scripts/config.ts";
-import { OpenSpecCli } from "../scripts/openspec.ts";
-import { Proceso } from "../scripts/proceso.ts";
-import { Store } from "../scripts/store.ts";
-import { GitWorkspace } from "../scripts/workspace.ts";
+import { fileURLToPath } from "node:url";
+import { DIR_PLANTILLAS } from "orqen-kit";
+import { cargarConfig } from "../src/proceso/config.ts";
+import { OpenSpecCli } from "../src/proceso/openspec.ts";
+import { Proceso } from "../src/proceso/proceso.ts";
+import { Store } from "../src/proceso/store.ts";
+import { GitWorkspace } from "../src/proceso/workspace.ts";
 import { FakeJira } from "./fakes.ts";
 
-const OPENSPEC = join(REC_DIR, "node_modules", ".bin", "openspec");
+const OPENSPEC = fileURLToPath(new URL(`../node_modules/.bin/openspec${process.platform === "win32" ? ".cmd" : ""}`, import.meta.url));
 
 function repoTemporal() {
   const dir = mkdtempSync(join(tmpdir(), "rec-e2e-"));
@@ -24,7 +26,7 @@ function repoTemporal() {
   git("config", "user.email", "t@t"); git("config", "user.name", "t");
   mkdirSync(join(dir, "openspec", "specs"), { recursive: true });
   mkdirSync(join(dir, "openspec", "changes", "archive"), { recursive: true });
-  cpSync(join(REC_DIR, "..", "openspec", "config.yaml"), join(dir, "openspec", "config.yaml"));
+  cpSync(join(DIR_PLANTILLAS, "openspec", "config.yaml"), join(dir, "openspec", "config.yaml"));
   writeFileSync(join(dir, "openspec", "specs", ".gitkeep"), "");
   writeFileSync(join(dir, "openspec", "changes", "archive", ".gitkeep"), "");
   writeFileSync(join(dir, "exportar.mjs"), "export const exportar = () => '';\n");
@@ -50,7 +52,7 @@ test("REC completo con OpenSpec real", { skip: !existsSync(OPENSPEC) && "falta o
   await p.analizar("REC-7", "analista-bot", "Ana");
   assert.equal(git("rev-parse", "--abbrev-ref", "HEAD").trim(), "main");   // el grilling no toca la rama
 
-  // carril completo: `rec carril` crea rama + change de OpenSpec
+  // carril completo: `orqen lane` crea rama + change de OpenSpec
   const c = await p.carril("REC-7", "completo", "analista-bot");
   const cambio = c.openspec!.cambio;
   assert.equal(cambio, "rec-7-exportar-facturas-csv");
@@ -88,14 +90,14 @@ test("REC completo con OpenSpec real", { skip: !existsSync(OPENSPEC) && "falta o
   assert.match(jira.coms["REC-7"].map((x) => x.cuerpo).join("\n"), /3 h estimadas/);
   assert.match(git("log", "--format=%s"), /spec OpenSpec/);
 
-  // ---- factory/REC-7 quedó commiteado en la rama y el árbol limpio (se puede cambiar de rama)
-  const tracked = git("ls-files", "factory/REC-7").split("\n");
-  assert.ok(tracked.includes("factory/REC-7/ronda-1/analisis.md"));
-  assert.ok(tracked.includes("factory/REC-7/bitacora.md"));
-  assert.ok(tracked.includes("factory/REC-7/estado.json"));
+  // ---- orqen/work/REC-7 quedó commiteado en la rama y el árbol limpio (se puede cambiar de rama)
+  const tracked = git("ls-files", "orqen/work/REC-7").split("\n");
+  assert.ok(tracked.includes("orqen/work/REC-7/ronda-1/analisis.md"));
+  assert.ok(tracked.includes("orqen/work/REC-7/bitacora.md"));
+  assert.ok(tracked.includes("orqen/work/REC-7/estado.json"));
   assert.equal(git("status", "--porcelain", "--untracked-files=no").trim(), "");
-  assert.match(readFileSync(join(dir, "factory", "REC-7", "ronda-1", "analisis.md"), "utf8"), /Excel queda fuera/);
-  assert.equal(JSON.parse(readFileSync(join(dir, "factory", "REC-7", "estado.json"), "utf8")).estado, "DESARROLLO");
+  assert.match(readFileSync(join(dir, "orqen", "work", "REC-7", "ronda-1", "analisis.md"), "utf8"), /Excel queda fuera/);
+  assert.equal(JSON.parse(readFileSync(join(dir, "orqen", "work", "REC-7", "estado.json"), "utf8")).estado, "DESARROLLO");
 
   // ---- al cerrar el análisis nace el SIS, vinculado al REC
   assert.equal(jira.creados.length, 1);

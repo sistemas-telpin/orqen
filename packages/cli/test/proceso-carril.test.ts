@@ -4,12 +4,12 @@ import { existsSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { cargarConfig } from "../scripts/config.ts";
-import type { OpenSpecApi } from "../scripts/openspec.ts";
-import { Proceso } from "../scripts/proceso.ts";
-import { revisarSql } from "../scripts/sql.ts";
-import { Store } from "../scripts/store.ts";
-import type { Workspace } from "../scripts/workspace.ts";
+import { cargarConfig } from "../src/proceso/config.ts";
+import type { OpenSpecApi } from "../src/proceso/openspec.ts";
+import { Proceso } from "../src/proceso/proceso.ts";
+import { revisarSql } from "../src/proceso/sql.ts";
+import { Store } from "../src/proceso/store.ts";
+import type { Workspace } from "../src/proceso/workspace.ts";
 import { FakeJira } from "./fakes.ts";
 
 const fakeOs: OpenSpecApi = {
@@ -75,7 +75,7 @@ test("carril operativo completo: SIS al cerrar el análisis, sin rama, con aprob
   jira.humano("REC-1", "pm", "/aprobar");                     // no es aprobador de ejecución
   await p.revisar();
   assert.equal(est().estado, "APROBACION_EJECUCION");
-  jira.humano("REC-1", "dba", "/aprobar");
+  jira.humano("REC-1", "dba", "/approve");
   await p.revisar();
   assert.equal(est().estado, "APLICACION");
   assert.equal(jira.creados.length, 1);                       // no se crea otro SIS al autorizar

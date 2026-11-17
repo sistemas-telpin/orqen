@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { existsSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
-import { comandoRapido, explorarConAgente, explorarRapido, extraerJson, promptExploracion } from "../src/lib/agente.ts";
+import { comandoRapido, explorarConAgente, explorarRapido, explorarRapidoAislado, extraerJson, promptExploracion } from "../src/lib/agente.ts";
 import { resumenComoTexto, resumirRepo } from "../src/lib/resumen-repo.ts";
 import { escena, logo } from "../src/ui/logo.ts";
 import { detectar } from "../src/lib/detectar.ts";
@@ -23,7 +23,7 @@ const reintento = prompt.includes("no pasó la validación");
 const salida = modo === "malo" || (modo === "malo-despues-bueno" && !reintento) ? malo : bueno;
 if (!prompt.includes("JSON Schema")) process.exit(3);
 if (modo === "stdout") console.log("Listo:\\n\`\`\`json\\n" + JSON.stringify(salida) + "\\n\`\`\`");
-else writeFileSync(".orqen/tmp/stack-propuesto.json", JSON.stringify(salida));
+else writeFileSync("orqen/tmp/stack-propuesto.json", JSON.stringify(salida));
 `);
   return `node "${script}"`;
 }
@@ -84,7 +84,7 @@ console.log(JSON.stringify({ resumen: ok ? "con resumen" : "sin resumen", servic
   const r = await explorarRapido(repo, `node "${script}"`, detectar(repo));
   assert.ok(r.ok, r.errores.join("; "));
   assert.equal(r.stack!.resumen, "con resumen");
-  assert.ok(!existsSync(join(repo, ".orqen")), "no deja nada en el repo");
+  assert.ok(!existsSync(join(repo, "orqen")), "no deja nada en el repo");
   assert.equal(comandoRapido("claude -p --permission-mode acceptEdits"), "claude -p --model haiku");
   assert.equal(comandoRapido("mi-agente --x"), "mi-agente --x");
 });
@@ -127,4 +127,22 @@ test("logo: la escena animada tiene estructura estable, se mueve en loop y el es
   assert.ok(logo(true, 120).split("\n").every((l) => [...limpio(l)].length <= 90));
   assert.match(logo(false), /A U T O N O M O U S/);
   assert.match(logo(true, 80), /██████╗/);
+});
+
+test("análisis aislado: corre en otro proceso sin compartir la terminal y devuelve el resultado", async () => {
+  const repo = repoTemporal(MONOREPO);
+  const script = join(repo, "..", `aislado-${Date.now()}.mjs`);
+  writeFileSync(script, `
+import { readFileSync } from "node:fs";
+const prompt = readFileSync(0, "utf8");
+console.log(JSON.stringify({ resumen: process.stdin.isTTY ? "con tty" : "aislado", servicios: [{ nombre: "db", tipo: "postgres" }] }));
+`);
+  const { resultado } = explorarRapidoAislado(repo, `node "${script}"`, detectar(repo));
+  const r = await resultado;
+  assert.ok(r.ok, r.errores.join("; "));
+  assert.equal(r.stack!.resumen, "aislado");
+  assert.ok(!existsSync(join(repo, "orqen")));
+
+  const c = explorarRapidoAislado(repo, `node -e "setTimeout(()=>{}, 60000)"`, detectar(repo));
+  c.cancelar();   // no queda colgado ni deja procesos
 });

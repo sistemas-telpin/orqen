@@ -86,8 +86,8 @@ export function generarCompose(stack: Stack, nombreProyecto: string): string {
   }
   const cabecera = [
     "# Generado por `orqen init`. Entornos para que los agentes corran el proyecto y sus tests sin intervención.",
-    "#   orqen entorno levantar            → servicios (DB, colas...) con healthcheck",
-    `#   orqen entorno levantar --apps     → además las apps (perfil "${PERFIL_APPS}"), para e2e / visual`,
+    "#   orqen env up            → servicios (DB, colas...) con healthcheck",
+    `#   orqen env up --apps     → además las apps (perfil "${PERFIL_APPS}"), para e2e / visual`,
     "# Podés editarlo: `orqen update` no lo pisa sin preguntarte.",
     ...(sinApp.length ? [`# Sin contenedor (se corren en la máquina): ${sinApp.join(", ")}`] : []),
     "",

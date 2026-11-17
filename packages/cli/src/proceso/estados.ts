@@ -2,7 +2,7 @@
  * Máquina de estados del REC. El FLUJO lo decide este código; el agente (cualquiera:
  * Claude Code, Codex, Cursor, Copilot...) solo produce contenido en cada etapa.
  *
- * El ANALISIS es el único tramo conducido por una persona (el analista, vía `/orqen:analizar`): al cerrarse
+ * El ANALISIS es el único tramo conducido por una persona (el analista, vía `/orqen:analyze`): al cerrarse
  * con el OK del analista ya están decididos el carril, la spec (si corresponde) y el SIS.
  */
 export const Estado = {

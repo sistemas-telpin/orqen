@@ -1,11 +1,11 @@
 /**
- * .orqen/.env: credenciales y datos del proceso (Jira, SIS, aprobadores). No se commitea.
- * `orqen init` lo genera a partir de .orqen/.env.example con lo que la persona contesta.
+ * orqen/.env: credenciales y datos del proceso (Jira, SIS, aprobadores). No se commitea.
+ * `orqen init` lo genera a partir de orqen/.env.example con lo que la persona contesta.
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
-export const RUTA_ENV = ".orqen/.env";
+export const RUTA_ENV = "orqen/.env";
 
 const LINEA = /^([A-Z][A-Z0-9_]*)=(.*)$/;
 

@@ -1,6 +1,6 @@
 ## Etapa ENTREGA — notas y mensaje al cliente
 
-Si el REC tuvo spec (carriles liviano/completo), el proceso ya archivó el change (`openspec archive`): los deltas se fusionaron en `openspec/specs/` y el change quedó en `openspec.dir`. En el carril directo no hay change: la referencia es `factory/<KEY>/` y `etapas_previas.ANALISIS`.
+Si el REC tuvo spec (carriles liviano/completo), el proceso ya archivó el change (`openspec archive`): los deltas se fusionaron en `openspec/specs/` y el change quedó en `openspec.dir`. En el carril directo no hay change: la referencia es `orqen/work/<KEY>/` y `etapas_previas.ANALISIS`.
 
 1. Leé el resumen de desarrollo en `etapas_previas` y, si hay change, proposal/specs/tasks archivados.
 2. `notas_release`: técnicas, para el equipo (cambios, migraciones, flags, riesgos).

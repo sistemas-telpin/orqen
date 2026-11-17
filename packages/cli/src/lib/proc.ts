@@ -52,7 +52,7 @@ export function ejecutarAsync(cmd: string, args: string[], o: OpcionesEjecutar =
   });
 }
 
-/** Corre una línea de comando del usuario (orqen.yaml) con la shell del sistema: cmd.exe en Windows, sh en el resto. */
+/** Corre una línea de comando del usuario (orqen/config.yaml) con la shell del sistema: cmd.exe en Windows, sh en el resto. */
 export function ejecutarLinea(linea: string, o: OpcionesEjecutar = {}): Promise<number> {
   return new Promise((resolve) => {
     const opts: SpawnOptions = { cwd: o.cwd, env: o.env ?? process.env, shell: true, stdio: "inherit", windowsHide: true };

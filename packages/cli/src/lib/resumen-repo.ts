@@ -8,7 +8,7 @@ import { join, relative } from "node:path";
 
 const IGNORAR = new Set([
   "node_modules", ".git", "dist", "build", "out", "target", "vendor", ".venv", "venv", "__pycache__", ".next", ".nuxt",
-  ".turbo", ".gradle", ".idea", ".vscode", "obj", "coverage", ".orqen", "factory", ".agents", ".claude", "lib", "libs",
+  ".turbo", ".gradle", ".idea", ".vscode", "obj", "coverage", "orqen", "factory", ".agents", ".claude", "lib", "libs",
   "classes", "logs", "tmp", "temp", ".cache", "screenshots", "videos",
 ]);
 

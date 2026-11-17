@@ -1,7 +1,7 @@
 /**
  * Instala / actualiza el kit de orqen en un repo sin pisar lo que el equipo personalizó.
  *
- * Cada archivo administrado se registra en .orqen/manifest.json con el hash de lo que orqen escribió.
+ * Cada archivo administrado se registra en orqen/manifest.json con el hash de lo que orqen escribió.
  * Al actualizar:
  *  - si el archivo no existe → se crea;
  *  - si su contenido es igual al nuevo → nada;
@@ -16,11 +16,11 @@ import { dirname, join, relative } from "node:path";
 import { DIR_PLANTILLAS, VERSION_KIT } from "orqen-kit";
 import { fusionarConfigOpenSpec } from "./openspec.ts";
 
-export const DIR_ORQEN = ".orqen";
-export const ARCHIVO_MANIFEST = ".orqen/manifest.json";
+export const DIR_ORQEN = "orqen";
+export const ARCHIVO_MANIFEST = "orqen/manifest.json";
 export const INICIO_BLOQUE = "<!-- orqen:inicio — bloque administrado por orqen (`orqen update` lo actualiza; editá fuera del bloque) -->";
 export const FIN_BLOQUE = "<!-- orqen:fin -->";
-export const IGNORAR_GIT = [".orqen/estado/", ".orqen/tmp/", ".orqen/.env"];
+export const IGNORAR_GIT = ["orqen/state/", "orqen/tmp/", "orqen/.env"];
 
 export interface Manifest { kit: string; archivos: Record<string, string> }
 export interface VariablesKit { RESUMEN_STACK: string; RAMA_BASE: string; AGENTE_CMD: string }
@@ -75,8 +75,9 @@ function listar(dir: string): string[] {
 /** Archivos completos que vienen del kit: ruta en el repo → contenido. */
 export function archivosDelKit(vars: VariablesKit): Record<string, string> {
   const out: Record<string, string> = {};
-  for (const f of listar(join(DIR_PLANTILLAS, "etapas"))) out[`${DIR_ORQEN}/etapas/${f}`] = render(readFileSync(join(DIR_PLANTILLAS, "etapas", f), "utf8"), vars);
+  for (const f of listar(join(DIR_PLANTILLAS, "etapas"))) out[`${DIR_ORQEN}/stages/${f}`] = render(readFileSync(join(DIR_PLANTILLAS, "etapas", f), "utf8"), vars);
   for (const f of listar(join(DIR_PLANTILLAS, "plugin"))) out[`${DIR_ORQEN}/plugin/${f}`] = render(readFileSync(join(DIR_PLANTILLAS, "plugin", f), "utf8"), vars);
+  out[`${DIR_ORQEN}/work/README.md`] = render(readFileSync(join(DIR_PLANTILLAS, "work", "README.md"), "utf8"), vars);
   out[`${DIR_ORQEN}/.env.example`] = render(readFileSync(join(DIR_PLANTILLAS, "env.example"), "utf8"), vars);
   return out;
 }
@@ -125,7 +126,7 @@ export function marketplace(actual: string | undefined): { texto: string; nombre
   j.plugins = Array.isArray(j.plugins) ? j.plugins : [];
   const entrada = {
     name: "orqen", source: `./${DIR_ORQEN}/plugin`,
-    description: "ORQEN: /orqen:analizar (grilling con el analista, carril, spec, SIS) y /orqen:implementar",
+    description: "ORQEN: /orqen:analyze (grilling con el analista, carril, spec, SIS) y /orqen:implement",
   };
   const i = j.plugins.findIndex((p: any) => p?.name === "orqen");
   if (i >= 0) j.plugins[i] = { ...j.plugins[i], ...entrada }; else j.plugins.push(entrada);
@@ -223,7 +224,7 @@ export async function aplicar(
   manifest.kit = VERSION_KIT;
   escribir(repo, ARCHIVO_MANIFEST, JSON.stringify(manifest, null, 2) + "\n");
 
-  // .orqen/.env local (ignorado por git) a partir del ejemplo
+  // orqen/.env local (ignorado por git) a partir del ejemplo
   const env = join(repo, DIR_ORQEN, ".env"), ejemplo = join(repo, DIR_ORQEN, ".env.example");
   if (!existsSync(env) && existsSync(ejemplo)) writeFileSync(env, readFileSync(ejemplo, "utf8"));
   return out;

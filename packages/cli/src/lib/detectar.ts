@@ -9,7 +9,7 @@ import { Stack, type Componente, type Servicio } from "./stack.ts";
 
 const IGNORAR = new Set([
   "node_modules", ".git", "dist", "build", "out", "target", "vendor", ".venv", "venv", "__pycache__",
-  ".next", ".nuxt", ".turbo", ".gradle", ".idea", ".vscode", "bin", "obj", "coverage", ".orqen", "openspec", "factory",
+  ".next", ".nuxt", ".turbo", ".gradle", ".idea", ".vscode", "bin", "obj", "coverage", "orqen", "openspec", "factory",
 ]);
 const PROFUNDIDAD = 3;
 

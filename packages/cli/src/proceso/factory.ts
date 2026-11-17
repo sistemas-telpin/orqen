@@ -1,7 +1,7 @@
 /**
- * Registro del proceso dentro del repo: factory/<KEY>/
+ * Registro del proceso dentro del repo: orqen/work/<KEY>/
  *
- *   estado.json                  proyección del estado actual (la fuente de verdad operativa es rec/.estado)
+ *   estado.json                  proyección del estado actual (la fuente de verdad operativa es orqen/state)
  *   bitacora.md                  una línea por transición
  *   ronda-N/analisis.md|json     lo que se decidió en el grilling: resumen, criterios, decisiones, carril, SIS
  *   ronda-N/ejecucion/           script, pasos, rollback y verificación del carril operativo
@@ -20,7 +20,7 @@ export class Factory {
   rondaDir = (key: string, ronda: number) => join(this.dir, key, `ronda-${ronda}`);
 
   private seguro(fn: () => void) {
-    try { fn(); } catch (e) { console.error(`[rec] aviso: no pude escribir en factory/: ${(e as Error).message}`); }
+    try { fn(); } catch (e) { console.error(`[orqen] aviso: no pude escribir en orqen/work/: ${(e as Error).message}`); }
   }
 
   /** Escribe `ronda-N/<archivo>` (crea los directorios). */
@@ -39,7 +39,7 @@ export class Factory {
       appendFileSync(join(this.dirDe(rec.key), "bitacora.md"),
         `- ${new Date().toISOString()} · ${desde} → ${hacia}${detalle ? ` · ${detalle.replace(/\s+/g, " ")}` : ""}${agente ? ` · (${agente})` : ""}\n`);
       writeFileSync(join(this.dirDe(rec.key), "estado.json"), JSON.stringify({
-        _nota: "Proyección informativa generada por `rec`. La fuente de verdad es rec/.estado.",
+        _nota: "Proyección informativa generada por `orqen`. La fuente de verdad es orqen/state.",
         key: rec.key, estado: hacia, ronda: rec.ronda, via: rec.via, carril: rec.carril, analista: rec.analista,
         sis: rec.sis, rama: rec.rama || undefined, cambio: rec.cambio || undefined,
         actualizado: new Date().toISOString(),

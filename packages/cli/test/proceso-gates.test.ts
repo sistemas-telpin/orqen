@@ -4,11 +4,11 @@ import { existsSync, mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { cargarConfig } from "../scripts/config.ts";
-import type { OpenSpecApi } from "../scripts/openspec.ts";
-import { Proceso, nombreCambio } from "../scripts/proceso.ts";
-import { Store } from "../scripts/store.ts";
-import type { Workspace } from "../scripts/workspace.ts";
+import { cargarConfig } from "../src/proceso/config.ts";
+import type { OpenSpecApi } from "../src/proceso/openspec.ts";
+import { Proceso, nombreCambio } from "../src/proceso/proceso.ts";
+import { Store } from "../src/proceso/store.ts";
+import type { Workspace } from "../src/proceso/workspace.ts";
 import { FakeJira } from "./fakes.ts";
 
 const fakeOs: OpenSpecApi = {
@@ -85,7 +85,7 @@ test("analista: preguntas al cliente, OK obligatorio, carril directo, SIS y fact
 
   const { contexto } = await p.analizar("REC-1", "codex", "Ana");
   assert.deepEqual(contexto.feedback_humano, [{ de: "cliente", texto: "CSV" }]);
-  assert.equal(contexto.factory, "factory/REC-1/ronda-1");
+  assert.equal(contexto.factory, "orqen/work/REC-1/ronda-1");
 
   assert.deepEqual(await p.carril("REC-1", "directo", "codex"), { carril: "directo", openspec: undefined, rama: undefined });
   assert.deepEqual(await p.completar("REC-1", ANALISIS_OK(), "codex"), { ok: true, siguiente: "DESARROLLO" });
@@ -102,7 +102,7 @@ test("analista: preguntas al cliente, OK obligatorio, carril directo, SIS y fact
   assert.equal(est().sis, "SIS-1");
   assert.match(jira.coms["REC-1"].map((c) => c.cuerpo).join("\n"), /Creé SIS-1/);
 
-  // registro en factory/REC-1
+  // registro en orqen/work/REC-1
   const f = join(cfg.factoryDir, "REC-1");
   const md = readFileSync(join(f, "ronda-1", "analisis.md"), "utf8");
   assert.match(md, /Analista:\*\* Ana/);
@@ -115,7 +115,7 @@ test("analista: preguntas al cliente, OK obligatorio, carril directo, SIS y fact
   assert.match(readFileSync(join(f, "bitacora.md"), "utf8"), /ANALISIS → DESARROLLO/);
 });
 
-test("carril liviano: exige `rec carril` y que el change coincida", async () => {
+test("carril liviano: exige `orqen lane` y que el change coincida", async () => {
   const { p, jira, est } = armar();
   await p.analizar("REC-1", "codex", "Ana");
   const spec = { cambio: "rec-1-algo", resumen: "Resumen de la propuesta.", supuestos: ["s"] };
@@ -123,8 +123,8 @@ test("carril liviano: exige `rec carril` y que el change coincida", async () => 
 
   let r = await p.completar("REC-1", liviano({ especificacion: undefined }), "codex");
   assert.match((r as any).errores.join(), /necesitan la spec/);
-  r = await p.completar("REC-1", liviano(), "codex");                    // no corrió `rec carril`
-  assert.match((r as any).errores.join(), /rec carril REC-1 liviano/);
+  r = await p.completar("REC-1", liviano(), "codex");                    // no corrió `orqen lane`
+  assert.match((r as any).errores.join(), /orqen lane REC-1 liviano/);
   await assert.rejects(p.carril("REC-1", "gigante", "codex"), /Carril inválido/);
 
   assert.deepEqual(await p.carril("REC-1", "liviano", "codex"),

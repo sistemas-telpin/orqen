@@ -1,0 +1,44 @@
+{
+  "name": "orqen",
+  "version": "0.1.0",
+  "description": "ORQEN — orquestación multiagente sobre OpenSpec. Del requerimiento a producción.",
+  "type": "module",
+  "bin": {
+    "orqen": "dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=20.12"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "dev": "tsx src/index.ts",
+    "build": "tsc -p tsconfig.build.json",
+    "test": "node --import tsx --test test/*.test.ts",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "pnpm build"
+  },
+  "dependencies": {
+    "@clack/prompts": "^1.9.0",
+    "orqen-kit": "workspace:*",
+    "cross-spawn": "^7.0.6",
+    "diff": "^9.0.0",
+    "picocolors": "^1.1.1",
+    "semver": "^7.8.6",
+    "yaml": "^2.9.1",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/cross-spawn": "^6.0.6",
+    "@types/node": "^24.0.0",
+    "@types/semver": "^7.7.0",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2"
+  },
+  "license": "UNLICENSED",
+  "author": "Telpin"
+}

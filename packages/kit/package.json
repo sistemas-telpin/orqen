@@ -1,0 +1,23 @@
+{
+  "name": "orqen-kit",
+  "version": "0.1.0",
+  "description": "Plantillas que orqen instala en cada repo: AGENTS.md, guías de etapas, plugin de Claude Code y reglas de OpenSpec",
+  "type": "module",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "files": [
+    "index.js",
+    "index.d.ts",
+    "plantillas"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "node -e 0",
+    "test": "node -e 0",
+    "typecheck": "node -e 0"
+  },
+  "license": "UNLICENSED",
+  "author": "Telpin"
+}

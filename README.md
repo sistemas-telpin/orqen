@@ -136,7 +136,24 @@ Desaparecieron los gates `APROBACION_ANALISIS` y `APROBACION_SPEC`: el OK del an
 Si se agotan los reintentos o hay un error, el REC pasa a **BLOQUEADO**. Una persona destraba con `/aprobar <indicaciones>`
 (`APROBADORES_ANALISIS` + `APROBADORES_CODIGO`).
 
-## Instalación en un repo
+## CLI `orqen` (init / update)
+
+Monorepo pnpm con dos paquetes:
+
+- **`packages/cli`** (`orqen`): el binario `orqen`. Detalle en [`packages/cli/README.md`](packages/cli/README.md).
+- **`packages/kit`** (`orqen-kit`): las plantillas que se instalan en cada repo (AGENTS.md, guías de etapas, plugin, reglas de OpenSpec).
+
+```sh
+pnpm add -g orqen      # paquete público de npm
+cd mi-repo
+orqen init                     # logo, chequeos, stack + entornos (detección + agente de IA), OpenSpec y kit
+orqen update                   # actualiza la CLI, OpenSpec y el kit sin pisar lo que editó el equipo
+orqen entorno levantar         # lo usan los agentes: docker compose + migraciones; después `orqen entorno tests`
+```
+
+Los comandos del proceso (`analizar`, `carril`, `tomar`, `completar`, `ciclo`…) siguen en `rec/` hasta que se migren a `orqen`.
+
+## Instalación manual (sin la CLI)
 
 ```sh
 # 1. copiar AGENTS.md (o fusionarlo con el existente), CLAUDE.md, rec/ y orqen/ en la raíz del repo

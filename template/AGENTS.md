@@ -60,6 +60,13 @@ La especificación se hace con **OpenSpec**: en los carriles liviano y completo 
 4. Una etapa por vez: después de `complete`, terminá. No sigas con la etapa siguiente aunque esté disponible.
 5. Si no podés avanzar: `./cli/bin/orqen block <KEY> "motivo concreto"`.
 
+### Revisión de e2e (`/orqen:e2e-review SIS-3312`)
+
+Los tests e2e que generaste en DEVELOPMENT los valida **visualmente el diseñador de testing e2e** (una persona). Con el REC en `TESTING`
+o `CODE_REVIEW`, mapeás cada Scenario / criterio de aceptación contra los e2e de la rama, dejás listo el modo visual (headed, traza, video)
+con una guía de revisión y **esperás su aprobación**, con los ajustes que haga a mano. No es una etapa del flujo: no uses `take`, `complete`
+ni `block`. No edites los e2e por tu cuenta ni des la aprobación por la persona. Los ajustes los commitea la persona en la rama antes de que se abra el PR.
+
 ### Reglas
 
 - **Nunca** escribas en Jira (tampoco por MCP: el MCP es de solo lectura), ni hagas `git commit/push/checkout/reset/rebase`,

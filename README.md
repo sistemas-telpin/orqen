@@ -13,7 +13,7 @@ El análisis lo conduce un **analista** con el agente (`/orqen:analyze REC-1234`
 - **`AGENTS.md`**: lo que el agente lee. Explica el proceso y las reglas, y le dice que use la CLI `cli`.
 - **`cli/`**: CLI en TypeScript (Node ≥ 20.12) que maneja la máquina de estados, Jira, git, tests y OpenSpec.
   Es determinística: el agente produce contenido y `cli` decide el flujo.
-- **`orqen/`**: plugin de Claude Code con los comandos `/orqen:analyze` y `/orqen:implement`, y el skill `orqen:grilling`.
+- **`orqen/.agents`**: recursos para agentes con los comandos `/orqen:analyze`, `/orqen:implement` y `/orqen:e2e-review`, y el skill `orqen:grilling`.
 - **`orqen/work/<KEY>/`**: registro y estado de cada REC dentro del repo (lo escribe `orqen`).
 - **`openspec/config.yaml`**: reglas del proceso REC aplicadas a los artefactos de OpenSpec.
 
@@ -36,11 +36,11 @@ labels los hace `orqen` en `complete`, solo si el análisis tiene el OK del anal
 
 ### Carriles
 
-| Carril            | Cuándo (guía; ajustable en `cli/stages/analysis.md`)                                   | Qué se genera                                                                                            |
-| ----------------- | -------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| `direct`         | Un componente, ≲ 4 h, sin cambio de contrato, bajo riesgo                              | **Sin OpenSpec.** `plan` + criterios de aceptación en el análisis y el SIS. Testing contra los criterios |
-| `light`         | Comportamiento observable acotado, 1–2 capacidades, ≲ 2 días                           | Change de OpenSpec compacto: proposal + deltas + tasks (design mínimo)                                   |
-| `full`        | Varias capacidades, datos/integraciones, seguridad/facturación, > 2 días, arquitectura | Change completo: proposal + specs + design + tasks                                                       |
+| Carril                           | Cuándo (guía; ajustable en `cli/stages/analysis.md`)                                   | Qué se genera                                                                                            |
+| -------------------------------- | -------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| `direct`                         | Un componente, ≲ 4 h, sin cambio de contrato, bajo riesgo                              | **Sin OpenSpec.** `plan` + criterios de aceptación en el análisis y el SIS. Testing contra los criterios |
+| `light`                          | Comportamiento observable acotado, 1–2 capacidades, ≲ 2 días                           | Change de OpenSpec compacto: proposal + deltas + tasks (design mínimo)                                   |
+| `full`                           | Varias capacidades, datos/integraciones, seguridad/facturación, > 2 días, arquitectura | Change completo: proposal + specs + design + tasks                                                       |
 | operativa (`route: operational`) | Se resuelve sin cambiar código (SQL, datos, reinicio, config)                          | Sin spec ni rama; flujo EXECUTION → aprobación → aplicación → verificación                               |
 
 ### Qué queda en `orqen/work/REC-1234/`
@@ -85,6 +85,30 @@ Mismas reglas que el análisis: Jira de solo lectura para el agente, sin `git co
 y sin tocar `cli/.state/`, `orqen/work/` ni los scripts de `cli/`. Si el contexto trae un test fallido o un rechazo de revisión,
 se corrige eso primero.
 
+## Revisión de e2e: `/orqen:e2e-review SIS-3312`
+
+Los tests e2e se generan durante la implementación a partir de los Scenarios / criterios de aceptación. Este comando deja todo
+listo para que el **diseñador de testing e2e** (una persona) los valide **visualmente** y **espera su aprobación**, con los ajustes
+que haga a mano. No mueve el estado del REC (no hace `take` ni `complete`): se corre con el REC en `TESTING` o `CODE_REVIEW`,
+parado en la rama del REC, y acepta la key del SIS o la del REC.
+
+```mermaid
+flowchart TD
+    A["/orqen:e2e-review SIS-3312"] --> B["orqen status: ¿TESTING o CODE_REVIEW?<br/>¿rama del REC activa?"]
+    B -->|"no"| X(["Se explica la etapa y se corta"])
+    B -->|"sí"| C["Arma la lista de escenarios / criterios<br/>y los mapea contra los tests e2e de la rama"]
+    C --> D["Deja listo el modo visual<br/>(headed / trace / video) + guía de revisión"]
+    D --> E{"Diseñador e2e<br/>(revisa y ajusta a mano)"}
+    E -->|"ajustó"| F["Re-corre los e2e y revisa el diff<br/>(¿siguen cubriendo todo?)"] --> E
+    E -->|"rechaza"| R(["Qué corregir → DEVELOPMENT<br/>(lo decide una persona)"])
+    E -->|"aprueba explícito + corrida en verde"| G(["Resumen listo para el PR/SIS<br/>→ sigue CODE_REVIEW"])
+```
+
+El agente **no edita los tests**: señala observaciones (escenarios sin e2e, tests que no verifican el THEN, esperas fijas) y el
+diseñador decide. La aprobación la da la persona en la conversación; igual que el OK del analista, **`orqen` no puede comprobarla**
+(barrera de proceso, no de seguridad). Los ajustes quedan sin commitear: hay que commitearlos en la rama del REC **antes de que se abra el PR**
+(`orqen` abre el PR al aprobar `TESTING`).
+
 ## Flujo completo
 
 ```mermaid
@@ -123,15 +147,15 @@ Jira, git, PR y `openspec archive` los ejecuta solo `orqen`; el agente produce c
 Desaparecieron los gates `APROBACION_ANALISIS` y `APROBACION_SPEC`: el OK del analista en el grilling los reemplaza
 (y por eso `APPROVERS_SPEC` ya no existe).
 
-| Estado          | Quién             | Qué pasa                                                                                                   | OpenSpec                                                                                                                                                     |
-| --------------- | ----------------- | ---------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| ANALYSIS        | analista + agente | grilling → OK → carril → spec (si corresponde) → SIS vinculado al REC                                      | lee `openspec/specs`; liviano/completo: `orqen lane` crea el change y `orqen complete` exige `validate --strict`, artefactos completos y `(Nh)` en cada tarea |
-| WAITING_CLIENT  | cliente           | responde en Jira (máx. 3 rondas)                                                                           | —                                                                                                                                                            |
-| DEVELOPMENT      | agente            | implementa; con spec tilda `tasks.md`, en directo sigue el `plan`                                          | flujo _apply_; `orqen` rechaza si queda alguna tarea sin tildar                                                                                                |
-| TESTING         | `orqen` + agente    | `orqen` corre la suite y el agente mapea test ↔ **cada Scenario** (directo: cada **criterio de aceptación**) | si falta alguno, se rechaza                                                                                                                                  |
-| CODE_REVIEW | senior            | revisa el PR (cuerpo = `proposal.md`, o `analysis.md` en directo)                                          | —                                                                                                                                                            |
-| DELIVERY         | `orqen` + agente    | `orqen` archiva (si hubo spec) y el agente escribe notas y mensaje al cliente                                | `openspec archive` fusiona los deltas en `openspec/specs` dentro del mismo PR                                                                                |
-| ACCEPTANCE     | cliente           | `/approve` cierra; `/reject` abre la ronda 2 (vuelve a ANALYSIS: nuevo carril, change y SIS)             | nuevo change `…-r2`                                                                                                                                          |
+| Estado         | Quién             | Qué pasa                                                                                                     | OpenSpec                                                                                                                                                      |
+| -------------- | ----------------- | ------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| ANALYSIS       | analista + agente | grilling → OK → carril → spec (si corresponde) → SIS vinculado al REC                                        | lee `openspec/specs`; liviano/completo: `orqen lane` crea el change y `orqen complete` exige `validate --strict`, artefactos completos y `(Nh)` en cada tarea |
+| WAITING_CLIENT | cliente           | responde en Jira (máx. 3 rondas)                                                                             | —                                                                                                                                                             |
+| DEVELOPMENT    | agente            | implementa; con spec tilda `tasks.md`, en directo sigue el `plan`                                            | flujo _apply_; `orqen` rechaza si queda alguna tarea sin tildar                                                                                               |
+| TESTING        | `orqen` + agente  | `orqen` corre la suite y el agente mapea test ↔ **cada Scenario** (directo: cada **criterio de aceptación**) | si falta alguno, se rechaza                                                                                                                                   |
+| CODE_REVIEW    | senior            | revisa el PR (cuerpo = `proposal.md`, o `analysis.md` en directo)                                            | —                                                                                                                                                             |
+| DELIVERY       | `orqen` + agente  | `orqen` archiva (si hubo spec) y el agente escribe notas y mensaje al cliente                                | `openspec archive` fusiona los deltas en `openspec/specs` dentro del mismo PR                                                                                 |
+| ACCEPTANCE     | cliente           | `/approve` cierra; `/reject` abre la ronda 2 (vuelve a ANALYSIS: nuevo carril, change y SIS)                 | nuevo change `…-r2`                                                                                                                                           |
 
 Si se agotan los reintentos o hay un error, el REC pasa a **BLOCKED**. Una persona destraba con `/approve <indicaciones>`
 (`APPROVERS_ANALYSIS` + `APPROVERS_CODE`).
@@ -148,7 +172,7 @@ cp cli/.env.example cli/.env              # Jira, SIS, aprobadores, comando de t
 echo "cli/.state/" >> .gitignore         # orqen/work/ NO se ignora: es el registro versionado
 ```
 
-**Plugin para Claude Code** (da `/orqen:analyze`, `/orqen:implement` y el skill de grilling), una vez por analista:
+**Plugin para Claude Code** (da `/orqen:analyze`, `/orqen:implement`, `/orqen:e2e-review` y el skill de grilling), una vez por analista:
 
 ```
 /plugin marketplace add ./          # raíz de este repo (tiene .claude-plugin/marketplace.json); o la URL git del kit
@@ -166,6 +190,8 @@ las escrituras las hace `orqen` con `JIRA_TOKEN`. `openspec init --tools …` in
 
 **Implementación**: en Claude Code, `/orqen:implement SIS-442`. En otro agente: _"implementá el SIS-442"_ (`orqen status` → `orqen take` →
 apply de la spec o plan → `orqen complete`). `take`, `complete`, `status`, `block` y `release` aceptan la key del SIS o la del REC.
+
+**Validación de e2e**: en Claude Code, `/orqen:e2e-review SIS-3312`, a cargo del diseñador de testing e2e. En otro agente: _"preparame la revisión de e2e del SIS-3312"_ (el agente lee `AGENTS.md`).
 
 **Resto de las etapas, interactivo**: _"procesá el REC REC-123"_ → `orqen take` → trabaja → `orqen complete`.
 

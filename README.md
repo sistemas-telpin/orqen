@@ -12,6 +12,7 @@ Opcionalmente, una persona de **soporte** atiende primero el reclamo con el agen
 
 | Quién              | Qué corre                                                                                                        |
 | ------------------ | ---------------------------------------------------------------------------------------------------------------- |
+| Persona nueva      | `/orqen:tutorial`: recorrido guiado paso a paso por orqen en este repo (qué correr en cada etapa, cómo avanza un pedido, cómo mirar al agente y los entornos) |
 | Soporte (opcional) | `/orqen:support REC-1234`: busca la respuesta, la redacta para el cliente y, si no se puede resolver, escala al analista con un resumen |
 | Analista           | `/orqen:analyze REC-1234`: analiza el REC, elige el carril, escribe la spec si hace falta y crea el SIS en Jira   |
 | Agente             | `/orqen:implement SIS-442`: implementa la spec o el plan aprobado · `/orqen:pr SIS-442`: abre el PR a desarrollo |
@@ -25,10 +26,32 @@ Opcionalmente, una persona de **soporte** atiende primero el reclamo con el agen
 - **CLI `orqen`** (paquete npm, Node ≥ 20.12): maneja la máquina de estados, Jira, git, los PRs, los entornos de prueba y OpenSpec.
   Es determinística: el agente produce contenido y `orqen` decide el flujo.
 - **`AGENTS.md` / `CLAUDE.md`**: lo que lee el agente. Explican el proceso y las reglas, y le indican que use la CLI.
-- **Plugin de Claude Code** (`orqen/plugin/`): los comandos `/orqen:support`, `/orqen:analyze`, `/orqen:implement`, `/orqen:e2e-review`, `/orqen:pr` y `/orqen:code-review`, y el skill `orqen:grilling`.
+- **Plugin de Claude Code** (`orqen/plugin/`): los comandos `/orqen:tutorial`, `/orqen:support`, `/orqen:analyze`, `/orqen:implement`, `/orqen:e2e-review`, `/orqen:pr` y `/orqen:code-review`, y el skill `orqen:grilling`.
 - **`orqen/stages/`**: las guías de cada etapa (soporte, análisis, especificación, desarrollo, testing, entrega, ejecución y verificación). Se pueden editar.
 - **`orqen/work/<KEY>/`**: registro y estado de cada REC dentro del repo (lo escribe `orqen`).
 - **`openspec/config.yaml`**: reglas del proceso REC aplicadas a los artefactos de OpenSpec.
+
+## Tutorial para personas nuevas: `/orqen:tutorial`
+
+Con el repo ya inicializado (`orqen init`), quien recién llega abre Claude Code en la carpeta y corre `/orqen:tutorial`
+(o `/orqen:tutorial <tema>` para ir directo a uno: `map`, `pending`, `support`, `analysis`, `implement`, `testing`, `pr`, `review`,
+`delivery`, `watch`, `env`, `unattended`, `cheatsheet`). El agente arma un recorrido **paso a paso** con los datos reales del repo
+(procesos y puertos de `orqen/config.yaml`, proyectos de Jira, tipo de gate de code review) y, en cada paso, muestra el comando exacto,
+qué hace `orqen` por detrás, qué se va a ver y **cómo se pasa a la etapa siguiente**; después pregunta si seguir, probarlo o profundizar.
+
+1. **Bienvenida**: chequea que el repo esté inicializado, resume la configuración (sin mostrar secretos de `orqen/.env`) y pregunta el rol
+   (soporte, analista, desarrollo, diseño de e2e, senior o "todo") para proponer el camino.
+2. **El mapa**: estados, REC vs SIS, carriles y la idea clave: una etapa termina cuando `orqen complete` acepta la salida o una persona decide en un gate.
+3. **Qué hay pendiente**: `orqen pending`, `orqen status`, `orqen status <KEY>`.
+4. **Cada etapa**: `/orqen:support`, `/orqen:analyze`, `/orqen:implement`, testing, `/orqen:pr`, `/orqen:e2e-review`, `/orqen:code-review`, entrega, conformidad y BLOCKED.
+5. **Cómo mirar al agente**: en Claude Code (`Ctrl+O` muestra el detalle, `Esc` lo interrumpe), `orqen status <KEY>`, `orqen/work/<KEY>/log.md`,
+   `git status` / `git diff`, `tasks.md`, la salida de `orqen cycle` y `orqen/state/swarm/<run>/`.
+6. **Los entornos que levanta**: `orqen env status`, logs en `orqen/state/logs/<proceso>.log` (con el comando para seguirlos en PowerShell o bash),
+   URLs, `orqen/tools/db.mjs status`, `orqen env up | test | down`.
+7. **Machete** por rol (opcional, en `orqen/tmp/cheatsheet.md`, ignorado por git) y el comando para arrancar a trabajar.
+
+Es seguro: solo corre comandos de lectura (`status`, `pending`, `schema`, `env status`, `git status`…); `orqen env up/test/down` solo con el OK
+de la persona, y **nunca** toma ni completa un REC, ni escribe en Jira, git o GitHub: esos comandos los muestra y explica.
 
 ## Soporte (opcional): `/orqen:support REC-1234`
 
@@ -475,6 +498,8 @@ Los modelos son comandos headless, así que se puede usar cualquier agente: `--s
 `ORQEN_SWARM_PLANNER`). Con `{prompt}` en el comando, el prompt va como argumento en vez de stdin.
 
 ## Uso
+
+**Primera vez**: en Claude Code, `/orqen:tutorial`.
 
 **Soporte (opcional)**: en Claude Code, `/orqen:support REC-1234`. En otro agente: _"atendé el REC-1234 como soporte"_ (`orqen support` → búsqueda → `orqen complete`). Si resuelve, `orqen` publica la respuesta y el cliente confirma con `/approve` o `/reject <motivo>`; si escala, el analista parte del resumen. El analista también puede tomar un REC nuevo directo con `analyze`. `support` funciona aunque `SUPPORT_STAGE` esté en `off`: sirve para pasar un REC puntual por soporte sin cambiar el flujo del resto.
 

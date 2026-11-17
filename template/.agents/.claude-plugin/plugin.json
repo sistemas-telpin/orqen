@@ -1,6 +1,6 @@
 {
   "name": "orqen",
   "version": "0.1.0",
-  "description": "Handle customer requests with /orqen:support, analyze them with /orqen:analyze and implement approved plans or OpenSpec changes with /orqen:implement.",
+  "description": "Learn orqen with /orqen:tutorial, handle customer requests with /orqen:support, analyze them with /orqen:analyze and implement approved plans or OpenSpec changes with /orqen:implement.",
   "author": { "name": "Telpin" }
 }

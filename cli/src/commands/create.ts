@@ -174,7 +174,7 @@ export async function crearProyecto(o: OpcionesCreate) {
     `${pc.bold("1.")} ${pc.cyan(`cd ${dir}`)}`,
     `${pc.bold("2.")} ${pc.cyan("orqen env up")} ${gris("starts the database and the backend and runs the migrations (--all: also the frontend)")}`,
     `${pc.bold("3.")} ${pc.cyan("orqen env test")} ${gris("· orqen env down when you are done")}`,
-    `${pc.bold("4.")} ${gris("Push it to your Git remote and start working on requests: /orqen:analyze REC-1234")}`,
+    `${pc.bold("4.")} ${gris("Push it to your Git remote and start working on requests: /orqen:analyze REC-1234 (new to orqen? run /orqen:tutorial in Claude Code)")}`,
   ].join("\n"), "Next steps");
   p.outro(`${magenta("//")} ${pc.bold(`${vars.PROYECTO} is ready.`)}`);
 }

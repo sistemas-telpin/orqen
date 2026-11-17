@@ -16,7 +16,8 @@ import {
 } from "../lib/openspec.ts";
 import { chequearSistema, ramaBase, VERSION_CLI } from "../lib/system.ts";
 import { resumenStack, type Stack } from "../lib/stack.ts";
-import type { ProcesoEntorno } from "../lib/processes.ts";
+import { ProcesoEntorno } from "../lib/processes.ts";
+import { dbParaServicio, instalarTools, PROCESO_DB, variablesBase, type DbTool } from "../lib/tools.ts";
 import { mostrarLogo } from "../ui/logo.ts";
 import {
   azul, confirmar, diffColoreado, elegir, elegirVarios, gris, interactivo, magenta, p, pc, salirSiCancela, secreto, texto, textoValidado, tick,
@@ -169,6 +170,8 @@ export async function init(o: OpcionesInit) {
   const vars = { RESUMEN_STACK: resumenStack(stack), BASE_BRANCH: config.proyecto.rama_base, AGENT_CMD: comandoAgente ? `${comandoAgente}` : "claude -p --permission-mode acceptEdits" };
   // Review how each part of the project starts before writing anything.
   if (!pre) config.entornos = await revisarProcesos(config.entornos, yes);
+  // The database the project needs runs in Docker through orqen/tools/db.mjs (orqen starts and stops it).
+  const db = pre ? undefined : await proponerDb(repo, nombre, config, yes);
 
   const plan = planificar(repo, vars);
   p.note(resumenPlan(plan, config), "Files to write");
@@ -176,6 +179,10 @@ export async function init(o: OpcionesInit) {
 
   escribirConfig(repo, config);
   const res = await aplicar(repo, plan, (c) => resolverConflicto(c, yes));
+  if (db) {
+    instalarTools(repo, { id: "db", tools: ["_shared/db.mjs"], db }, variablesBase(nombre));
+    p.log.success(`orqen/tools/db.mjs ${gris(`(${db.engine === "postgres" ? "PostgreSQL" : "SQL Server"} in Docker on port ${db.port}; settings in orqen/tools/db.json)`)}`);
+  }
   if (datosEnv) {
     escribirEnv(repo, readFileSync(join(repo, "orqen", ".env.example"), "utf8"), datosEnv);
     p.log.success(`${RUTA_ENV} created ${gris("(ignored by Git)")}`);
@@ -190,8 +197,10 @@ export async function init(o: OpcionesInit) {
   const pasos = [
     ...(faltanEnv.length ? [`Complete ${pc.cyan(RUTA_ENV)}: missing ${faltanEnv.join(", ")}. Git ignores this file.`] : []),
     `Review ${pc.cyan(ARCHIVO_CONFIG)}, then try: ${pc.cyan("orqen env up")} · ${pc.cyan("orqen env test")} · ${pc.cyan("orqen env down")}`,
-    `In Claude Code: ${pc.cyan("/plugin marketplace add ./")} and ${pc.cyan(`/plugin install orqen@${mk}`)}`,
-    `Commit the changes (orqen/, AGENTS.md, CLAUDE.md, openspec/).`,
+    `Open Claude Code in this folder (restart it if it was open) and accept ${pc.bold("Trust this folder")}: ` +
+      `the commands appear as ${pc.cyan("/orqen:analyze")}, ${pc.cyan("/orqen:implement")}, ${pc.cyan("/orqen:e2e-review")}, ${pc.cyan("/orqen:pr")} ` +
+      gris(`(type /orqen: to list them; check with /plugin → orqen@${mk})`),
+    `Commit the changes (orqen/, .claude/, .claude-plugin/, AGENTS.md, CLAUDE.md, openspec/) so the team gets the same commands.`,
   ];
   if (o.sinLogo) return;   // `orqen create project` shows its own next steps
   p.note(pasos.map((x, i) => `${pc.bold(`${i + 1}.`)} ${x}`).join("\n"), "Next steps");
@@ -365,4 +374,23 @@ export async function resolverConflicto(c: Cambio, yes: boolean): Promise<Decisi
     ],
     initialValue: "nuevo",
   }));
+}
+
+/**
+ * When the stack needs PostgreSQL or SQL Server and nothing starts it yet, offer to run it in Docker with
+ * orqen/tools/db.mjs and add the `db` process (with a clean stop). An existing orqen/tools/db.json is kept.
+ */
+async function proponerDb(repo: string, nombre: string, config: Config, yes: boolean): Promise<DbTool | undefined> {
+  const procesos = config.entornos.procesos;
+  const agregar = () => { config.entornos.procesos = [ProcesoEntorno.parse(PROCESO_DB), ...procesos]; };
+  if (procesos.some((x) => x.nombre === "db" || /orqen\/tools\/db\.mjs/.test(x.comando))) return undefined;
+  if (existsSync(join(repo, "orqen", "tools", "db.json"))) { agregar(); return undefined; }   // Installed by an earlier init.
+  const svc = config.stack.servicios.find((s) => s.tipo === "postgres" || s.tipo === "sqlserver");
+  if (!svc || (svc.puerto && procesos.some((x) => x.puerto === svc.puerto))) return undefined;
+  const db = dbParaServicio(svc, variablesBase(nombre).PROYECTO_ID);
+  if (!db) return undefined;
+  const motor = db.engine === "postgres" ? "PostgreSQL" : "SQL Server";
+  if (!(await confirmar(`The project needs ${motor} (port ${db.port}). Run it in Docker with ${pc.cyan("orqen/tools/db.mjs")}? ${gris("(orqen starts and stops it on its own)")}`, true, yes))) return undefined;
+  agregar();
+  return db;
 }

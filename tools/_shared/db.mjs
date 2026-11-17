@@ -2,14 +2,14 @@
 /**
  * Local development database in Docker, managed by orqen.
  *
- *   node tools/db.mjs up       start the container (create it the first time), wait until it accepts
+ *   node orqen/tools/db.mjs up       start the container (create it the first time), wait until it accepts
  *                              connections, create the database, print "orqen-db: ready" and keep following its logs
- *                              (orqen runs this as a process and stops it with `node tools/db.mjs down`)
- *   node tools/db.mjs down     stop the container (data is kept in a Docker volume)
- *   node tools/db.mjs reset    delete the container and its volume (empty database next time)
- *   node tools/db.mjs status   show whether it is running
+ *                              (orqen runs this as a process and stops it with `node orqen/tools/db.mjs down`)
+ *   node orqen/tools/db.mjs down     stop the container (data is kept in a Docker volume)
+ *   node orqen/tools/db.mjs reset    delete the container and its volume (empty database next time)
+ *   node orqen/tools/db.mjs status   show whether it is running
  *
- * Settings live in tools/db.json (engine, port, database, user, password). Only Docker is required.
+ * Settings live in orqen/tools/db.json (engine, port, database, user, password). Only Docker is required.
  */
 import { spawn, spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
@@ -35,7 +35,7 @@ const ENGINES = {
   },
 };
 const engine = ENGINES[cfg.engine];
-if (!engine) { console.error(`orqen-db: unknown engine "${cfg.engine}" in tools/db.json`); process.exit(2); }
+if (!engine) { console.error(`orqen-db: unknown engine "${cfg.engine}" in orqen/tools/db.json`); process.exit(2); }
 
 const docker = (args, opts = {}) => spawnSync("docker", args, { encoding: "utf8", windowsHide: true, ...opts });
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -59,7 +59,7 @@ async function up() {
     console.log(`orqen-db: creating ${container} (${engine.image}) on port ${cfg.port}…`);
     const env = Object.entries(engine.env).flatMap(([k, v]) => ["-e", `${k}=${v}`]);
     const r = docker(["run", "-d", "--name", container, "-p", `${cfg.port}:${engine.internalPort}`, "-v", `${volume}:${engine.dataDir}`, ...env, engine.image], { stdio: ["ignore", "pipe", "inherit"] });
-    if (r.status !== 0) fail(`could not create the container (is port ${cfg.port} already in use? change it in tools/db.json and orqen/config.yaml).`);
+    if (r.status !== 0) fail(`could not create the container (is port ${cfg.port} already in use? change it in orqen/tools/db.json and orqen/config.yaml).`);
   } else if (s === "stopped") {
     console.log(`orqen-db: starting ${container}…`);
     if (docker(["start", container]).status !== 0) fail(`could not start ${container}.`);
@@ -97,4 +97,4 @@ if (cmd === "up") await up();
 else if (cmd === "down") down();
 else if (cmd === "reset") reset();
 else if (cmd === "status") console.log(`orqen-db: ${container} ${state()} (${cfg.engine}, localhost:${cfg.port}, database ${cfg.database})`);
-else { console.log("Usage: node tools/db.mjs up | down | reset | status"); process.exit(cmd ? 1 : 0); }
+else { console.log("Usage: node orqen/tools/db.mjs up | down | reset | status"); process.exit(cmd ? 1 : 0); }

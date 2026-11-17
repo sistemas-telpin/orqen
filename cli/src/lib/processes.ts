@@ -24,7 +24,7 @@ export const ProcesoEntorno = z.object({
   url: z.string().nullish().describe("Ready when this URL responds (e.g. http://localhost:3000/health)"),
   listo_si: z.string().nullish().describe("Ready when this text (or regex) shows up in its output"),
   detener: z.string().nullish()
-    .describe("Command that stops it cleanly before orqen kills it (e.g. node tools/db.mjs down to stop a Docker container)"),
+    .describe("Command that stops it cleanly before orqen kills it (e.g. node orqen/tools/db.mjs down to stop a Docker container)"),
   cuando: z.enum(["siempre", "e2e"]).default("siempre")
     .describe("siempre: started for development and tests. e2e: only for end-to-end / visual tests (e.g. the frontend)"),
   espera_seg: z.number().int().positive().default(120),

@@ -5,8 +5,8 @@
  *   - requisitos   commands it needs (node, mvn, docker…), with an optional minimum version
  *   - parametros   extra questions for `orqen create project` (ports, Java package…)
  *   - scaffold     steps to create the code: copy files (`copiar`), run official generators (`correr`), write files (`archivo`)
- *   - tools        scripts copied to the project's `tools/` folder (e.g. the database script)
- *   - db           database settings written to `tools/db.json`
+ *   - tools        scripts copied to the project's `orqen/tools/` folder (e.g. the database script)
+ *   - db           database settings written to `orqen/tools/db.json`
  *   - stack / entornos   what goes into orqen/config.yaml: how each part starts, variables, migrations and tests
  *
  * `{{VARIABLES}}` are replaced in tool.yaml, in copied file contents and in their paths.
@@ -20,7 +20,7 @@ import { parse } from "yaml";
 import { z } from "zod";
 import { ProcesoEntorno } from "./processes.ts";
 import { version } from "./proc.ts";
-import { Stack } from "./stack.ts";
+import { Stack, type Servicio } from "./stack.ts";
 
 const bundled = import.meta.url.endsWith(".js");
 export const TOOLS_DIR = fileURLToPath(new URL(bundled ? "../tools/" : "../../../tools/", import.meta.url));
@@ -156,37 +156,61 @@ export function copiarCarpeta(origen: string, destino: string, vars: Variables):
   return escritos;
 }
 
-/** Copy the tool scripts to the project's tools/ folder and write tools/db.json. */
-export function instalarTools(proyecto: string, tool: Tool, vars: Variables): string[] {
-  const dir = join(proyecto, "tools");
+/** Copy the tool scripts to the project's orqen/tools/ folder and write orqen/tools/db.json. */
+export function instalarTools(proyecto: string, tool: Pick<Tool, "id" | "tools" | "db">, vars: Variables): string[] {
+  const dir = join(proyecto, "orqen", "tools");
   mkdirSync(dir, { recursive: true });
   const escritos: string[] = [];
   for (const rel of tool.tools) {
     const nombre = basename(rel);
     writeFileSync(join(dir, nombre), readFileSync(join(TOOLS_DIR, rel), "utf8"));
-    escritos.push(`tools/${nombre}`);
+    escritos.push(`orqen/tools/${nombre}`);
   }
   if (tool.db) {
     writeFileSync(join(dir, "db.json"), JSON.stringify({ ...tool.db, container: `${vars.PROYECTO_ID}-db` }, null, 2) + "\n");
-    escritos.push("tools/db.json");
+    escritos.push("orqen/tools/db.json");
   }
   writeFileSync(join(dir, "README.md"), [
-    "# tools",
+    "# orqen/tools",
     "",
     `Scripts that start this project's environments (tool \`${tool.id}\` from orqen). orqen runs them on its own`,
     "(`orqen env up`, `orqen take`); you can also run them by hand.",
     "",
     ...(tool.db ? [
       "| Command | What it does |", "|---|---|",
-      `| \`node tools/db.mjs up\` | Starts ${tool.db.engine === "postgres" ? "PostgreSQL" : "SQL Server"} in Docker on port ${tool.db.port} and waits until it is ready |`,
-      "| `node tools/db.mjs down` | Stops it (the data is kept) |",
-      "| `node tools/db.mjs reset` | Deletes the container and its data |",
-      "| `node tools/db.mjs status` | Shows whether it is running |",
+      `| \`node orqen/tools/db.mjs up\` | Starts ${tool.db.engine === "postgres" ? "PostgreSQL" : "SQL Server"} in Docker on port ${tool.db.port} and waits until it is ready |`,
+      "| `node orqen/tools/db.mjs down` | Stops it (the data is kept) |",
+      "| `node orqen/tools/db.mjs reset` | Deletes the container and its data |",
+      "| `node orqen/tools/db.mjs status` | Shows whether it is running |",
       "",
-      "Settings: `tools/db.json` (if you change the port, change it in `orqen/config.yaml` too).",
+      "Settings: `orqen/tools/db.json` (if you change the port, change it in `orqen/config.yaml` too).",
     ] : []),
     "",
   ].join("\n"));
-  escritos.push("tools/README.md");
+  escritos.push("orqen/tools/README.md");
   return escritos;
 }
+
+/** The database settings `orqen init` proposes for a service the existing project needs (postgres or sqlserver). */
+export type DbTool = NonNullable<Tool["db"]>;
+export function dbParaServicio(s: Servicio, proyectoId: string): DbTool | undefined {
+  const v = s.variables ?? {};
+  if (s.tipo === "postgres") return {
+    engine: "postgres", port: s.puerto ?? 5432,
+    database: v.POSTGRES_DB ?? proyectoId, user: v.POSTGRES_USER ?? "app", password: v.POSTGRES_PASSWORD ?? "app",
+    image: s.imagen ?? undefined,
+  };
+  if (s.tipo === "sqlserver") return {
+    engine: "sqlserver", port: s.puerto ?? 1433,
+    database: v.MSSQL_DB ?? v.DB_NAME ?? proyectoId.replace(/-/g, "_"), user: "sa",
+    password: v.MSSQL_SA_PASSWORD ?? v.SA_PASSWORD ?? variablesBase(proyectoId).DB_PASSWORD,
+    image: s.imagen ?? undefined,
+  };
+  return undefined;
+}
+
+/** The orqen process that runs the database tool (orqen starts it and stops the container cleanly). */
+export const PROCESO_DB = {
+  nombre: "db", comando: "node orqen/tools/db.mjs up", detener: "node orqen/tools/db.mjs down",
+  listo_si: "orqen-db: ready", cuando: "siempre", espera_seg: 300,
+} as const;

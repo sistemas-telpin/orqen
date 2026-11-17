@@ -26,7 +26,7 @@ test("catalog: the two initial stacks are listed and their tool.yaml is valid", 
   assert.deepEqual(ids, ["java-tomcat-sqlserver", "vue-node-postgres"]);
   for (const id of ids) {
     const t = cargarTool(id, variables(id));
-    assert.ok(t.entornos.procesos.some((p) => p.nombre === "db" && p.detener === "node tools/db.mjs down"), `${id}: db process with a clean stop`);
+    assert.ok(t.entornos.procesos.some((p) => p.nombre === "db" && p.detener === "node orqen/tools/db.mjs down"), `${id}: db process with a clean stop`);
     assert.ok(t.entornos.tests.unitarios, `${id}: unit tests`);
     assert.ok(t.db, `${id}: database settings`);
     assert.doesNotMatch(JSON.stringify(t), /\{\{/, `${id}: every {{VARIABLE}} is replaced`);
@@ -66,9 +66,9 @@ test("create project (Java + Tomcat + SQL Server): code, tools, orqen config and
   assert.match(readFileSync(join(paquete, "Saludos.java"), "utf8"), /^package com\.telpin\.facturacionweb;/);
   assert.match(readFileSync(join(dir, "pom.xml"), "utf8"), /<artifactId>facturacion-web<\/artifactId>[\s\S]*<packaging>war<\/packaging>/);
 
-  const db = JSON.parse(readFileSync(join(dir, "tools/db.json"), "utf8"));
+  const db = JSON.parse(readFileSync(join(dir, "orqen/tools/db.json"), "utf8"));
   assert.deepEqual([db.engine, db.database, db.container], ["sqlserver", "facturacionweb", "facturacion-web-db"]);
-  assert.ok(existsSync(join(dir, "tools/db.mjs")));
+  assert.ok(existsSync(join(dir, "orqen/tools/db.mjs")));
 
   const cfg = parse(readFileSync(join(dir, "orqen/config.yaml"), "utf8"));
   assert.deepEqual(cfg.entornos.procesos.map((p: any) => p.nombre), ["db", "app"]);
@@ -96,7 +96,7 @@ test("create project refuses a non-empty folder and an unknown stack", async () 
   assert.match(r3.stdout, /vue-node-postgres\s+Vue \+ Node \+ PostgreSQL/);
 });
 
-test("tools/db.mjs: starts, waits until ready, reports, and stops the container (fake docker)", () => {
+test("orqen/tools/db.mjs: starts, waits until ready, reports, and stops the container (fake docker)", () => {
   // A fake `docker` that records calls: the container becomes ready on the third readiness check.
   const bin = mkdtempSync(join(tmpdir(), "fake-docker-"));
   const estado = join(bin, "estado.json");
@@ -123,11 +123,11 @@ switch (a[0]) {
   else { writeFileSync(join(bin, "docker"), `#!/bin/sh\nexec node "${join(bin, "docker.mjs")}" "$@"\n`); chmodSync(join(bin, "docker"), 0o755); }
 
   const proyecto = mkdtempSync(join(tmpdir(), "orqen-db-"));
-  mkdirSync(join(proyecto, "tools"));
-  writeFileSync(join(proyecto, "tools/db.mjs"), readFileSync(join(TOOLS_DIR, "_shared/db.mjs")));
-  writeFileSync(join(proyecto, "tools/db.json"), JSON.stringify({ engine: "postgres", port: 5432, database: "pagos", user: "app", password: "app", container: "pagos-db" }));
+  mkdirSync(join(proyecto, "orqen/tools"), { recursive: true });
+  writeFileSync(join(proyecto, "orqen/tools/db.mjs"), readFileSync(join(TOOLS_DIR, "_shared/db.mjs")));
+  writeFileSync(join(proyecto, "orqen/tools/db.json"), JSON.stringify({ engine: "postgres", port: 5432, database: "pagos", user: "app", password: "app", container: "pagos-db" }));
   const env = { ...process.env, PATH: `${bin}${process.platform === "win32" ? ";" : ":"}${process.env.PATH}` };
-  const run = (cmd: string) => spawnSync(process.execPath, ["tools/db.mjs", cmd], { cwd: proyecto, env, encoding: "utf8", timeout: 20_000 });
+  const run = (cmd: string) => spawnSync(process.execPath, ["orqen/tools/db.mjs", cmd], { cwd: proyecto, env, encoding: "utf8", timeout: 20_000 });
 
   const up = run("up");
   assert.match(up.stdout, /creating pagos-db \(postgres:17-alpine\) on port 5432[\s\S]*orqen-db: ready \(postgres on localhost:5432, database pagos\)/);

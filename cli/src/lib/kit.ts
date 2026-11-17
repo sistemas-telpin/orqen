@@ -136,6 +136,21 @@ export function marketplace(actual: string | undefined): { texto: string; nombre
   return { texto: JSON.stringify(j, null, 2) + "\n", nombre: j.name };
 }
 
+/**
+ * Claude Code project settings (.claude/settings.json, committed): register the repository's own marketplace
+ * (a relative "directory" source, so it works on every clone) and enable the orqen plugin. Claude Code applies
+ * them when the person trusts the folder, and the /orqen:* commands appear without running /plugin.
+ */
+export const CLAUDE_SETTINGS = ".claude/settings.json";
+export function claudeSettings(actual: string | undefined, mk: string): string {
+  let j: any = {};
+  try { j = actual ? JSON.parse(actual) : {}; } catch { return actual!; }   // Never break a file we can't read.
+  if (typeof j !== "object" || j === null || Array.isArray(j)) return actual!;
+  j.extraKnownMarketplaces = { ...(j.extraKnownMarketplaces ?? {}), [mk]: { source: { source: "directory", path: "./" } } };
+  j.enabledPlugins = { ...(j.enabledPlugins ?? {}), [`orqen@${mk}`]: true };
+  return JSON.stringify(j, null, 2) + "\n";
+}
+
 export interface OpcionesPlan {
   /** Additional files generated outside the kit, such as Compose configuration. */
   extra?: Record<string, string>;
@@ -183,6 +198,8 @@ export function planificar(repo: string, vars: VariablesKit, o: OpcionesPlan = {
     fusion("CLAUDE.md", claudeMd);
     fusion(".gitignore", gitignore);
     fusion(MARKETPLACE, (a) => marketplace(a).texto);
+    const mk = marketplace(leer(join(repo, MARKETPLACE))).nombre;
+    fusion(CLAUDE_SETTINGS, (a) => claudeSettings(a, mk));
     if (existsSync(join(repo, "openspec"))) {
       const frag = readFileSync(join(TEMPLATES_DIR, "openspec", "config.yaml"), "utf8");
       fusion("openspec/config.yaml", (a) => fusionarConfigOpenSpec(a ?? "", frag));

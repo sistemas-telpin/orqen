@@ -4,7 +4,7 @@
  *  1. Ask the project name, the folder and the stack (tool).
  *  2. Check the stack requirements (node, mvn, docker…) and ask its parameters (ports, Java package…).
  *  3. Create the folder and the Git repo, generate the code (official generators + the tool's skeleton)
- *     and copy the tool scripts to tools/ (e.g. tools/db.mjs to run the database in Docker).
+ *     and copy the tool scripts to orqen/tools/ (e.g. orqen/tools/db.mjs to run the database in Docker).
  *  4. Run `orqen init` with the stack and environments already known (no detection or AI needed).
  *  5. Offer the initial commit.
  */

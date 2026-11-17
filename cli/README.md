@@ -28,7 +28,7 @@ orqen create stacks
 
 Asks the name, folder and stack; checks the stack requirements and asks its parameters (ports, Java package); creates the
 folder and Git repository; generates the code (official generators plus the stack skeleton); copies the environment scripts
-to `tools/` (e.g. `tools/db.mjs`, the database in Docker); runs `orqen init` with the stack and environments already known;
+to `orqen/tools/` (e.g. `orqen/tools/db.mjs`, the database in Docker); runs `orqen init` with the stack and environments already known;
 and offers the initial commit. Stacks live in the repository's `tools/` folder (one `tool.yaml` plus a `scaffold/` per stack).
 
 ## Update an installation

@@ -266,7 +266,7 @@ orqen create stacks                                                 # lista los 
 2. Revisa los requisitos (Node, Maven, Docker…) y pide los parámetros del stack (puertos, paquete Java); si un puerto está
    ocupado propone el siguiente libre.
 3. Crea la carpeta y el repo git, genera el código (generadores oficiales, como `create-vue`, más un esqueleto propio con
-   health check, migraciones y tests de ejemplo) y copia a `tools/` el script de la base (`tools/db.mjs`, PostgreSQL o
+   health check, migraciones y tests de ejemplo) y copia a `orqen/tools/` el script de la base (`orqen/tools/db.mjs`, PostgreSQL o
    SQL Server en Docker).
 4. Corre `orqen init` con el stack y los entornos ya definidos (sin detección ni IA): OpenSpec, Jira, `AGENTS.md`, plugin.
 5. Ofrece el commit inicial.

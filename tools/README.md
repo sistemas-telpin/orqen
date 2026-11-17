@@ -22,8 +22,8 @@ tools/<id>/
 | `requisitos` | Comandos que necesita (`node`, `mvn`, `docker`…) con versión mínima. Si falta uno que usan los pasos de `scaffold`, no se crea el proyecto; si falta otro (ej. Docker), solo avisa |
 | `parametros` | Preguntas extra (puertos, paquete Java…). Los puertos ocupados se reemplazan solos por el siguiente libre |
 | `scaffold` | Pasos en orden: `copiar: scaffold`, `correr: <comando>` (generadores oficiales, `npm install`; `en:` carpeta), `archivo: <ruta>` + `contenido` |
-| `tools` | Scripts que se copian a `tools/` del proyecto (ej. `_shared/db.mjs`) |
-| `db` | Motor, puerto, base, usuario y contraseña → `tools/db.json` del proyecto |
+| `tools` | Scripts que se copian a `orqen/tools/` del proyecto (ej. `_shared/db.mjs`) |
+| `db` | Motor, puerto, base, usuario y contraseña → `orqen/tools/db.json` del proyecto |
 | `stack`, `entornos` | Lo que va a `orqen/config.yaml`: componentes, procesos que lo levantan, variables, migraciones y tests |
 
 Variables disponibles: `{{PROYECTO}}` (nombre), `{{PROYECTO_ID}}` (`plataforma-pagos`), `{{PROYECTO_JAVA}}` (`plataformapagos`),
@@ -35,16 +35,16 @@ orqen les pone el punto al copiarlos.
 ## La base de datos
 
 `_shared/db.mjs` levanta la base en Docker (solo la base: las apps corren con sus comandos normales). En cada proyecto queda
-como `tools/db.mjs` + `tools/db.json`, y en `orqen/config.yaml` como un proceso más:
+como `orqen/tools/db.mjs` + `orqen/tools/db.json`, y en `orqen/config.yaml` como un proceso más:
 
 ```yaml
 - nombre: db
-  comando: node tools/db.mjs up       # crea o arranca el contenedor, espera que acepte conexiones y crea la base
-  detener: node tools/db.mjs down     # orqen lo corre antes de cortar el proceso (si no, el contenedor quedaría prendido)
+  comando: node orqen/tools/db.mjs up       # crea o arranca el contenedor, espera que acepte conexiones y crea la base
+  detener: node orqen/tools/db.mjs down     # orqen lo corre antes de cortar el proceso (si no, el contenedor quedaría prendido)
   listo_si: "orqen-db: ready"
 ```
 
-Los datos quedan en un volumen de Docker entre `down` y `up`; `node tools/db.mjs reset` los borra. Motores: `postgres`, `sqlserver`.
+Los datos quedan en un volumen de Docker entre `down` y `up`; `node orqen/tools/db.mjs reset` los borra. Motores: `postgres`, `sqlserver`.
 
 ## Agregar un stack
 

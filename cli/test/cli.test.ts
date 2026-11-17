@@ -33,7 +33,15 @@ test("orqen init --yes writes the repository configuration", () => {
   const cfg = parse(readFileSync(join(repo, "orqen/config.yaml"), "utf8"));
   assert.equal(cfg.version, 1);
   assert.equal(cfg.proyecto.rama_base, "main");
-  assert.deepEqual(cfg.entornos.procesos.map((x: any) => `${x.nombre}:${x.comando}:${x.cuando}`).sort(), ["api:pnpm start:siempre", "web:pnpm dev:e2e"]);
+  assert.deepEqual(cfg.entornos.procesos.map((x: any) => `${x.nombre}:${x.comando}:${x.cuando}`).sort(), ["api:pnpm start:siempre", "db:node orqen/tools/db.mjs up:siempre", "web:pnpm dev:e2e"]);
+  // The database runs with orqen/tools/db.mjs (inside orqen/, never a root tools/ folder), stopped cleanly.
+  assert.equal(cfg.entornos.procesos.find((x: any) => x.nombre === "db").detener, "node orqen/tools/db.mjs down");
+  assert.equal(JSON.parse(readFileSync(join(repo, "orqen/tools/db.json"), "utf8")).engine, "postgres");
+  assert.ok(existsSync(join(repo, "orqen/tools/db.mjs")) && !existsSync(join(repo, "tools")));
+  // Claude Code loads the /orqen:* commands from the committed project settings once the folder is trusted.
+  const claude = JSON.parse(readFileSync(join(repo, ".claude/settings.json"), "utf8"));
+  assert.deepEqual(claude.extraKnownMarketplaces.orqen.source, { source: "directory", path: "./" });
+  assert.equal(claude.enabledPlugins["orqen@orqen"], true);
   assert.equal(cfg.entornos.tests.e2e, "pnpm exec playwright test");
   assert.ok(!JSON.stringify(cfg).includes("null"), "no null values in orqen/config.yaml");
 

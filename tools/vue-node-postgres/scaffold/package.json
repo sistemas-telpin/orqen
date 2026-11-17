@@ -2,7 +2,7 @@
   "name": "{{PROYECTO_ID}}",
   "private": true,
   "scripts": {
-    "db": "node tools/db.mjs",
+    "db": "node orqen/tools/db.mjs",
     "test": "cd web && npm run test:unit -- --run && cd ../api && npm test"
   }
 }

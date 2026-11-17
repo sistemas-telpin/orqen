@@ -482,7 +482,14 @@ export async function mostrarLogo(o: OpcionesLogo | boolean = {}): Promise<void>
       await new Promise((r) => setTimeout(r, process.platform === "win32" ? 1 : Math.max(1, proximo - performance.now())));
     }
   } finally {
-    if (loop) { entrada.off("keypress", alTeclear); entrada.setRawMode(false); entrada.pause(); }
+    if (loop) {
+      entrada.off("keypress", alTeclear);
+      entrada.pause();
+      // Let stdin stop its pending read before switching modes. On Windows,
+      // a pending line read can otherwise swallow keys from the next prompt.
+      await new Promise<void>((resolve) => process.nextTick(resolve));
+      entrada.setRawMode(false);
+    }
     stream.off("resize", alRedimensionar);
     // Leave the static logo, clear the welcome text, and put the cursor below the tagline.
     const final = logo(true, columnas).split("\n").slice(1);

@@ -30,6 +30,8 @@ export interface Config {
   sis: { project: string; type: string; link: string; transitions: Record<string, string>; operationalType: string };
   factoryDir: string;       // per-REC record and state: orqen/work/<KEY>/ (committed with the branch)
   repoPath: string; baseBranch: string; testCommand: string; prCommand: string;
+  /** `orqen pr`: integration branch ("desarrollo"/"devel") the REC branch is sent to, and the command that opens that PR. */
+  develBranch: string; develPrCommand: string;
   openspecCmd: string;
   stateDir: string; lockMinutes: number;
   agentCmd: string; intervalSec: number;
@@ -58,6 +60,8 @@ export function loadConfig(over: Partial<Config> = {}): Config {
     baseBranch: env("BASE_BRANCH", "main"),
     testCommand: env("TEST_COMMAND", "npm test"),
     prCommand: env("PR_COMMAND", 'gh pr create --base main --head {branch} --title "{key}: {title}" --body-file {body}'),
+    develBranch: env("DEVEL_BRANCH", "desarrollo"),
+    develPrCommand: env("DEVEL_PR_COMMAND", 'gh pr create --base {base} --head {branch} --title "{key}: {title}" --body-file {body}'),
     openspecCmd: env("OPENSPEC_CMD", "openspec"),
     stateDir: env("REC_STATE_DIR", join(REC_DIR, ".state")),
     lockMinutes: Number(env("REC_LOCK_MIN", "90")),

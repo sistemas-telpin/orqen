@@ -7,7 +7,7 @@ import { test } from "node:test";
 import { loadConfig } from "../scripts/config.ts";
 import type { OpenSpecApi } from "../scripts/openspec.ts";
 import { Process, changeName } from "../scripts/process.ts";
-import { Store } from "../scripts/store.ts";
+import { Store, newRec } from "../scripts/store.ts";
 import type { Workspace } from "../scripts/workspace.ts";
 import { FakeJira } from "./fakes.ts";
 
@@ -177,4 +177,34 @@ test("testing requires evaluating each criterion and milestones are mirrored on 
 test("change name", () => {
   assert.equal(changeName("REC-123", "Exportación de facturas a CSV mensual", 1), "rec-123-exportacion-facturas-csv-mensual");
   assert.equal(changeName("REC-123", "Exportación", 2), "rec-123-exportacion-r2");
+});
+
+test("pr: sends the branch to the devel branch, records the explanation and is idempotent", async () => {
+  const { p, jira, cfg } = setup();
+  const calls: string[] = [];
+  let cmd = "";
+  const ws: Workspace = {
+    ...failingTests, commit: () => { calls.push("commit"); return true; }, push: () => { calls.push("push"); },
+    openPr: (vars, c) => { cmd = `${c}|${vars.base}|${vars.body}`; calls.push("pr"); return "https://example.test/pr/7"; },
+  };
+  const store = new Store(cfg.stateDir);
+  const flow = new Process(cfg, jira, store, ws, fakeOs);
+  const rec = newRec("REC-1");
+  store.save({ ...rec, state: "DEVELOPMENT", branch: "rec/rec-1" });
+  assert.throws(() => flow.prInfo("REC-1"), /once development is done/);
+  store.save({ ...rec, state: "CODE_REVIEW", branch: "rec/rec-1", sis: "SIS-9" });
+  assert.equal(flow.prInfo("REC-1").base, "desarrollo");
+  await assert.rejects(flow.pr("REC-1", "corto"), /too short/);
+
+  const body = "## Qué cambió\nSe agregó la exportación a CSV.\n\n## Cómo verificarlo\nProbar la pantalla de reportes y descargar el archivo.";
+  const r = await flow.pr("REC-1", body);
+  assert.deepEqual([r.created, r.url, r.base], [true, "https://example.test/pr/7", "desarrollo"]);
+  assert.deepEqual(calls, ["commit", "push", "pr"]);
+  assert.ok(cmd.endsWith("|desarrollo|orqen/work/REC-1/round-1/devel-pr.md"));
+  assert.match(readFileSync(join(cfg.factoryDir, "REC-1", "round-1", "devel-pr.md"), "utf8"), /exportación a CSV/);
+  assert.match(jira.last("REC-1"), /PR a \*desarrollo\*/);
+
+  const again = await flow.pr("REC-1", body);   // the PR already exists: only pushes
+  assert.equal(again.created, false);
+  assert.deepEqual(calls, ["commit", "push", "pr", "commit", "push"]);
 });

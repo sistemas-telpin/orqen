@@ -67,6 +67,12 @@ o `CODE_REVIEW`, mapeás cada Scenario / criterio de aceptación contra los e2e 
 con una guía de revisión y **esperás su aprobación**, con los ajustes que haga a mano. No es una etapa del flujo: no uses `take`, `complete`
 ni `block`. No edites los e2e por tu cuenta ni des la aprobación por la persona. Los ajustes los commitea la persona en la rama antes de que se abra el PR.
 
+### PR a desarrollo (`/orqen:pr SIS-32`)
+
+Con el desarrollo hecho (TESTING o después), redactás la explicación de los cambios (resumen, cambios, desvíos, tests, cómo verificar, riesgos) a partir
+del diff contra la rama base, y se la pasás a `./cli/bin/orqen pr <KEY> <archivo.md>`, que commitea lo pendiente, empuja y abre el PR hacia `DEVEL_BRANCH`.
+`./cli/bin/orqen pr <KEY>` sin archivo solo informa. El PR lo abre siempre `orqen`: vos no corrés `git push` ni `gh`.
+
 ### Reglas
 
 - **Nunca** escribas en Jira (tampoco por MCP: el MCP es de solo lectura), ni hagas `git commit/push/checkout/reset/rebase`,

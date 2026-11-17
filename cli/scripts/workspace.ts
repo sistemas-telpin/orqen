@@ -9,7 +9,7 @@ export interface Workspace {
   commit(key: string, message: string, opts?: { path?: string; branch?: string }): boolean;
   runTests(): { ok: boolean; output: string };
   push(branch: string): void;
-  openPr(vars: Record<string, string>): string;
+  openPr(vars: Record<string, string>, command?: string): string;
 }
 
 export class GitWorkspace implements Workspace {
@@ -61,10 +61,10 @@ export class GitWorkspace implements Workspace {
 
   push(branch: string) { this.git("push", "-u", "origin", branch); }
 
-  openPr(vars: Record<string, string>) {
-    if (!this.cfg.prCommand) return "";
+  openPr(vars: Record<string, string>, command = this.cfg.prCommand) {
+    if (!command) return "";
     // values come from Jira: they are sanitized so they cannot inject shell
-    const cmd = this.cfg.prCommand.replace(/\{(\w+)\}/g, (_, k) => (vars[k] ?? "").replace(/["'`$\\;|&<>]/g, ""));
+    const cmd = command.replace(/\{(\w+)\}/g, (_, k) => (vars[k] ?? "").replace(/["'`$\\;|&<>]/g, ""));
     const p = spawnSync(cmd, { shell: true, cwd: this.cfg.repoPath, encoding: "utf8" });
     return (p.stdout || p.stderr || "").trim();
   }

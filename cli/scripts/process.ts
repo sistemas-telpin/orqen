@@ -146,6 +146,49 @@ export class Process {
     };
   }
 
+  // ================================================================ pr
+  /** Where the REC branch would go and whether it can be sent now (used by `orqen pr <KEY>` before writing the explanation). */
+  prInfo(key: string) {
+    const rec = this.store.get(key);
+    if (!rec) throw new Error(`${key} is unknown to orqen.`);
+    if (rec.route === "operational") throw new Error(`${key} is operational (no code): there is no branch to send.`);
+    if (!rec.branch || !["TESTING", "CODE_REVIEW", "DELIVERY", "ACCEPTANCE", "CLOSED"].includes(rec.state))
+      throw new Error(`${key} is in ${rec.state}: the PR to ${this.cfg.develBranch} is opened once development is done (TESTING or later).`);
+    return {
+      key, state: rec.state, branch: rec.branch, base: this.cfg.develBranch, lane: rec.lane, sis: rec.sis,
+      analysis: `orqen/work/${key}/round-${rec.round}/analysis.md`,
+      change: rec.change ? `openspec/changes/${rec.change}` : undefined,
+      existing: rec.artifacts.devel_pr as string | undefined,
+    };
+  }
+
+  /**
+   * Sends the REC branch to the development branch: records the explanation (written by the agent), commits what is pending
+   * on the branch (e.g. hand adjustments), pushes and opens the PR. If the PR already exists it only pushes the new commits.
+   */
+  async pr(key: string, body: string, title?: string, agent = "agent") {
+    const info = this.prInfo(key);
+    const rec = this.store.get(key)!;
+    if (body.trim().length < 80) throw new Error("The explanation is too short: describe what changed, why and how to verify it.");
+    const bodyFile = `orqen/work/${key}/round-${rec.round}/devel-pr.md`;
+    this.fac.write(rec, "devel-pr.md", body.trim() + "\n");
+    this.ws.commit(key, `explicación del PR a ${info.base}`, { branch: rec.branch });
+    this.ws.push(rec.branch);
+    if (info.existing) return { url: info.existing, created: false, base: info.base };
+    const issue = await this.jira.issue(key);
+    const out = this.ws.openPr({
+      key, branch: rec.branch, base: info.base, body: bodyFile, change: rec.change,
+      title: (title ?? rec.artifacts.ANALYSIS?.summary ?? issue.title).slice(0, 80),
+    }, this.cfg.develPrCommand);
+    const url = out.match(/https?:\/\/\S+/)?.[0];
+    if (!url) throw new Error(`The PR was not opened. Output: ${out || "(none)"}`);
+    rec.artifacts.devel_pr = url;
+    this.store.save(rec);
+    await this.commentWithSis(rec, `PR a *${info.base}* abierto desde la rama \`${rec.branch}\`: ${url}`);
+    this.store.log(key, { ts: new Date().toISOString(), from: rec.state, to: rec.state, detail: `PR to ${info.base}: ${url}`, agent });
+    return { url, created: true, base: info.base };
+  }
+
   // ================================================================ complete
   async complete(key: string, raw: unknown, agent = "agent"): Promise<CompleteResult> {
     const rec = this.store.get(key);

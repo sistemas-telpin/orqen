@@ -13,7 +13,7 @@ El análisis lo conduce un **analista** con el agente (`/orqen:analyze REC-1234`
 - **`AGENTS.md`**: lo que el agente lee. Explica el proceso y las reglas, y le dice que use la CLI `cli`.
 - **`cli/`**: CLI en TypeScript (Node ≥ 20.12) que maneja la máquina de estados, Jira, git, tests y OpenSpec.
   Es determinística: el agente produce contenido y `cli` decide el flujo.
-- **`orqen/.agents`**: recursos para agentes con los comandos `/orqen:analyze`, `/orqen:implement` y `/orqen:e2e-review`, y el skill `orqen:grilling`.
+- **`orqen/.agents`**: recursos para agentes con los comandos `/orqen:analyze`, `/orqen:implement`, `/orqen:e2e-review` y `/orqen:pr`, y el skill `orqen:grilling`.
 - **`orqen/work/<KEY>/`**: registro y estado de cada REC dentro del repo (lo escribe `orqen`).
 - **`openspec/config.yaml`**: reglas del proceso REC aplicadas a los artefactos de OpenSpec.
 
@@ -109,6 +109,26 @@ diseñador decide. La aprobación la da la persona en la conversación; igual qu
 (barrera de proceso, no de seguridad). Los ajustes quedan sin commitear: hay que commitearlos en la rama del REC **antes de que se abra el PR**
 (`orqen` abre el PR al aprobar `TESTING`).
 
+## PR a desarrollo: `/orqen:pr SIS-32`
+
+Manda la rama del REC a la rama de integración (`DEVEL_BRANCH`, por defecto `desarrollo`; también sirve `devel`) con un pull request cuya
+descripción explica los cambios. Acepta la key del SIS o la del REC y se corre con el REC en `TESTING` o después (no en carril operativo).
+Es independiente del PR del code review que `orqen` abre al aprobar TESTING.
+
+```mermaid
+flowchart TD
+    A["/orqen:pr SIS-32"] --> B["orqen pr SIS-32<br/>(rama, base, análisis, change; ¿ya hay PR?)"]
+    B -->|"todavía en desarrollo,<br/>operativo o desconocido"| X(["Se explica y se corta"])
+    B -->|"ok"| C["El agente lee el diff contra la base,<br/>el análisis y la spec/plan"]
+    C --> D["Escribe la explicación (.md):<br/>resumen · cambios · desvíos · tests · cómo verificar · riesgos"]
+    D --> E["orqen pr SIS-32 explicación.md<br/>guarda devel-pr.md · commitea lo pendiente · push · abre el PR"]
+    E --> F(["URL del PR, comentada en el REC y el SIS"])
+```
+
+El agente solo redacta: el commit, el push y el PR los hace `orqen` (`DEVEL_PR_COMMAND`, con `{base}`, `{branch}`, `{key}`, `{title}`, `{body}`).
+La explicación queda en `orqen/work/<KEY>/round-N/devel-pr.md`. Es idempotente: si el PR ya existe, solo empuja los commits nuevos.
+Como `orqen` commitea lo pendiente de la rama antes de empujar, los ajustes manuales (p. ej. los del diseñador de e2e) viajan con el PR.
+
 ## Flujo completo
 
 ```mermaid
@@ -172,7 +192,7 @@ cp cli/.env.example cli/.env              # Jira, SIS, aprobadores, comando de t
 echo "cli/.state/" >> .gitignore         # orqen/work/ NO se ignora: es el registro versionado
 ```
 
-**Plugin para Claude Code** (da `/orqen:analyze`, `/orqen:implement`, `/orqen:e2e-review` y el skill de grilling), una vez por analista:
+**Plugin para Claude Code** (da `/orqen:analyze`, `/orqen:implement`, `/orqen:e2e-review`, `/orqen:pr` y el skill de grilling), una vez por analista:
 
 ```
 /plugin marketplace add ./          # raíz de este repo (tiene .claude-plugin/marketplace.json); o la URL git del kit
@@ -193,6 +213,8 @@ apply de la spec o plan → `orqen complete`). `take`, `complete`, `status`, `bl
 
 **Validación de e2e**: en Claude Code, `/orqen:e2e-review SIS-3312`, a cargo del diseñador de testing e2e. En otro agente: _"preparame la revisión de e2e del SIS-3312"_ (el agente lee `AGENTS.md`).
 
+**PR a desarrollo**: en Claude Code, `/orqen:pr SIS-32`. En otro agente: _"abrí el PR a desarrollo del SIS-32"_ (`orqen pr` → explicación → `orqen pr <KEY> <archivo.md>`).
+
 **Resto de las etapas, interactivo**: _"procesá el REC REC-123"_ → `orqen take` → trabaja → `orqen complete`.
 
 **Desatendido** (cron, CI o servidor), solo etapas de agente — **nunca** ANALYSIS:
@@ -203,7 +225,7 @@ apply de la spec o plan → `orqen complete`). `take`, `complete`, `status`, `bl
 
 Para cambiar de agente alcanza con cambiar `AGENT_CMD`, por ejemplo a `codex exec --full-auto {prompt}`.
 
-Otros comandos: `orqen pending` (separa _para analizar_ de _para un agente_), `orqen status [KEY]`, `orqen schema <ETAPA>`,
+Otros comandos: `orqen pr <KEY> [explicación.md]`, `orqen pending` (separa _para analizar_ de _para un agente_), `orqen status [KEY]`, `orqen schema <ETAPA>`,
 `orqen block`, `orqen release`, `orqen search <JQL>`. Los REC nuevos ya no se toman solos: quedan en NEW hasta que un analista corre `analyze`.
 
 ## Garantías y límites

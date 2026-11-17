@@ -6,7 +6,7 @@ Si tu herramienta tiene el skill `orqen:grilling`, usalo: define el método de l
 ### 1. Prepará el terreno (antes de preguntar)
 
 - Leé el issue y **toda** la conversación del contexto. Los comentarios con `es_del_agente: true` son de rondas anteriores; `feedback_humano` trae respuestas del cliente o el rechazo que motivó esta ronda.
-- Si tenés el MCP de Jira, usalo **solo para leer** (issue, comentarios, vinculados, REC parecidos). Sin MCP: `./rec/bin/rec buscar '<JQL>'`. **No escribas en Jira**: lo hace `rec`.
+- Si tenés el MCP de Jira, usalo **solo para leer** (issue, comentarios, vinculados, REC parecidos). Sin MCP: `./cli/bin/rec buscar '<JQL>'`. **No escribas en Jira**: lo hace `rec`.
 - Entendé el comportamiento actual: `openspec list --specs` y `openspec show <capacidad>` (fuente de verdad) y, si hace falta, el código (solo lectura).
 - Todo lo que puedas contestar leyendo el repo o Jira **no se le pregunta al analista**.
 
@@ -38,7 +38,7 @@ Ante la duda entre dos, elegí el de **más** rigor y decilo. Una vez confirmado
 ### 5. Ejecutá el carril
 
 - `operativa` o `directo`: no hay spec. Pasá a producir la salida.
-- `liviano` o `completo`: corré `./rec/bin/rec carril <KEY> <carril>`. Crea la rama y el change de OpenSpec e imprime cómo escribir la spec (el analista revisa lo que escribís; ajustá lo que pida). No hagas commits: `rec` los hace.
+- `liviano` o `completo`: corré `./cli/bin/rec carril <KEY> <carril>`. Crea la rama y el change de OpenSpec e imprime cómo escribir la spec (el analista revisa lo que escribís; ajustá lo que pida). No hagas commits: `rec` los hace.
 
 ### 6. Salida
 
@@ -49,4 +49,4 @@ Producí el JSON del esquema:
 - Carril liviano/completo: `especificacion` (`cambio` = el que asignó `rec carril`, `resumen`, `supuestos`).
 
 `rec completar` valida todo (y con spec: `openspec validate --strict`, artefactos completos y horas en cada tarea). Si pasa, crea el **SIS**, lo vincula al REC, deja el registro en `factory/<KEY>/` y mueve el REC a la etapa siguiente.
-No toques `rec/.estado/`. No hagas commit/push/checkout.
+No toques `cli/.estado/`. No hagas commit/push/checkout.

@@ -1,6 +1,6 @@
 ---
 name: grilling
-description: Entrevista (grilling) a un analista sobre un requerimiento hasta tener un entendimiento compartido y verificable, explorando antes el repo y Jira para no preguntar lo que ya se sabe. Usar al analizar un REC (/orqen:analizar) o cuando haya que estresar un plan o diseño antes de especificar.
+description: Entrevista (grilling) a un analista sobre un requerimiento hasta tener un entendimiento compartido y verificable, explorando antes el repo y Jira para no preguntar lo que ya se sabe. Usar al analizar un REC (/orqen:analyze) o cuando haya que estresar un plan o diseño antes de especificar.
 ---
 
 # Grilling de un requerimiento
@@ -35,4 +35,4 @@ Objetivo: salir con un entendimiento compartido, sin ambigüedades que cambien e
 
 ## Después del OK
 
-Proponé el carril según la tabla de la etapa ANALISIS (`./rec/bin/rec analizar` la imprime), justificá en términos de tamaño, riesgo y alcance, y pedí confirmación. Ante la duda entre dos carriles, el de más rigor.
+Proponé el carril según la tabla de la etapa ANALISIS (`./cli/bin/rec analizar` la imprime), justificá en términos de tamaño, riesgo y alcance, y pedí confirmación. Ante la duda entre dos carriles, el de más rigor.

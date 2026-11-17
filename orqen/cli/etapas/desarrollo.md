@@ -10,5 +10,5 @@ Ya estás en la rama del REC (`rama` en el contexto). El análisis ya se cerró 
 4. Escribí tests automáticos para **cada criterio de aceptación / Scenario**, nombrados de forma que se reconozca cuál verifican.
 5. Corré los tests y linters del proyecto antes de terminar.
 6. Si el contexto trae `resultado_tests` fallido, `etapas_previas.TESTING` o un rechazo de revisión en `feedback_humano`, **corregí eso primero**.
-7. Prohibido: `git commit/push/checkout/reset`, cambiar de rama, `openspec archive`, tocar `rec/.estado/` y `factory/`. El proceso se encarga.
+7. Prohibido: `git commit/push/checkout/reset`, cambiar de rama, `openspec archive`, tocar `cli/.estado/` y `factory/`. El proceso se encarga.
 8. Si hay un bloqueo real (falta acceso, análisis contradictorio), devolvé `completado: false` con `bloqueo`.

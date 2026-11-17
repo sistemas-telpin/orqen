@@ -99,7 +99,7 @@ export class Proceso {
     if (!rec || !esEstadoAgente(rec.estado))
       throw new Error(`${key} no tiene trabajo para el agente (estado: ${rec?.estado ?? "desconocido"}). Corré \`rec pendientes\`.`);
     if (rec.estado === "ANALISIS" && !desdeAnalizar)
-      throw new Error(`El análisis de ${key} lo conduce un analista: usá /orqen:analizar ${key} (o \`rec analizar ${key}\`).`);
+      throw new Error(`El análisis de ${key} lo conduce un analista: usá /orqen:analyze ${key} (o \`rec analizar ${key}\`).`);
     const lock = this.lockVigente(rec);
     if (lock && lock.agente !== agente) throw new Error(`${key} ya lo tomó "${lock.agente}" desde ${lock.desde}.`);
     rec.lock = { agente, desde: new Date().toISOString() };

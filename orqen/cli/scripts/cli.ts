@@ -1,5 +1,5 @@
 /**
- * CLI del proceso REC.  Uso:  ./rec/bin/rec <comando>
+ * CLI del proceso REC.  Uso:  ./cli/bin/rec <comando>
  *
  *   pendientes [--json]            Avanza gates y lista los REC con trabajo: para analista (NUEVO/ANALISIS) y para agente
  *   analizar <KEY> [--analista N]  Abre el análisis con un analista (grilling): imprime instrucciones + contexto + esquema
@@ -63,7 +63,7 @@ function guia(estado: EstadoAgente) {
 function renderTomar(key: string, ctx: Record<string, any>) {
   const e = ctx.estado as EstadoAgente;
   const carril = e === "ANALISIS"
-    ? ["", "## Carril (cuando el analista dé el OK)", `Con el carril confirmado: \`./rec/bin/rec carril ${key} <${CARRILES.join("|")}> --agente ${agente}\`.`,
+    ? ["", "## Carril (cuando el analista dé el OK)", `Con el carril confirmado: \`./cli/bin/rec carril ${key} <${CARRILES.join("|")}> --agente ${agente}\`.`,
        "Liviano/completo: te crea la rama y el change de OpenSpec e imprime cómo escribir la spec. Directo: no hace falta spec."]
     : [];
   return [
@@ -81,9 +81,9 @@ function renderTomar(key: string, ctx: Record<string, any>) {
     "",
     "## Para terminar",
     `Escribí la salida en un archivo (ej. \`/tmp/${key}-${e.toLowerCase()}.json\`) y corré:`,
-    "```sh", `./rec/bin/rec completar ${key} /tmp/${key}-${e.toLowerCase()}.json --agente ${agente}`, "```",
+    "```sh", `./cli/bin/rec completar ${key} /tmp/${key}-${e.toLowerCase()}.json --agente ${agente}`, "```",
     "Si la salida no es válida, el comando lista los errores: corregí y volvé a correrlo.",
-    `Si no podés avanzar: \`./rec/bin/rec bloquear ${key} "motivo"\`.`,
+    `Si no podés avanzar: \`./cli/bin/rec bloquear ${key} "motivo"\`.`,
   ].join("\n");
 }
 
@@ -91,7 +91,7 @@ async function ciclo() {
   const pend = (await proceso.revisar()).filter((p) => p.para === "agente" && !p.tomadoPor);
   for (const p of pend) {
     const prompt = `Procesá el REC ${p.key} siguiendo la sección "Proceso REC" de AGENTS.md. ` +
-      `Empezá corriendo: ./rec/bin/rec tomar ${p.key} --agente ciclo`;
+      `Empezá corriendo: ./cli/bin/rec tomar ${p.key} --agente ciclo`;
     const comando = cfg.agenteCmd.replace("{prompt}", `'${prompt.replace(/'/g, `'\\''`)}'`);
     console.log(`→ ${p.key} (${p.estado}): ${comando}`);
     const r = spawnSync(comando, { shell: true, cwd: cfg.repoPath, stdio: "inherit", env: { ...process.env, REC_AGENTE: "ciclo" } });
@@ -111,7 +111,7 @@ async function main() {
       for (const para of ["analista", "agente"] as const) {
         const xs = p.filter((x) => x.para === para);
         if (!xs.length) continue;
-        console.log(para === "analista" ? "Para analizar (/orqen:analizar <KEY>):" : "Para un agente (rec tomar <KEY>):");
+        console.log(para === "analista" ? "Para analizar (/orqen:analyze <KEY>):" : "Para un agente (rec tomar <KEY>):");
         for (const x of xs) console.log(`  ${x.key.padEnd(12)} ${x.estado.padEnd(15)} ${x.tomadoPor ? `(tomado por ${x.tomadoPor})` : ""}`);
       }
       return;

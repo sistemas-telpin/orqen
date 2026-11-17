@@ -1,7 +1,6 @@
 /** Update the CLI, compatible OpenSpec installation, and managed kit files. */
 import { resolve } from "node:path";
 import semver from "semver";
-import { VERSION_KIT } from "orqen-kit";
 import { actualizarVersiones, leerConfig } from "../lib/config.ts";
 import { aplicar, leerManifest, planificar } from "../lib/kit.ts";
 import {
@@ -82,16 +81,16 @@ export async function update(o: OpcionesUpdate) {
     };
     const plan = planificar(repo, vars);
     const cambios = plan.filter((c) => c.accion !== "igual");
-    if (!cambios.length) p.log.success(`The kit is up to date (v${VERSION_KIT})`);
+    if (!cambios.length) p.log.success(`The kit is up to date (v${VERSION_CLI})`);
     else {
       const icono: Record<string, string> = { crear: pc.green("+"), actualizar: pc.yellow("~"), conflicto: pc.red("!") };
       p.note(cambios.map((c) => `${icono[c.accion]} ${c.ruta}${c.accion === "conflicto" ? pc.red("  (local edits require review)") : ""}`).join("\n"),
-        `Kit ${manifest.kit} → ${VERSION_KIT}`);
+        `Kit ${manifest.kit} → ${VERSION_CLI}`);
       if (await confirmar("Apply the kit updates?", true, yes)) {
         const res = await aplicar(repo, plan, (c) => resolverConflicto(c, yes));
-        actualizarVersiones(repo, { kit: VERSION_KIT, cli: VERSION_CLI });
+        actualizarVersiones(repo, { kit: VERSION_CLI, cli: VERSION_CLI });
         const n = (a: string) => res.filter((r) => r.accion === a).length;
-        p.log.success(`Kit v${VERSION_KIT}: ${n("crear")} created, ${n("actualizar")} updated, ${n("mantenido")} kept, ${n("guardado-al-lado")} to merge manually`);
+        p.log.success(`Kit v${VERSION_CLI}: ${n("crear")} created, ${n("actualizar")} updated, ${n("mantenido")} kept, ${n("guardado-al-lado")} to merge manually`);
         for (const r of res.filter((r) => r.accion === "guardado-al-lado")) p.log.warn(`${r.ruta} → see ${r.detalle}`);
       }
     }

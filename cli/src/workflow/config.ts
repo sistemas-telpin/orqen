@@ -2,7 +2,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { TEMPLATES_DIR } from "orqen-kit";
+import { TEMPLATES_DIR } from "../lib/template-assets.ts";
 import { existeConfig, leerConfig, type Config as ProjectConfig } from "../lib/config.ts";
 
 export const REC_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "../..");

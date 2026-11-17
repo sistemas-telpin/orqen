@@ -17,14 +17,15 @@
   },
   "scripts": {
     "dev": "tsx src/index.ts",
-    "build": "tsc -p tsconfig.build.json",
+    "build": "tsc -p tsconfig.build.json && node scripts/copy-template.mjs",
     "test": "node --import tsx --test test/*.test.ts",
     "typecheck": "tsc --noEmit",
-    "prepublishOnly": "pnpm build"
+    "link:local": "npm run build && npm link",
+    "prepack": "npm run build",
+    "prepublishOnly": "npm run typecheck && npm test"
   },
   "dependencies": {
     "@clack/prompts": "^1.9.0",
-    "orqen-kit": "workspace:*",
     "cross-spawn": "^7.0.6",
     "diff": "^9.0.0",
     "picocolors": "^1.1.1",

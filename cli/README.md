@@ -58,10 +58,13 @@ For an existing checkout, the CLI also reads `cli/.env` and its local state unde
 
 ## Develop locally
 
+From this directory:
+
 ```sh
-pnpm install
-pnpm enlazar
-pnpm test
-pnpm typecheck
-pnpm build
+npm ci
+npm run dev -- --help
+npm test
+npm run typecheck
+npm run build
+npm run link:local  # Build and link the local CLI as orqen
 ```

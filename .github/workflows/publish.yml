@@ -20,6 +20,6 @@ jobs:
           node-version: 22
           registry-url: https://registry.npmjs.org
       - run: npm ci
-      - run: npm publish # runs prepublishOnly: typecheck + test + build
+      - run: npm publish # prepublishOnly checks types and tests; prepack builds the CLI and bundles templates
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

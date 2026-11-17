@@ -124,12 +124,12 @@ During development, `orqen take` starts the environment and `orqen complete` shu
 - `template/` contains the files installed by `orqen init`.
 
 ```sh
-pnpm install
-./cli/bin/orqen --help  # Run from the checkout without linking
-pnpm enlazar     # Build and link the local CLI globally
-pnpm test
-pnpm typecheck
-pnpm build
+cd cli
+npm ci
+npm run dev -- --help
+npm test
+npm run typecheck
+npm run build
 ```
 
-To publish the `orqen` and `orqen-kit` packages, bump the versions in `cli/package.json` and `template/package.json`, sign in with `npm login`, and run `pnpm build && pnpm -r publish --access public`.
+Run `npm run link:local` from `cli/` to link the local build as `orqen`. The published `orqen` package includes the templates. The release workflow publishes from `cli/` when a version tag is pushed.

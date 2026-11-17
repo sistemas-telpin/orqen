@@ -13,7 +13,8 @@
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
-import { TEMPLATES_DIR, VERSION_KIT } from "orqen-kit";
+import { VERSION_CLI } from "./system.ts";
+import { TEMPLATES_DIR } from "./template-assets.ts";
 import { completarEnv } from "./env.ts";
 import { fusionarConfigOpenSpec } from "./openspec.ts";
 import { stageGuideFile } from "./stage-guides.ts";
@@ -223,7 +224,7 @@ export async function aplicar(
     if (c.hashNuevo) manifest.archivos[clave] = c.hashNuevo;
     out.push({ ruta: c.ruta, accion: c.accion });
   }
-  manifest.kit = VERSION_KIT;
+  manifest.kit = VERSION_CLI;
   escribir(repo, ARCHIVO_MANIFEST, JSON.stringify(manifest, null, 2) + "\n");
 
   // Create a Git-ignored orqen/.env from the example if needed.

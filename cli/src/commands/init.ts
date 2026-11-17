@@ -4,7 +4,6 @@
  * The CLI writes the configuration, Compose file, and workflow templates.
  */
 import { basename, resolve } from "node:path";
-import { VERSION_KIT } from "orqen-kit";
 import { agentesInstalados, comandoRapido, explorarConAgente, explorarRapidoAislado, type ResultadoExploracion } from "../lib/agent.ts";
 import { ARCHIVO_COMPOSE, generarCompose } from "../lib/compose.ts";
 import { ARCHIVO_CONFIG, entornosDesdeStack, escribirConfig, existeConfig, type Config } from "../lib/config.ts";
@@ -153,7 +152,7 @@ export async function init(o: OpcionesInit) {
   // 5. Write configuration and kit files.
   const config: Config = {
     version: 1,
-    orqen: { cli: VERSION_CLI, kit: VERSION_KIT },
+    orqen: { cli: VERSION_CLI, kit: VERSION_CLI },
     proyecto: { nombre, rama_base: rama || "main" },
     agente: { comando: comandoAgente },
     openspec: openspecCfg,
@@ -176,7 +175,7 @@ export async function init(o: OpcionesInit) {
   const env = leerEnv(repo) ?? {};
   const faltanEnv = ["JIRA_URL", "JIRA_USER", "JIRA_TOKEN"].filter((k) => !env[k] || /your-company|tu-empresa/.test(env[k]));
   const lado = res.filter((r) => r.accion === "guardado-al-lado");
-  p.log.success(`${ARCHIVO_CONFIG}, ${ARCHIVO_COMPOSE} and kit v${VERSION_KIT} installed`);
+  p.log.success(`${ARCHIVO_CONFIG}, ${ARCHIVO_COMPOSE} and kit v${VERSION_CLI} installed`);
   for (const r of lado) p.log.warn(`${r.ruta}: the proposed version is in ${r.detalle} for you to merge`);
 
   const mk = marketplace(existsSync(join(repo, MARKETPLACE)) ? readFileSync(join(repo, MARKETPLACE), "utf8") : undefined).nombre;

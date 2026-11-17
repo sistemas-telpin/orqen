@@ -1,0 +1,7 @@
+#!/usr/bin/env sh
+# orqen CLI wrapper. Can be run from any folder of the repo.
+DIR="$(cd "$(dirname "$0")/.." && pwd)"
+if [ ! -x "$DIR/node_modules/.bin/tsx" ]; then
+  echo "Missing dependencies, run: pnpm install" >&2; exit 1
+fi
+exec "$DIR/node_modules/.bin/tsx" "$DIR/src/index.ts" "$@"

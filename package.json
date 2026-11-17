@@ -10,7 +10,7 @@
     "build": "pnpm -r build",
     "test": "pnpm -r test",
     "typecheck": "pnpm -r typecheck",
-    "enlazar": "pnpm build && cd packages/cli && npm link"
+    "enlazar": "pnpm build && cd cli && npm link"
   },
   "pnpm": {
     "onlyBuiltDependencies": [

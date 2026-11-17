@@ -33,7 +33,7 @@ orqen env down
 
 orqen pending [--json]                 List requests awaiting analyst or agent work
 orqen analyze <KEY> [--analyst NAME]   Start analysis
-orqen lane <KEY> <directo|liviano|completo>
+orqen lane <KEY> <direct|light|full>
 orqen take <KEY> [--agent NAME]        Claim a stage and prepare its environment
 orqen complete <KEY> <output.json|->  Validate the output and advance the workflow
 orqen status [KEY]
@@ -41,10 +41,11 @@ orqen schema <STAGE>
 orqen block <KEY> <reason>
 orqen release <KEY>
 orqen search <JQL>
+orqen pr <KEY> [<explanation.md>] [--title TITLE]
 orqen cycle [--loop]                   Run the unattended workflow
 ```
 
-`take`, `complete`, `status`, `block`, and `release` accept either the customer request key (REC) or its linked implementation issue key (SIS). Existing stage IDs, lane values, and configuration keys are used as written in the command examples and JSON schemas.
+`take`, `complete`, `status`, `block`, and `release` accept either the customer request key (REC) or its linked implementation issue key (SIS). Run `orqen schema <STAGE>` to inspect the accepted JSON fields.
 
 ## Repository setup
 
@@ -54,7 +55,7 @@ orqen cycle [--loop]                   Run the unattended workflow
 | `orqen/.env` | Local Jira credentials, project settings, and approvers |
 | `orqen/stages/` | Editable stage instructions |
 | `orqen/plugin/` | Claude Code commands and the grilling skill |
-| `orqen/work/<KEY>/` | Request history, including `status.json`, `history.md`, and analysis notes |
+| `orqen/work/<KEY>/` | Request history, including `state.json`, `log.md`, and analysis notes |
 | `orqen/state/` and `orqen/tmp/` | Local workflow state and temporary files |
 | `orqen/manifest.json` | File hashes used by `orqen update` to identify local edits |
 | `docker-compose.orqen.yml` | Services with health checks and optional apps under the `apps` profile |
@@ -63,14 +64,14 @@ orqen cycle [--loop]                   Run the unattended workflow
 
 ## From request to delivery
 
-The analyst reviews the Jira issue and repository with the agent, confirms the acceptance criteria, and selects a lane. Questions only the customer can answer send the request to `ESPERA_CLIENTE` (Waiting for customer).
+The analyst reviews the Jira issue and repository with the agent, confirms the acceptance criteria, and selects a lane. Questions only the customer can answer send the request to `WAITING_CLIENT` (Waiting for customer).
 
 | Lane | When to use it | Output |
 | --- | --- | --- |
-| `directo` (direct) | A low-risk change in one component, roughly four hours or less, with no contract change | An implementation plan and acceptance criteria |
-| `liviano` (lightweight) | A focused behavior change across one or two capabilities, roughly two days or less | An OpenSpec proposal, spec deltas, a short design, and tasks |
-| `completo` (full) | Larger changes involving architecture, data, integration, security, or billing | A full OpenSpec proposal, specs, design, and tasks |
-| `via: operativa` (operational) | A data, service, or configuration change with no code changes | Steps, rollback, and read-only verification. A person approves and applies the change |
+| `direct` (direct) | A low-risk change in one component, roughly four hours or less, with no contract change | An implementation plan and acceptance criteria |
+| `light` (lightweight) | A focused behavior change across one or two capabilities, roughly two days or less | An OpenSpec proposal, spec deltas, a short design, and tasks |
+| `full` (full) | Larger changes involving architecture, data, integration, security, or billing | A full OpenSpec proposal, specs, design, and tasks |
+| `route: operational` (operational) | A data, service, or configuration change with no code changes | Steps, rollback, and read-only verification. A person approves and applies the change |
 
 For the lightweight and full lanes, `orqen lane` prepares the branch and OpenSpec change. After the analyst approves and the analysis passes validation, `orqen complete` creates and links the SIS and writes the request record.
 
@@ -113,21 +114,22 @@ During development, `orqen take` starts the environment and `orqen complete` shu
 ## Guarantees and limits
 
 - Stage outputs are validated with Zod and, when applicable, OpenSpec. If Jira fails partway through closing analysis, retrying `complete` resumes the operation without creating a duplicate SIS.
-- The agent records analyst approval in the required `analista_ok` field. This is a workflow check. Use tool permissions to enforce Git and Jira access.
+- The agent records analyst approval in the required `analyst_ok` field. This is a workflow check. Use tool permissions to enforce Git and Jira access.
 - orqen manages Jira writes, branch transitions, pull requests, and OpenSpec archiving. Agents write stage outputs and implement approved changes.
 - Each checkout handles one request at a time. Use separate clones or worktrees for parallel work.
 
 ## Develop and publish
 
-- [CLI](packages/cli/README.md) contains the commands and the request workflow.
-- `packages/kit` contains the files installed by `orqen init`.
+- [CLI](cli/README.md) contains the commands and the request workflow.
+- `template/` contains the files installed by `orqen init`.
 
 ```sh
 pnpm install
+./cli/bin/orqen --help  # Run from the checkout without linking
 pnpm enlazar     # Build and link the local CLI globally
 pnpm test
 pnpm typecheck
 pnpm build
 ```
 
-To publish the `orqen` and `orqen-kit` packages, bump the versions in `packages/*/package.json`, sign in with `npm login`, and run `pnpm build && pnpm -r publish --access public`.
+To publish the `orqen` and `orqen-kit` packages, bump the versions in `cli/package.json` and `template/package.json`, sign in with `npm login`, and run `pnpm build && pnpm -r publish --access public`.

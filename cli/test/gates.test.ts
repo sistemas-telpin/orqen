@@ -231,6 +231,8 @@ test("review: records the code review in CODE_REVIEW with an open PR, numbered p
 
 test("pr: sends the branch to the devel branch, records the explanation and is idempotent", async () => {
   const { p, jira, cfg } = setup();
+  jira.issues["SIS-9"] = { title: "SIS" };
+  jira.coms["SIS-9"] = [];
   const calls: string[] = [];
   let cmd = "", branch = "main";
   const ws: Workspace = {
@@ -260,6 +262,7 @@ test("pr: sends the branch to the devel branch, records the explanation and is i
   assert.ok(cmd.endsWith("|desarrollo|orqen/work/REC-1/round-1/devel-pr.md"));
   assert.match(readFileSync(join(cfg.factoryDir, "REC-1", "round-1", "devel-pr.md"), "utf8"), /exportación a CSV/);
   assert.match(jira.last("REC-1"), /PR to \*desarrollo\*/);
+  assert.match(jira.last("SIS-9"), /PR to \*desarrollo\*/);
 
   const again = await flow.pr("REC-1", body);   // the PR already exists: only pushes
   assert.equal(again.created, false);

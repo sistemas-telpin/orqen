@@ -30,11 +30,15 @@ function tempRepo() {
   writeFileSync(join(dir, "export.mjs"), "export const exportCsv = () => '';\n");
   writeFileSync(join(dir, "test.mjs"), "import {exportCsv} from './export.mjs'; if (exportCsv([{n:1}]) !== 'n\\n1') process.exit(1);\n");
   git("add", "-A"); git("commit", "-qm", "init");
-  return { dir, git };
+  const remote = `${dir}-remote.git`;
+  execFileSync("git", ["init", "--bare", "-q", remote]);
+  git("remote", "add", "origin", remote);
+  git("push", "-q", "-u", "origin", "main");
+  return { dir, git, remote };
 }
 
 test("full REC with real OpenSpec", { skip: !existsSync(OPENSPEC) && "openspec missing" }, async () => {
-  const { dir, git } = tempRepo();
+  const { dir, git, remote } = tempRepo();
   const cfg = loadConfig({
     repoPath: dir, stateDir: join(dir, "..", `state-${Date.now()}`), openspecCmd: OPENSPEC,
     testCommand: "node test.mjs",jql: "x",
@@ -137,6 +141,7 @@ test("full REC with real OpenSpec", { skip: !existsSync(OPENSPEC) && "openspec m
   await p.take("REC-7");
   assert.ok(existsSync(join(dir, "openspec", "specs", "facturacion-exportacion", "spec.md")));
   assert.ok(!existsSync(cdir));
+  assert.equal(execFileSync("git", ["--git-dir", remote, "branch", "--list", "rec/rec-7"], { encoding: "utf8" }).trim(), "rec/rec-7");
   r = await p.complete("REC-7", { release_notes: "n", client_message: "Ya podés exportar facturas a CSV desde el módulo.", validation_steps: ["Exportar"] });
   assert.deepEqual(r, { ok: true, next: "ACCEPTANCE" });
 

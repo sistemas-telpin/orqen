@@ -17,11 +17,18 @@ function orqen(cwd: string, ...args: string[]) {
   return { codigo: r.status, salida: r.stdout + r.stderr };
 }
 
+test("orqen --help prints the current logo and usage without an interactive terminal", () => {
+  const r = orqen(process.cwd(), "--help");
+  assert.equal(r.codigo, 0, r.salida);
+  assert.match(r.salida, /AI Software Factory KIT/);
+  assert.match(r.salida, /Usage: orqen/);
+});
+
 test("orqen init --yes writes the repository configuration", () => {
   const repo = repoTemporal(MONOREPO);
   const r = orqen(repo, "init", "--yes", "--no-ai", "--no-openspec");
   assert.equal(r.codigo, 0, r.salida);
-  assert.match(r.salida, /A U T O N O M O U S/);
+  assert.match(r.salida, /AI Software Factory KIT/);
 
   const cfg = parse(readFileSync(join(repo, "orqen/config.yaml"), "utf8"));
   assert.equal(cfg.version, 1);

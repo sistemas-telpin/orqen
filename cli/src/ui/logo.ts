@@ -24,7 +24,7 @@ const BLANCO: RGB = [0xf4, 0xf6, 0xfa];
 
 const LEMA = "From request to production.";
 const SUB = "Orchestrate autonomous development.";
-const SUBTITULO = "A U T O N O M O U S   S Y S T E M S";
+const SUBTITULO = "AI Software Factory KIT";
 
 /* ───────────────────────── utilidades ───────────────────────── */
 

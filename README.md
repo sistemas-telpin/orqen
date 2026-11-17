@@ -1,4 +1,4 @@
-# orqen — AI Software Factory Kit
+# orqen — AI Software Factory KIT
 
 **orqen** coordinates AI agents and development workflows from customer requirements through implementation and delivery. It builds on OpenSpec, using repository specifications and Jira issues to track decisions, verification, and approvals.
 

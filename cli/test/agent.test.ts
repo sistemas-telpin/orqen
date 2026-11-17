@@ -116,7 +116,7 @@ test("renders a stable animated loop and a static logo", () => {
   }
   const e = escena(5, bienvenida, true);
   const texto = e.map((l) => l.map(([, s]) => limpio(s)).join("")).join("\n");
-  assert.match(texto, /A U T O N O M O U S   S Y S T E M S/);
+  assert.match(texto, /AI Software Factory KIT/);
   assert.match(texto, /uno[\s\S]*dos[\s\S]*Press Enter to begin/);
   // The loop keeps moving after the intro and updates only some segments.
   const a = escena(5, [], true).slice(0, 12).flat().map(([, s]) => s), b = escena(5.05, [], true).slice(0, 12).flat().map(([, s]) => s);
@@ -124,8 +124,9 @@ test("renders a stable animated loop and a static logo", () => {
   assert.ok(cambiados > 0 && cambiados < a.length, `tramos que cambian: ${cambiados}/${a.length}`);
   // The static logo uses pixels in a wide color terminal and plain characters otherwise.
   assert.match(logo(true, 120), /▀/);
+  assert.match(limpio(logo(true, 120)), /AI Software Factory KIT/);
   assert.ok(logo(true, 120).split("\n").every((l) => [...limpio(l)].length <= 90));
-  assert.match(logo(false), /A U T O N O M O U S/);
+  assert.match(logo(false), /AI Software Factory KIT/);
   assert.match(logo(true, 80), /██████╗/);
 });
 

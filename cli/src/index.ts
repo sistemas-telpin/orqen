@@ -6,7 +6,7 @@ import { init } from "./commands/init.ts";
 import { WORKFLOW_HELP, WORKFLOW_COMMANDS, runWorkflow } from "./commands/workflow.ts";
 import { update } from "./commands/update.ts";
 import { VERSION_CLI } from "./lib/system.ts";
-import { logo } from "./ui/logo.ts";
+import { mostrarLogo } from "./ui/logo.ts";
 
 
 const AYUDA = `
@@ -55,7 +55,11 @@ async function main() {
   });
   const [cmd, ...resto] = positionals;
   if (v.version) return console.log(VERSION_CLI);
-  if (!cmd || v.help) { console.log(logo() + AYUDA); return; }
+  if (!cmd || v.help) {
+    await mostrarLogo({ animar: !v["no-animation"] && !v.yes });
+    console.log(AYUDA);
+    return;
+  }
 
   switch (cmd) {
     case "init":

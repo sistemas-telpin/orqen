@@ -108,20 +108,23 @@ test("logo: la escena animada tiene estructura estable, se mueve en loop y el es
   const limpio = (l: string) => l.replace(/\x1b\[[0-9;?]*[a-zA-Z]/g, "");
   const bienvenida = ["uno", "dos"];
   const n = escena(0, bienvenida, true).length;
-  for (const t of [0, 0.3, 0.8, 1.2, 3, 7.77, 60]) {
+  const ancho = (tramos: [number, string][]) => tramos.reduce((a, [, s]) => a + [...limpio(s)].length, 0);
+  for (const t of [0, 0.3, 0.8, 1.2, 1.6, 3, 7.77, 60]) {
     const e = escena(t, bienvenida, true);
     assert.equal(e.length, n, `misma cantidad de líneas en t=${t}`);
-    for (const [, iso] of e.slice(0, 10).map((l) => l[0])) assert.equal([...limpio(iso)].length, 22, `isotipo de ancho fijo en t=${t}`);
+    for (const fila of e.slice(0, 12)) assert.equal(ancho(fila), 90, `lienzo de ancho fijo en t=${t}`);
   }
-  // Armado completo: el texto está entero y la bienvenida visible
   const e = escena(5, bienvenida, true);
-  assert.equal(limpio(e[2][1][1]), " ██████╗ ██████╗  ██████╗ ███████╗███╗   ██╗");
-  assert.match(limpio(e.at(-1)![0][1]), /Enter para comenzar/);
-  assert.match(e.map((l) => limpio(l[0][1])).join("\n"), /uno[\s\S]*dos/);
-  // El isotipo sigue en movimiento después del armado (loop)
-  assert.notDeepEqual(escena(5, [], true).slice(0, 10), escena(5.2, [], true).slice(0, 10));
-  // Estático: con color usa medios bloques; sin color, caracteres
-  assert.match(logo(true), /▀/);
+  const texto = e.map((l) => l.map(([, s]) => limpio(s)).join("")).join("\n");
+  assert.match(texto, /A U T O N O M O U S   S Y S T E M S/);
+  assert.match(texto, /uno[\s\S]*dos[\s\S]*Enter para comenzar/);
+  // Sigue en movimiento después del armado (loop), pero solo cambian algunos tramos
+  const a = escena(5, [], true).slice(0, 12).flat().map(([, s]) => s), b = escena(5.05, [], true).slice(0, 12).flat().map(([, s]) => s);
+  const cambiados = a.filter((s, i) => s !== b[i]).length;
+  assert.ok(cambiados > 0 && cambiados < a.length, `tramos que cambian: ${cambiados}/${a.length}`);
+  // Estático: con color y terminal ancha usa el lienzo de píxeles; sin color o angosta, caracteres
+  assert.match(logo(true, 120), /▀/);
+  assert.ok(logo(true, 120).split("\n").every((l) => [...limpio(l)].length <= 90));
   assert.match(logo(false), /A U T O N O M O U S/);
-  assert.ok(logo(true).split("\n").every((l) => [...limpio(l)].length <= 82));
+  assert.match(logo(true, 80), /██████╗/);
 });

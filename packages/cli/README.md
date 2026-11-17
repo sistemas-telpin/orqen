@@ -9,8 +9,10 @@ Es un paquete público de npm: no necesita token ni configuración.
 
 ## `orqen init`
 
-1. Pantalla de bienvenida animada en loop a ~60 fps: el isotipo se dibuja por píxeles (el trazo se traza solo, el degradado gira,
-   un cometa recorre el anillo y tres satélites orbitan) hasta presionar Enter; estático sin TTY, en CI, con `--yes` o `--sin-animacion`. Después chequea Node ≥ 20.12, git, pnpm/npm y Docker (Docker es opcional: si falta, avisa).
+1. Pantalla de bienvenida animada en loop a ~60 fps, dibujada por píxeles: partículas que convergen, el hexágono entra
+   girando en 3D, una onda expansiva enciende "ORQEN" con aberración cromática, y queda vivo (degradado que gira, cometa,
+   halo, satélites en órbita 3D, estrellas, giro + onda cada pocos segundos) hasta presionar Enter. Necesita una terminal
+   de ≥ 92 columnas y ≥ 23 filas; si no, o sin TTY, en CI, con `--yes` o `--sin-animacion`, muestra el logo estático. Después chequea Node ≥ 20.12, git, pnpm/npm y Docker (Docker es opcional: si falta, avisa).
 2. **Detección automática** del stack: manifiestos (`package.json`, `pom.xml`, `build.gradle`, `requirements.txt`,
    `pyproject.toml`, `*.csproj`, `go.mod`, `composer.json`, `Gemfile`), Dockerfiles, `docker-compose` existentes,
    Prisma, `.env.example` y dependencias que delatan servicios (Postgres, MySQL, SQL Server, Mongo, Redis, RabbitMQ, Kafka…).

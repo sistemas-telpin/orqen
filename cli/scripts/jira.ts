@@ -1,25 +1,25 @@
-/** Cliente mínimo de Jira. Lectura para el agente (vía `orqen take`/`orqen search`); escritura solo desde el proceso. */
+/** Minimal Jira client. Read access for the agent (via `orqen take`/`orqen search`); writes only from the process. */
 import type { Config } from "./config.ts";
 
-export const BOT_MARCA = "[rec-agente]";
+export const BOT_MARK = "[rec-agente]";
 
-export interface Comentario { id: string; autor: string; autorNombre: string; cuerpo: string; creado: string }
+export interface Comment { id: string; author: string; authorName: string; body: string; created: string }
 export interface Issue {
-  key: string; titulo: string; descripcion: string; tipo?: string; prioridad?: string;
-  reportadoPor?: string; estadoJira?: string; labels: string[]; componentes: string[]; adjuntos: string[];
+  key: string; title: string; description: string; type?: string; priority?: string;
+  reportedBy?: string; jiraStatus?: string; labels: string[]; components: string[]; attachments: string[];
 }
 
 export interface JiraApi {
-  buscarKeys(jql: string): Promise<string[]>;
+  searchKeys(jql: string): Promise<string[]>;
   issue(key: string): Promise<Issue>;
-  comentarios(key: string): Promise<Comentario[]>;
-  comentar(key: string, texto: string): Promise<void>;
-  setLabelEstado(key: string, estado: string): Promise<void>;
-  transicionar(key: string, nombre: string): Promise<boolean>;
-  /** Crea un issue en otro proyecto (ej. el SIS de desarrollo) y devuelve su key. */
-  crearIssue(i: { proyecto: string; tipo: string; titulo: string; descripcion: string; labels?: string[] }): Promise<string>;
-  /** Vincula dos issues (ej. SIS "relates to" REC). */
-  vincular(desde: string, hacia: string, tipoLink: string): Promise<void>;
+  comments(key: string): Promise<Comment[]>;
+  comment(key: string, text: string): Promise<void>;
+  setStateLabel(key: string, state: string): Promise<void>;
+  transition(key: string, name: string): Promise<boolean>;
+  /** Creates an issue in another project (e.g. the development SIS) and returns its key. */
+  createIssue(i: { project: string; type: string; title: string; description: string; labels?: string[] }): Promise<string>;
+  /** Links two issues (e.g. SIS "relates to" REC). */
+  link(from: string, to: string, linkType: string): Promise<void>;
 }
 
 export class JiraClient implements JiraApi {
@@ -45,7 +45,7 @@ export class JiraClient implements JiraApi {
     return t ? JSON.parse(t) : {};
   }
 
-  async buscarKeys(jql: string) {
+  async searchKeys(jql: string) {
     const path = this.cfg.jiraDeployment === "cloud" ? "/rest/api/3/search/jql" : "/rest/api/2/search";
     const r = await this.req("GET", path, undefined, { jql, fields: "key", maxResults: 100 });
     return (r.issues ?? []).map((i: any) => i.key as string);
@@ -57,50 +57,50 @@ export class JiraClient implements JiraApi {
     });
     const f = r.fields;
     return {
-      key, titulo: f.summary, descripcion: f.description ?? "", tipo: f.issuetype?.name,
-      prioridad: f.priority?.name, reportadoPor: f.reporter?.displayName, estadoJira: f.status?.name,
-      labels: f.labels ?? [], componentes: (f.components ?? []).map((c: any) => c.name),
-      adjuntos: (f.attachment ?? []).map((a: any) => a.filename),
+      key, title: f.summary, description: f.description ?? "", type: f.issuetype?.name,
+      priority: f.priority?.name, reportedBy: f.reporter?.displayName, jiraStatus: f.status?.name,
+      labels: f.labels ?? [], components: (f.components ?? []).map((c: any) => c.name),
+      attachments: (f.attachment ?? []).map((a: any) => a.filename),
     };
   }
 
-  async comentarios(key: string): Promise<Comentario[]> {
+  async comments(key: string): Promise<Comment[]> {
     const r = await this.req("GET", `/rest/api/2/issue/${key}/comment`, undefined, { maxResults: 500, orderBy: "created" });
     return (r.comments ?? []).map((c: any) => ({
-      id: String(c.id), autor: c.author?.accountId ?? c.author?.name ?? "",
-      autorNombre: c.author?.displayName ?? "", cuerpo: c.body ?? "", creado: c.created ?? "",
+      id: String(c.id), author: c.author?.accountId ?? c.author?.name ?? "",
+      authorName: c.author?.displayName ?? "", body: c.body ?? "", created: c.created ?? "",
     }));
   }
 
-  async comentar(key: string, texto: string) {
-    await this.req("POST", `/rest/api/2/issue/${key}/comment`, { body: `${BOT_MARCA} ${texto}` });
+  async comment(key: string, text: string) {
+    await this.req("POST", `/rest/api/2/issue/${key}/comment`, { body: `${BOT_MARK} ${text}` });
   }
 
-  async setLabelEstado(key: string, estado: string) {
+  async setStateLabel(key: string, state: string) {
     const { labels } = await this.issue(key);
-    const nuevas = labels.filter((l) => !l.startsWith("rec-estado-")).concat(`rec-estado-${estado.toLowerCase()}`);
-    await this.req("PUT", `/rest/api/2/issue/${key}`, { fields: { labels: nuevas } });
+    const next = labels.filter((l) => !l.startsWith("rec-state-")).concat(`rec-state-${state.toLowerCase()}`);
+    await this.req("PUT", `/rest/api/2/issue/${key}`, { fields: { labels: next } });
   }
 
-  async crearIssue(i: { proyecto: string; tipo: string; titulo: string; descripcion: string; labels?: string[] }) {
+  async createIssue(i: { project: string; type: string; title: string; description: string; labels?: string[] }) {
     const r = await this.req("POST", "/rest/api/2/issue", {
       fields: {
-        project: { key: i.proyecto }, issuetype: { name: i.tipo },
-        summary: i.titulo.slice(0, 250), description: i.descripcion, labels: i.labels ?? [],
+        project: { key: i.project }, issuetype: { name: i.type },
+        summary: i.title.slice(0, 250), description: i.description, labels: i.labels ?? [],
       },
     });
     return r.key as string;
   }
 
-  async vincular(desde: string, hacia: string, tipoLink: string) {
+  async link(from: string, to: string, linkType: string) {
     await this.req("POST", "/rest/api/2/issueLink", {
-      type: { name: tipoLink }, inwardIssue: { key: desde }, outwardIssue: { key: hacia },
+      type: { name: linkType }, inwardIssue: { key: from }, outwardIssue: { key: to },
     });
   }
 
-  async transicionar(key: string, nombre: string) {
+  async transition(key: string, name: string) {
     const r = await this.req("GET", `/rest/api/2/issue/${key}/transitions`);
-    const t = (r.transitions ?? []).find((t: any) => t.name.toLowerCase() === nombre.toLowerCase());
+    const t = (r.transitions ?? []).find((t: any) => t.name.toLowerCase() === name.toLowerCase());
     if (!t) return false;
     await this.req("POST", `/rest/api/2/issue/${key}/transitions`, { transition: { id: t.id } });
     return true;

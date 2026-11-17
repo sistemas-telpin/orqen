@@ -1,34 +1,34 @@
-import type { Comentario, Issue, JiraApi } from "../scripts/jira.ts";
-import { BOT_MARCA } from "../scripts/jira.ts";
+import type { Comment, Issue, JiraApi } from "../scripts/jira.ts";
+import { BOT_MARK } from "../scripts/jira.ts";
 
 let id = 0;
 
 export class FakeJira implements JiraApi {
-  coms: Record<string, Comentario[]> = {};
+  coms: Record<string, Comment[]> = {};
   labels: Record<string, string> = {};
   constructor(public issues: Record<string, Partial<Issue>>) {
     for (const k of Object.keys(issues)) this.coms[k] = [];
   }
-  async buscarKeys() { return Object.keys(this.issues); }
+  async searchKeys() { return Object.keys(this.issues); }
   async issue(key: string): Promise<Issue> {
-    return { key, titulo: "", descripcion: "", labels: [], componentes: [], adjuntos: [], ...this.issues[key] };
+    return { key, title: "", description: "", labels: [], components: [], attachments: [], ...this.issues[key] };
   }
-  async comentarios(key: string) { return [...this.coms[key]]; }
-  async comentar(key: string, texto: string) { this.add(key, "bot", `${BOT_MARCA} ${texto}`); }
-  humano(key: string, autor: string, texto: string) { this.add(key, autor, texto); }
-  async setLabelEstado(key: string, e: string) { this.labels[key] = e; }
-  async transicionar(key: string, n: string) { (this.transiciones[key] ??= []).push(n); return true; }
-  transiciones: Record<string, string[]> = {};
-  creados: Array<{ key: string; proyecto: string; tipo: string; titulo: string; descripcion: string }> = [];
+  async comments(key: string) { return [...this.coms[key]]; }
+  async comment(key: string, text: string) { this.add(key, "bot", `${BOT_MARK} ${text}`); }
+  human(key: string, author: string, text: string) { this.add(key, author, text); }
+  async setStateLabel(key: string, s: string) { this.labels[key] = s; }
+  async transition(key: string, n: string) { (this.transitions[key] ??= []).push(n); return true; }
+  transitions: Record<string, string[]> = {};
+  created: Array<{ key: string; project: string; type: string; title: string; description: string }> = [];
   links: Array<[string, string, string]> = [];
-  async crearIssue(i: { proyecto: string; tipo: string; titulo: string; descripcion: string }) {
-    const key = `${i.proyecto}-${this.creados.length + 1}`;
-    this.creados.push({ key, ...i }); this.coms[key] = []; this.issues[key] = { titulo: i.titulo };
+  async createIssue(i: { project: string; type: string; title: string; description: string }) {
+    const key = `${i.project}-${this.created.length + 1}`;
+    this.created.push({ key, ...i }); this.coms[key] = []; this.issues[key] = { title: i.title };
     return key;
   }
-  async vincular(a: string, b: string, t: string) { this.links.push([a, b, t]); }
-  ultimo(key: string) { return this.coms[key].at(-1)!.cuerpo; }
-  private add(key: string, autor: string, cuerpo: string) {
-    this.coms[key].push({ id: String(++id), autor, autorNombre: autor, cuerpo, creado: "" });
+  async link(a: string, b: string, t: string) { this.links.push([a, b, t]); }
+  last(key: string) { return this.coms[key].at(-1)!.body; }
+  private add(key: string, author: string, body: string) {
+    this.coms[key].push({ id: String(++id), author, authorName: author, body, created: "" });
   }
 }

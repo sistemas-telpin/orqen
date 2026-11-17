@@ -3,7 +3,7 @@
   "version": "0.2.0",
   "private": true,
   "type": "module",
-  "description": "Proceso orqen agnóstico de agente: AGENTS.md + CLI en TypeScript",
+  "description": "Agent-agnostic orqen process: AGENTS.md + TypeScript CLI",
   "engines": {
     "node": ">=20.12"
   },

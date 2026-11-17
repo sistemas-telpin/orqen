@@ -1,110 +1,110 @@
 /**
- * Integración con OpenSpec (>= 2.0). Cada REC (y cada ronda) es un "change" de OpenSpec:
- *   ESPECIFICACION → openspec new change + el agente escribe proposal/specs/design/tasks
- *   DESARROLLO     → el agente sigue `openspec instructions apply` y tilda tasks.md
- *   TESTING        → los Scenarios de los spec deltas son el checklist de cobertura
- *   ENTREGA        → openspec archive (los deltas se fusionan en openspec/specs)
- * Este módulo solo envuelve la CLI con --json y parsea lo que la CLI no expone (escenarios, horas).
+ * OpenSpec integration (>= 2.0). Each REC (and each round) is an OpenSpec "change":
+ *   SPECIFICATION → openspec new change + the agent writes proposal/specs/design/tasks
+ *   DEVELOPMENT   → the agent follows `openspec instructions apply` and ticks tasks.md
+ *   TESTING       → the Scenarios of the spec deltas are the coverage checklist
+ *   DELIVERY      → openspec archive (the deltas are merged into openspec/specs)
+ * This module only wraps the CLI with --json and parses what the CLI does not expose (scenarios, hours).
  */
 import { spawnSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 
-export interface Tarea { descripcion: string; hecha: boolean; horas?: number }
-export interface Escenario { capacidad: string; requisito: string; escenario: string }
+export interface Task { description: string; done: boolean; hours?: number }
+export interface Scenario { capability: string; requirement: string; scenario: string }
 
 export interface OpenSpecApi {
-  nuevoCambio(id: string, descripcion: string): string;           // devuelve el dir del change
-  existe(id: string): boolean;
+  newChange(id: string, description: string): string;           // returns the change dir
+  exists(id: string): boolean;
   dir(id: string): string;
-  validar(id: string): { ok: boolean; problemas: string[] };
-  planificacionCompleta(id: string): boolean;
-  tareas(id: string): Tarea[];
-  escenarios(id: string): Escenario[];
-  archivar(id: string): { archivadoComo: string; totales: Record<string, number> };
+  validate(id: string): { ok: boolean; problems: string[] };
+  planningComplete(id: string): boolean;
+  tasks(id: string): Task[];
+  scenarios(id: string): Scenario[];
+  archive(id: string): { archivedAs: string; totals: Record<string, number> };
 }
 
 export class OpenSpecCli implements OpenSpecApi {
   constructor(private cmd: string, private repoPath: string) {}
 
   private run(args: string[]): any {
-    const win = process.platform === "win32";  // con shell (cmd) hay que entrecomillar los argumentos con espacios
+    const win = process.platform === "win32";  // with a shell (cmd) arguments containing spaces must be quoted
     const a = win ? args.map((x) => (/[\s"]/.test(x) ? `"${x.replace(/"/g, '\\"')}"` : x)) : args;
     const p = spawnSync(this.cmd, a, { cwd: this.repoPath, encoding: "utf8", shell: win });
-    if (p.error) throw new Error(`No pude ejecutar "${this.cmd}": ${p.error.message}. ¿Está instalado OpenSpec? (npm i -g @fission-ai/openspec)`);
+    if (p.error) throw new Error(`Could not run "${this.cmd}": ${p.error.message}. Is OpenSpec installed? (npm i -g @fission-ai/openspec)`);
     try {
-      return { codigo: p.status, json: JSON.parse(p.stdout) };
+      return { code: p.status, json: JSON.parse(p.stdout) };
     } catch {
-      return { codigo: p.status, json: null, texto: (p.stdout + p.stderr).trim() };
+      return { code: p.status, json: null, text: (p.stdout + p.stderr).trim() };
     }
   }
 
   private ok(args: string[]) {
     const r = this.run(args);
-    if (r.codigo !== 0 || !r.json) throw new Error(`openspec ${args.join(" ")} falló: ${r.texto ?? JSON.stringify(r.json)}`);
+    if (r.code !== 0 || !r.json) throw new Error(`openspec ${args.join(" ")} failed: ${r.text ?? JSON.stringify(r.json)}`);
     return r.json;
   }
 
   dir(id: string) { return join(this.repoPath, "openspec", "changes", id); }
-  existe(id: string) { return existsSync(this.dir(id)); }
+  exists(id: string) { return existsSync(this.dir(id)); }
 
-  nuevoCambio(id: string, descripcion: string) {
-    if (this.existe(id)) return this.dir(id);
-    return this.ok(["new", "change", id, "--description", descripcion, "--json"]).change.path as string;
+  newChange(id: string, description: string) {
+    if (this.exists(id)) return this.dir(id);
+    return this.ok(["new", "change", id, "--description", description, "--json"]).change.path as string;
   }
 
-  validar(id: string) {
+  validate(id: string) {
     const r = this.run(["validate", id, "--type", "change", "--strict", "--json", "--no-interactive"]);
     const item = r.json?.items?.[0];
-    if (!item) return { ok: false, problemas: [r.texto ?? "openspec validate no devolvió resultado"] };
-    const problemas = (item.issues ?? []).map((i: any) => `${i.level ?? ""} ${i.path ?? ""}: ${i.message ?? JSON.stringify(i)}`.trim());
-    return { ok: !!item.valid, problemas };
+    if (!item) return { ok: false, problems: [r.text ?? "openspec validate returned no result"] };
+    const problems = (item.issues ?? []).map((i: any) => `${i.level ?? ""} ${i.path ?? ""}: ${i.message ?? JSON.stringify(i)}`.trim());
+    return { ok: !!item.valid, problems };
   }
 
-  planificacionCompleta(id: string) {
+  planningComplete(id: string) {
     return !!this.ok(["status", "--change", id, "--json"]).isPlanningComplete;
   }
 
-  tareas(id: string): Tarea[] {
+  tasks(id: string): Task[] {
     const j = this.ok(["instructions", "apply", "--change", id, "--json"]);
-    return (j.tasks ?? []).map((t: any) => ({ descripcion: t.description, hecha: !!t.done, horas: horasDe(t.description) }));
+    return (j.tasks ?? []).map((t: any) => ({ description: t.description, done: !!t.done, hours: hoursOf(t.description) }));
   }
 
-  escenarios(id: string) { return escenariosDeCambio(this.dir(id)); }
+  scenarios(id: string) { return changeScenarios(this.dir(id)); }
 
-  archivar(id: string) {
+  archive(id: string) {
     const j = this.ok(["archive", id, "--yes", "--json"]);
-    return { archivadoComo: j.archive.archivedAs, totales: j.archive.totals };
+    return { archivedAs: j.archive.archivedAs, totals: j.archive.totals };
   }
 }
 
-/** "Implementar endpoint (4h)" → 4 ; también "(1.5 h)" */
-export function horasDe(desc: string): number | undefined {
+/** "Implement endpoint (4h)" → 4 ; also "(1.5 h)" */
+export function hoursOf(desc: string): number | undefined {
   const m = desc.match(/\((\d+(?:[.,]\d+)?)\s*h\)\s*$/i);
   return m ? Number(m[1].replace(",", ".")) : undefined;
 }
 
-/** Recorre specs/**\/spec.md del change y lista cada Scenario con su Requirement. */
-export function escenariosDeCambio(dirCambio: string): Escenario[] {
-  const base = join(dirCambio, "specs");
+/** Walks specs/**\/spec.md of the change and lists each Scenario with its Requirement. */
+export function changeScenarios(changeDir: string): Scenario[] {
+  const base = join(changeDir, "specs");
   if (!existsSync(base)) return [];
-  const out: Escenario[] = [];
-  const recorrer = (d: string) => {
+  const out: Scenario[] = [];
+  const walk = (d: string) => {
     for (const f of readdirSync(d)) {
       const p = join(d, f);
-      if (statSync(p).isDirectory()) recorrer(p);
+      if (statSync(p).isDirectory()) walk(p);
       else if (f === "spec.md") {
-        const capacidad = d.slice(base.length + 1).replaceAll("\\", "/");
-        let seccion = "", requisito = "";
-        for (const linea of readFileSync(p, "utf8").split("\n")) {
-          const h2 = linea.match(/^##\s+(.+)/), req = linea.match(/^###\s+Requirement:\s*(.+)/), esc = linea.match(/^####\s+Scenario:\s*(.+)/);
-          if (h2 && !linea.startsWith("###")) seccion = h2[1].trim().toUpperCase();
-          else if (req) requisito = req[1].trim();
-          else if (esc && !seccion.startsWith("REMOVED")) out.push({ capacidad, requisito, escenario: esc[1].trim() });
+        const capability = d.slice(base.length + 1).replaceAll("\\", "/");
+        let section = "", requirement = "";
+        for (const line of readFileSync(p, "utf8").split("\n")) {
+          const h2 = line.match(/^##\s+(.+)/), req = line.match(/^###\s+Requirement:\s*(.+)/), sc = line.match(/^####\s+Scenario:\s*(.+)/);
+          if (h2 && !line.startsWith("###")) section = h2[1].trim().toUpperCase();
+          else if (req) requirement = req[1].trim();
+          else if (sc && !section.startsWith("REMOVED")) out.push({ capability, requirement, scenario: sc[1].trim() });
         }
       }
     }
   };
-  recorrer(base);
+  walk(base);
   return out;
 }

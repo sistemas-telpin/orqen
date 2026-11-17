@@ -19,7 +19,7 @@ const fakeOs: OpenSpecApi = {
   archive: () => ({ archivedAs: "x", totals: {} }),
 };
 const failingTests: Workspace = {
-  prepareBranch: () => "rec/rec-1", commit: () => true, push: () => {}, openPr: () => "",
+  prepareBranch: () => "rec/rec-1", currentBranch: () => "rec/rec-1", commit: () => true, push: () => {}, openPr: () => "",
   runTests: () => ({ ok: false, output: "1 failed" }),
 };
 
@@ -179,12 +179,63 @@ test("change name", () => {
   assert.equal(changeName("REC-123", "Exportación", 2), "rec-123-exportacion-r2");
 });
 
+test("testing approved goes to CODE_REVIEW without pushing or opening a PR", async () => {
+  const { jira, cfg } = setup();
+  const calls: string[] = [];
+  const ws: Workspace = {
+    ...failingTests, runTests: () => ({ ok: true, output: "ok" }),
+    push: () => { calls.push("push"); }, openPr: () => { calls.push("pr"); return "https://example.test/pr/1"; },
+  };
+  const store = new Store(cfg.stateDir);
+  const flow = new Process(cfg, jira, store, ws, fakeOs);
+  store.save({ ...newRec("REC-1"), state: "TESTING", branch: "rec/rec-1", change: "c" });
+  await flow.take("REC-1");
+  const r = await flow.complete("REC-1", {
+    scenarios: [{ requirement: "R", scenario: "E", covered: true, test: "a.test.ts::e" }],
+    failure_diagnosis: "", suggestions: [], coverage_ok: true,
+  });
+  assert.deepEqual(r, { ok: true, next: "CODE_REVIEW" });
+  assert.deepEqual(calls, []);
+  assert.match(jira.last("REC-1"), /is opened with \/orqen:pr/);
+});
+
+test("review: records the code review in CODE_REVIEW with an open PR, numbered per round, commented on the SIS", async () => {
+  const { jira, cfg } = setup();
+  jira.coms["SIS-9"] = [];
+  const commits: unknown[] = [];
+  const ws: Workspace = { ...failingTests, commit: (_k, msg, opts) => { commits.push([msg, opts?.branch]); return true; } };
+  const store = new Store(cfg.stateDir);
+  const flow = new Process(cfg, jira, store, ws, fakeOs);
+  const report = "## Veredicto\nRechazar: falta validar el rango de fechas.\n\n## Hallazgos\n#1 bloqueante · src/export.ts:42 · Solución: validar antes de consultar.";
+  const rec = { ...newRec("REC-1"), branch: "rec/rec-1", sis: "SIS-9" };
+
+  store.save({ ...rec, state: "TESTING" });
+  await assert.rejects(flow.codeReview("REC-1", report, "reject"), /recorded in CODE_REVIEW/);
+  store.save({ ...rec, state: "CODE_REVIEW" });
+  await assert.rejects(flow.codeReview("REC-1", report, "reject"), /no PR to desarrollo yet/);
+  store.save({ ...rec, state: "CODE_REVIEW", artifacts: { devel_pr: "https://example.test/pr/7" } });
+  await assert.rejects(flow.codeReview("REC-1", report, "maybe"), /Invalid verdict/);
+  await assert.rejects(flow.codeReview("REC-1", "corto", "reject"), /too short/);
+
+  const r1 = await flow.codeReview("REC-1", report, "reject");
+  assert.deepEqual([r1.n, r1.path, r1.commentedOn], [1, "orqen/work/REC-1/round-1/code-review-1.md", "SIS-9"]);
+  assert.match(readFileSync(join(cfg.factoryDir, "REC-1", "round-1", "code-review-1.md"), "utf8"), /rango de fechas/);
+  assert.match(jira.last("SIS-9"), /Code review #1.*verdict: \*Reject\*/);
+  assert.deepEqual(commits, [["code review #1", "rec/rec-1"]]);
+
+  const r2 = await flow.codeReview("REC-1", report.replace("Rechazar", "Aprobable"), "approve");   // second pass: does not overwrite
+  assert.equal(r2.n, 2);
+  assert.ok(existsSync(join(cfg.factoryDir, "REC-1", "round-1", "code-review-1.md")));
+  assert.equal(store.get("REC-1")!.state, "CODE_REVIEW");   // does not move the state
+});
+
 test("pr: sends the branch to the devel branch, records the explanation and is idempotent", async () => {
   const { p, jira, cfg } = setup();
   const calls: string[] = [];
-  let cmd = "";
+  let cmd = "", branch = "main";
   const ws: Workspace = {
-    ...failingTests, commit: () => { calls.push("commit"); return true; }, push: () => { calls.push("push"); },
+    ...failingTests, currentBranch: () => branch,
+    commit: () => { calls.push("commit"); return true; }, push: () => { calls.push("push"); },
     openPr: (vars, c) => { cmd = `${c}|${vars.base}|${vars.body}`; calls.push("pr"); return "https://example.test/pr/7"; },
   };
   const store = new Store(cfg.stateDir);
@@ -197,6 +248,12 @@ test("pr: sends the branch to the devel branch, records the explanation and is i
   await assert.rejects(flow.pr("REC-1", "corto"), /too short/);
 
   const body = "## Qué cambió\nSe agregó la exportación a CSV.\n\n## Cómo verificarlo\nProbar la pantalla de reportes y descargar el archivo.";
+  // on another branch: fails before writing, committing or pushing anything
+  await assert.rejects(flow.pr("REC-1", body), /not on the REC branch "rec\/rec-1"/);
+  assert.deepEqual(calls, []);
+  assert.equal(existsSync(join(cfg.factoryDir, "REC-1", "round-1", "devel-pr.md")), false);
+
+  branch = "rec/rec-1";
   const r = await flow.pr("REC-1", body);
   assert.deepEqual([r.created, r.url, r.base], [true, "https://example.test/pr/7", "desarrollo"]);
   assert.deepEqual(calls, ["commit", "push", "pr"]);

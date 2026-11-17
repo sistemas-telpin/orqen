@@ -15,7 +15,8 @@ In Claude Code, run `/plugin marketplace add ./` and `/plugin install orqen@orqe
 | Who | What they run |
 | --- | --- |
 | Analyst | `/orqen:analyze REC-1234` to review a request, choose a lane, write a spec when needed, and create a Jira implementation issue |
-| Agent | `/orqen:implement SIS-442` to implement the approved spec or plan |
+| Agent | `/orqen:implement SIS-442` to implement the approved spec or plan, and `/orqen:pr SIS-442` to open the integration PR |
+| Senior | `/orqen:code-review SIS-442` to get a review of the integration PR, with findings and possible solutions, before `/approve` or `/reject` |
 | Unattended runner | `orqen cycle --loop` to check for approvals and dispatch eligible stages |
 | Jira reviewers | `/approve` or `/reject <reason>` on the issue |
 
@@ -42,6 +43,7 @@ orqen block <KEY> <reason>
 orqen release <KEY>
 orqen search <JQL>
 orqen pr <KEY> [<explanation.md>] [--title TITLE]
+orqen review <KEY> <report.md|-> --verdict <approve|minor|reject>   Record a code review report
 orqen cycle [--loop]                   Run the unattended workflow
 ```
 
@@ -55,7 +57,7 @@ orqen cycle [--loop]                   Run the unattended workflow
 | `orqen/.env` | Local Jira credentials, project settings, and approvers |
 | `orqen/stages/` | Editable stage instructions |
 | `orqen/plugin/` | Claude Code commands and the grilling skill |
-| `orqen/work/<KEY>/` | Request history, including `state.json`, `log.md`, and analysis notes |
+| `orqen/work/<KEY>/` | Request history, including `state.json`, `log.md`, analysis notes, the PR explanation (`devel-pr.md`), and code review reports (`code-review-<n>.md`) |
 | `orqen/state/` and `orqen/tmp/` | Local workflow state and temporary files |
 | `orqen/manifest.json` | File hashes used by `orqen update` to identify local edits |
 | `docker-compose.orqen.yml` | Services with health checks and optional apps under the `apps` profile |
@@ -110,6 +112,22 @@ flowchart LR
 ```
 
 During development, `orqen take` starts the environment and `orqen complete` shuts it down. During testing, orqen starts the full environment, runs the configured suite, and shuts it down. Agents may run individual tests using `orqen env test`.
+
+### Integration PR and code review
+
+Testing opens no PR. Once testing is underway or done, `/orqen:pr SIS-442` has the agent explain the diff, and `orqen pr` commits pending changes on the request branch, pushes, and opens the only PR in the workflow, targeting `DEVEL_BRANCH`. It refuses to run from another branch.
+
+In code review, the senior runs `/orqen:code-review SIS-442`. The agent reviews the PR diff read-only against the analysis, spec or plan, and acceptance criteria, and reports a verdict plus each finding with its severity (`blocking`, `important`, `minor`, or `to verify`), `file:line`, impact, and one to three possible solutions, recommended first. When the verdict is not approvable, it drafts the `/reject` text. Once the senior accepts the report, `orqen review` saves it as `orqen/work/<KEY>/round-N/code-review-<n>.md`, comments it on the SIS, and leaves the stage unchanged: the senior still decides with `/approve` or `/reject` in Jira.
+
+```mermaid
+flowchart LR
+    T["Testing passes"] --> P["/orqen:pr: integration PR"]
+    P --> CR["/orqen:code-review: verdict and findings"]
+    CR --> RV["orqen review: record and comment on the SIS"]
+    RV --> S{"Senior in Jira"}
+    S -->|"/approve"| D["Delivery"]
+    S -->|"/reject with the drafted text"| DEV["Development"]
+```
 
 ## Guarantees and limits
 

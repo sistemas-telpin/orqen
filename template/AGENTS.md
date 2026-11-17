@@ -39,6 +39,11 @@ Propose the steps, rollback, and read-only verification. A person authorized by 
 - If you cannot proceed, run `orqen block <KEY> "<specific reason>"`. Human reviewers use `/approve` or `/reject <reason>` in Jira.
 - orqen writes `state.json`, `log.md`, and `round-N/analysis.md` and `.json` under `orqen/work/<KEY>/`. Operational rounds also record execution details under `execution/`. The authoritative workflow state is stored under `orqen/state/` or `cli/.state/`, depending on how the project is configured.
 
+### Integration PR and code review
+
+- `TESTING` opens no PR. The only PR is the integration PR to `DEVEL_BRANCH`, opened with `/orqen:pr` (`orqen pr <KEY> <explanation.md>`) from the request branch. orqen commits pending changes, pushes, and opens or updates it.
+- The senior reviews that PR in `CODE_REVIEW`, supported by `/orqen:code-review <KEY>`: review the PR diff read-only against the analysis, spec or plan, and acceptance criteria, and give a verdict plus each finding with its severity, `file:line`, impact, and possible solutions. When the senior accepts the report, record it with `orqen review <KEY> <report.md> --verdict <approve|minor|reject>`. It does not change the stage: the senior still comments `/approve` or `/reject <reason>` in Jira.
+
 ### Rules
 
 - Use Jira for read-only access. orqen handles issue writes, Git commits, branch changes, pushes, and OpenSpec archiving. Do not run `git commit/push/checkout/reset/rebase` or `openspec archive`.

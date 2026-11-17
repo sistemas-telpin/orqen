@@ -21,7 +21,7 @@ const fakeOs: OpenSpecApi = {
 test("development manages its environment and testing starts apps, runs the suite, and tears down", async () => {
   const pasos: string[] = [];
   const ws: Workspace = {
-    prepareBranch: () => "rec/rec-1", commit: () => true, push: () => {}, openPr: () => "",
+    prepareBranch: () => "rec/rec-1", currentBranch: () => "rec/rec-1", commit: () => true, push: () => {}, openPr: () => "",
     startEnvironment: (apps) => { pasos.push(`levantar(${apps ? "apps" : "servicios"})`); return { ok: true, detail: "Entorno ready.", variables: { DATABASE_URL: "x" }, commands: { unitarios: "orqen env test unitarios" } }; },
     stopEnvironment: () => { pasos.push("bajar"); },
     runTests: () => { pasos.push("tests"); return { ok: true, output: "" }; },

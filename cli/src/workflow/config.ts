@@ -28,7 +28,7 @@ export interface Config {
   /** SIS: issue created in another Jira project when the analysis closes (all lanes). */
   sis: { project: string; type: string; link: string; transitions: Record<string, string>; operationalType: string };
   factoryDir: string;       // per-REC record and state: orqen/work/<KEY>/ (committed with the branch)
-  repoPath: string; baseBranch: string; testCommand: string; prCommand: string;
+  repoPath: string; baseBranch: string; testCommand: string;
   /** `orqen pr`: integration branch ("desarrollo"/"devel") the REC branch is sent to, and the command that opens that PR. */
   develBranch: string; develPrCommand: string;
   openspecCmd: string;
@@ -66,7 +66,6 @@ export function loadConfig(over: Partial<Config> = {}): Config {
     repoPath,
     baseBranch,
     testCommand: env("TEST_COMMAND", "npm test"),
-    prCommand: env("PR_COMMAND", `gh pr create --base ${baseBranch} --head {branch} --title "{key}: {title}" --body-file {body}`),
     develBranch: env("DEVEL_BRANCH", "desarrollo"),
     develPrCommand: env("DEVEL_PR_COMMAND", 'gh pr create --base {base} --head {branch} --title "{key}: {title}" --body-file {body}'),
     openspecCmd: env("OPENSPEC_CMD") && env("OPENSPEC_CMD") !== "openspec" ? env("OPENSPEC_CMD") : existsSync(localOpenSpec) ? localOpenSpec : "openspec",

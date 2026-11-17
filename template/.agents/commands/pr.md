@@ -4,7 +4,7 @@ argument-hint: SIS-32
 allowed-tools: Bash(orqen:*), Bash(git diff:*), Bash(git log:*), Bash(git status:*), Bash(git branch:*), Bash(git show:*), Read, Grep, Glob, Write
 ---
 
-Prepare the integration PR for `$ARGUMENTS` from the repository root. `orqen pr` targets `DEVEL_BRANCH` and is separate from the code review PR opened after testing. Follow the workflow in `AGENTS.md`.
+Prepare the integration PR for `$ARGUMENTS` from the repository root. `orqen pr` targets `DEVEL_BRANCH`. It is the only PR in the workflow: testing opens none, and the senior does the code review (CODE_REVIEW) on this PR. Follow the workflow in `AGENTS.md`.
 
 ## Rules
 
@@ -17,5 +17,5 @@ Prepare the integration PR for `$ARGUMENTS` from the repository root. `orqen pr`
 2. Check the current branch with `git branch --show-current`. If it differs from the request branch, ask the user to switch and stop. Mention pending changes that `orqen pr` will commit.
 3. Read the log and diff against the target base (or its remote-tracking branch), review the analysis and OpenSpec artifacts or direct plan, and inspect the tests. Run tests when needed to substantiate a result.
 4. Write a temporary Markdown explanation with the REC and SIS, a summary, changes by capability, decisions and deviations, tests mapped to the acceptance criteria, verification steps, and risks or pending work.
-5. Run `orqen pr <KEY> <explanation.md> --agent pr`. Pass `--title "<title>"` if needed. orqen saves the explanation to the work record, commits pending changes, pushes the branch, and opens or updates the PR. If the command fails, address the reported cause before retrying.
+5. Run `orqen pr <KEY> <explanation.md> --agent pr`. Pass `--title "<title>"` if needed. orqen saves the explanation to the work record, commits pending changes, pushes the branch, and opens or updates the PR. If it fails because the repository is not on the request branch, ask the user to switch and stop (orqen writes nothing in that case). For any other failure, address the reported cause before retrying.
 6. Report the PR URL, branch, target base, and relevant risks or deviations.

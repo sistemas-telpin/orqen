@@ -32,7 +32,7 @@ export class GitWorkspace implements Workspace {
     return rama;
   }
 
-  /** Pathspec que excluye factory/ (el registro del proceso no debe impedir cambiar de rama). */
+  /** Pathspec que excluye orqen/work/ (el registro del proceso no debe impedir cambiar de rama). */
   private sinFactory(): string[] {
     const r = relative(this.cfg.repoPath, this.cfg.factoryDir).replaceAll("\\", "/");
     return r && !r.startsWith("..") ? ["--", ".", `:(exclude)${r}`] : [];

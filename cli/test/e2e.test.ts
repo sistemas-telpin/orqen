@@ -50,7 +50,7 @@ test("REC completo con OpenSpec real", { skip: !existsSync(OPENSPEC) && "falta o
   await p.analizar("REC-7", "analista-bot", "Ana");
   assert.equal(git("rev-parse", "--abbrev-ref", "HEAD").trim(), "main");   // el grilling no toca la rama
 
-  // carril completo: `rec carril` crea rama + change de OpenSpec
+  // carril completo: `orqen carril` crea rama + change de OpenSpec
   const c = await p.carril("REC-7", "completo", "analista-bot");
   const cambio = c.openspec!.cambio;
   assert.equal(cambio, "rec-7-exportar-facturas-csv");
@@ -88,14 +88,14 @@ test("REC completo con OpenSpec real", { skip: !existsSync(OPENSPEC) && "falta o
   assert.match(jira.coms["REC-7"].map((x) => x.cuerpo).join("\n"), /3 h estimadas/);
   assert.match(git("log", "--format=%s"), /spec OpenSpec/);
 
-  // ---- factory/REC-7 quedó commiteado en la rama y el árbol limpio (se puede cambiar de rama)
-  const tracked = git("ls-files", "factory/REC-7").split("\n");
-  assert.ok(tracked.includes("factory/REC-7/ronda-1/analisis.md"));
-  assert.ok(tracked.includes("factory/REC-7/bitacora.md"));
-  assert.ok(tracked.includes("factory/REC-7/estado.json"));
+  // ---- orqen/work/REC-7 quedó commiteado en la rama y el árbol limpio (se puede cambiar de rama)
+  const tracked = git("ls-files", "orqen/work/REC-7").split("\n");
+  assert.ok(tracked.includes("orqen/work/REC-7/ronda-1/analisis.md"));
+  assert.ok(tracked.includes("orqen/work/REC-7/bitacora.md"));
+  assert.ok(tracked.includes("orqen/work/REC-7/estado.json"));
   assert.equal(git("status", "--porcelain", "--untracked-files=no").trim(), "");
-  assert.match(readFileSync(join(dir, "factory", "REC-7", "ronda-1", "analisis.md"), "utf8"), /Excel queda fuera/);
-  assert.equal(JSON.parse(readFileSync(join(dir, "factory", "REC-7", "estado.json"), "utf8")).estado, "DESARROLLO");
+  assert.match(readFileSync(join(dir, "orqen", "work", "REC-7", "ronda-1", "analisis.md"), "utf8"), /Excel queda fuera/);
+  assert.equal(JSON.parse(readFileSync(join(dir, "orqen", "work", "REC-7", "estado.json"), "utf8")).estado, "DESARROLLO");
 
   // ---- al cerrar el análisis nace el SIS, vinculado al REC
   assert.equal(jira.creados.length, 1);

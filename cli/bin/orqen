@@ -1,5 +1,5 @@
 #!/usr/bin/env sh
-# Wrapper de la CLI del proceso REC. Se puede correr desde cualquier carpeta del repo.
+# Wrapper de la CLI orqen. Se puede correr desde cualquier carpeta del repo.
 DIR="$(cd "$(dirname "$0")/.." && pwd)"
 if [ ! -x "$DIR/node_modules/.bin/tsx" ]; then
   echo "Falta instalar dependencias: npm ci --prefix \"$DIR\"" >&2; exit 1

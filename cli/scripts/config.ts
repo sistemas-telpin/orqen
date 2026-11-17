@@ -28,7 +28,7 @@ export interface Config {
   transicionesJira: Record<string, string>;
   /** SIS: issue que se crea en otro proyecto de Jira al cerrar el análisis (todos los carriles). */
   sis: { proyecto: string; tipo: string; link: string; transiciones: Record<string, string>; tipoOperativo: string };
-  factoryDir: string;       // registro y estado por REC: factory/<KEY>/ (se commitea con la rama)
+  factoryDir: string;       // registro y estado por REC: orqen/work/<KEY>/ (se commitea con la rama)
   repoPath: string; ramaBase: string; comandoTests: string; comandoPr: string;
   openspecCmd: string;
   estadoDir: string; lockMinutos: number;
@@ -53,7 +53,7 @@ export function cargarConfig(over: Partial<Config> = {}): Config {
       transiciones: kv(env("TRANSICIONES_SIS")),
       tipoOperativo: env("SIS_TIPO_OPERATIVO") || env("SIS_TIPO", "Task"),
     },
-    factoryDir: env("FACTORY_DIR") || join(repoPath, "factory"),
+    factoryDir: env("FACTORY_DIR") || join(repoPath, "orqen", "work"),
     repoPath,
     ramaBase: env("RAMA_BASE", "main"),
     comandoTests: env("COMANDO_TESTS", "npm test"),
@@ -61,7 +61,7 @@ export function cargarConfig(over: Partial<Config> = {}): Config {
     openspecCmd: env("OPENSPEC_CMD", "openspec"),
     estadoDir: env("REC_ESTADO_DIR", join(REC_DIR, ".estado")),
     lockMinutos: Number(env("REC_LOCK_MIN", "90")),
-    // Comando headless del agente para `rec ciclo`. {prompt} se reemplaza (ya escapado).
+    // Comando headless del agente para `orqen ciclo`. {prompt} se reemplaza (ya escapado).
     agenteCmd: env("AGENTE_CMD", "claude -p {prompt} --permission-mode acceptEdits"),
     intervaloSeg: Number(env("REC_INTERVALO_SEG", "120")),
     ...over,

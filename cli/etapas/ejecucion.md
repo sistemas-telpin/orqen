@@ -11,5 +11,5 @@ Vos **proponés**; nunca ejecutás nada que modifique datos o servicios. Una per
    - `rollback`: cómo se deshace (idealmente un script, o un backup/`SELECT INTO` previo). Si no hay vuelta atrás, decilo y justificá.
    - `verificacion`: un SELECT o chequeo de solo lectura que confirma que quedó resuelto.
    - `impacto`, `sistema`, `riesgos`.
-4. `rec completar` rechaza la salida si el SQL no pasa las guardas (DROP/TRUNCATE, UPDATE/DELETE sin WHERE, WHERE trivial), o si falta rollback o verificación.
-5. Si descubrís que la causa es un bug de código y no se arregla operativamente, no inventes un parche de datos: `rec bloquear` explicando que corresponde el carril de desarrollo.
+4. `orqen completar` rechaza la salida si el SQL no pasa las guardas (DROP/TRUNCATE, UPDATE/DELETE sin WHERE, WHERE trivial), o si falta rollback o verificación.
+5. Si descubrís que la causa es un bug de código y no se arregla operativamente, no inventes un parche de datos: `orqen bloquear` explicando que corresponde el carril de desarrollo.

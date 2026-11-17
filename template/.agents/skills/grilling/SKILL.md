@@ -23,7 +23,7 @@ Objetivo: salir con un entendimiento compartido, sin ambigüedades que cambien e
    - **¿Se resuelve sin tocar código?** (script, dato, configuración). Si sí, es vía operativa.
    - Riesgos y cómo revertir.
 5. **Separá lo que es del cliente.** Si solo el cliente puede contestarlo y bloquea el diseño, anotalo como pregunta abierta (máx. 5); no lo inventes ni se lo preguntes al analista como si lo supiera.
-6. **Llevá el registro.** Anotá cada decisión como `pregunta → respuesta`; va a `decisiones` de la salida y a `factory/<KEY>/`.
+6. **Llevá el registro.** Anotá cada decisión como `pregunta → respuesta`; va a `decisiones` de la salida y a `orqen/work/<KEY>/`.
 7. **Cerrá con un resumen y pedí el OK.** Qué se hace, criterios de aceptación en Dado/Cuando/Entonces (observables y testeables), fuera de alcance, supuestos y riesgos. Sin OK explícito no hay carril ni SIS.
 
 ## Estilo
@@ -35,4 +35,4 @@ Objetivo: salir con un entendimiento compartido, sin ambigüedades que cambien e
 
 ## Después del OK
 
-Proponé el carril según la tabla de la etapa ANALISIS (`./cli/bin/rec analizar` la imprime), justificá en términos de tamaño, riesgo y alcance, y pedí confirmación. Ante la duda entre dos carriles, el de más rigor.
+Proponé el carril según la tabla de la etapa ANALISIS (`./cli/bin/orqen analizar` la imprime), justificá en términos de tamaño, riesgo y alcance, y pedí confirmación. Ante la duda entre dos carriles, el de más rigor.

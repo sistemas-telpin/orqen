@@ -1,4 +1,4 @@
-/** Contrato de salida de cada etapa. `rec completar` rechaza lo que no cumpla. */
+/** Contrato de salida de cada etapa. `orqen completar` rechaza lo que no cumpla. */
 import { z } from "zod";
 import { CARRILES, type Carril, type EstadoAgente } from "./estados.ts";
 
@@ -25,7 +25,7 @@ export const ESQUEMAS = {
     plan: lista.optional().describe("Carril directo (vía desarrollo): pasos de implementación en orden"),
     estimacion_horas: z.number().nonnegative().optional().describe("Carril directo: estimación total. En liviano/completo se calcula de tasks.md"),
     especificacion: z.object({
-      cambio: z.string().describe("id del change de OpenSpec asignado por rec carril"),
+      cambio: z.string().describe("id del change de OpenSpec asignado por orqen carril"),
       resumen: z.string().min(20).describe("Resumen de la propuesta"),
       supuestos: lista,
     }).optional().describe("Obligatorio en carriles liviano y completo"),
@@ -37,7 +37,7 @@ export const ESQUEMAS = {
     if (!s.justificacion_carril || s.justificacion_carril.length < 10) falta("justificacion_carril", "Justificá el carril elegido");
     if (s.via === "operativa" && s.carril !== "directo") falta("carril", "La vía operativa no lleva spec: el carril es directo");
     if (s.via === "desarrollo" && s.carril === "directo" && !s.plan?.length) falta("plan", "El carril directo necesita el plan de implementación");
-    if (s.via === "desarrollo" && s.carril !== "directo" && !s.especificacion) falta("especificacion", "Los carriles liviano y completo necesitan la spec (rec carril + artefactos de OpenSpec)");
+    if (s.via === "desarrollo" && s.carril !== "directo" && !s.especificacion) falta("especificacion", "Los carriles liviano y completo necesitan la spec (orqen carril + artefactos de OpenSpec)");
   }),
 
   DESARROLLO: z.object({

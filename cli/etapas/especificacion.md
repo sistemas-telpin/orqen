@@ -1,6 +1,6 @@
 ## Spec del change de OpenSpec — carril [liviano|completo]
 
-`rec carril` ya creó la rama y el change `<cambio>`. Tu trabajo es completar sus artefactos **con el analista** (mostrale lo que escribís y ajustá lo que pida). Seguís dentro de la etapa ANALISIS: cuando la spec valide, producí la salida del análisis (`especificacion` + `listo` + `analista_ok`).
+`orqen carril` ya creó la rama y el change `<cambio>`. Tu trabajo es completar sus artefactos **con el analista** (mostrale lo que escribís y ajustá lo que pida). Seguís dentro de la etapa ANALISIS: cuando la spec valide, producí la salida del análisis (`especificacion` + `listo` + `analista_ok`).
 
 1. Seguí el flujo **propose** de OpenSpec sobre ese change (si tu herramienta tiene el skill/comando `openspec-propose` o `/opsx:propose`, usalo indicando el change; si no, a mano):
    - `openspec status --change <cambio> --json` → orden de artefactos.

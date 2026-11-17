@@ -1,5 +1,5 @@
 /**
- * Núcleo del proceso REC. Lo usan la CLI (`rec ...`) y los tests.
+ * Núcleo del proceso REC. Lo usan la CLI (`orqen ...`) y los tests.
  *
  *  - revisar():   avanza todo lo que NO necesita agente (gates, desbloqueos) y lista el trabajo pendiente.
  *  - analizar():  abre el análisis conducido por un analista (grilling) y devuelve el contexto.
@@ -58,7 +58,7 @@ export class Proceso {
   async analizar(key: string, agente = "agente", analista = agente) {
     const rec = this.store.get(key) ?? recNuevo(key);
     if (rec.estado === "ESPERA_CLIENTE")
-      throw new Error(`${key} está esperando respuestas del cliente en Jira. Cuando respondan vuelve a ANALISIS (\`rec pendientes\`).`);
+      throw new Error(`${key} está esperando respuestas del cliente en Jira. Cuando respondan vuelve a ANALISIS (\`orqen pendientes\`).`);
     if (rec.estado !== "NUEVO" && rec.estado !== "ANALISIS")
       throw new Error(`${key} ya pasó el análisis (estado: ${rec.estado}). Si hay que rehacerlo, el rechazo o la escalada lo devuelven a ANALISIS.`);
     if (rec.estado === "NUEVO") {
@@ -76,7 +76,7 @@ export class Proceso {
     const rec = this.store.get(key);
     if (!rec || rec.estado !== "ANALISIS") throw new Error(`${key} no está en ANALISIS (estado: ${rec?.estado ?? "desconocido"}).`);
     const lock = this.lockVigente(rec) ?? (rec.lock?.agente === agente ? rec.lock : undefined);
-    if (!lock || lock.agente !== agente) throw new Error(`Primero corré \`rec analizar ${key}\``);
+    if (!lock || lock.agente !== agente) throw new Error(`Primero corré \`orqen analizar ${key}\``);
     if (!CARRILES.includes(carril as Carril)) throw new Error(`Carril inválido "${carril}". Opciones: ${CARRILES.join(", ")}`);
     rec.carril = carril as Carril;
     if (rec.carril === "directo") {
@@ -97,9 +97,9 @@ export class Proceso {
   async tomar(key: string, agente = "agente", desdeAnalizar = false) {
     const rec = this.store.get(key);
     if (!rec || !esEstadoAgente(rec.estado))
-      throw new Error(`${key} no tiene trabajo para el agente (estado: ${rec?.estado ?? "desconocido"}). Corré \`rec pendientes\`.`);
+      throw new Error(`${key} no tiene trabajo para el agente (estado: ${rec?.estado ?? "desconocido"}). Corré \`orqen pendientes\`.`);
     if (rec.estado === "ANALISIS" && !desdeAnalizar)
-      throw new Error(`El análisis de ${key} lo conduce un analista: usá /orqen:analyze ${key} (o \`rec analizar ${key}\`).`);
+      throw new Error(`El análisis de ${key} lo conduce un analista: usá /orqen:analyze ${key} (o \`orqen analizar ${key}\`).`);
     const lock = this.lockVigente(rec);
     if (lock && lock.agente !== agente) throw new Error(`${key} ya lo tomó "${lock.agente}" desde ${lock.desde}.`);
     rec.lock = { agente, desde: new Date().toISOString() };
@@ -108,7 +108,7 @@ export class Proceso {
     const issue = await this.jira.issue(key);
     const estado = rec.estado;
 
-    // ANALISIS (liviano/completo la crea `rec carril`) y el carril rápido (EJECUCION/VERIFICACION) no preparan rama acá
+    // ANALISIS (liviano/completo la crea `orqen carril`) y el carril rápido (EJECUCION/VERIFICACION) no preparan rama acá
     if (["DESARROLLO", "TESTING", "ENTREGA"].includes(estado)) rec.rama = this.ws.prepararRama(key);
     if (estado === "TESTING") {
       rec.artefactos.resultado_tests = this.ws.correrTests();
@@ -132,7 +132,7 @@ export class Proceso {
       rec,
       contexto: {
         key, estado, ronda: rec.ronda, rama: rec.rama || undefined,
-        analista: rec.analista, carril: rec.carril, factory: `factory/${key}/ronda-${rec.ronda}`,
+        analista: rec.analista, carril: rec.carril, factory: `orqen/work/${key}/ronda-${rec.ronda}`,
         issue, sis: rec.sis, comentarios,
         openspec,
         ...(["DESARROLLO", "TESTING"].includes(estado) ? { tareas: this.tareasDe(rec) } : {}),
@@ -150,7 +150,7 @@ export class Proceso {
     if (!rec || !esEstadoAgente(rec.estado)) return { ok: false, errores: [`${key} no está en una etapa de agente`] };
     // un lock vencido sigue siendo válido mientras nadie más haya tomado el REC (el grilling puede durar más que REC_LOCK_MIN)
     const lock = this.lockVigente(rec) ?? (rec.lock?.agente === agente ? rec.lock : undefined);
-    if (!lock) return { ok: false, errores: [`Primero corré \`rec ${rec.estado === "ANALISIS" ? "analizar" : "tomar"} ${key}\``] };
+    if (!lock) return { ok: false, errores: [`Primero corré \`orqen ${rec.estado === "ANALISIS" ? "analizar" : "tomar"} ${key}\``] };
     if (lock.agente !== agente) return { ok: false, errores: [`${key} lo tiene tomado "${lock.agente}"`] };
 
     const estado = rec.estado;
@@ -192,8 +192,8 @@ export class Proceso {
   private validarContraOpenSpec(rec: Rec, estado: EstadoAgente, s: Record<string, any>): string[] {
     const err: string[] = [];
     if (estado === "ANALISIS" && s.listo && s.via === "desarrollo" && s.carril !== "directo") {
-      if (rec.carril !== s.carril) err.push(`El carril del análisis ("${s.carril}") no coincide con el registrado (${rec.carril ?? "ninguno"}): corré \`rec carril ${rec.key} ${s.carril}\` y escribí la spec`);
-      else if (!rec.cambio) err.push(`Falta el change: corré \`rec carril ${rec.key} ${s.carril}\``);
+      if (rec.carril !== s.carril) err.push(`El carril del análisis ("${s.carril}") no coincide con el registrado (${rec.carril ?? "ninguno"}): corré \`orqen carril ${rec.key} ${s.carril}\` y escribí la spec`);
+      else if (!rec.cambio) err.push(`Falta el change: corré \`orqen carril ${rec.key} ${s.carril}\``);
       else {
         if (s.especificacion.cambio !== rec.cambio) err.push(`especificacion.cambio debe ser "${rec.cambio}"`);
         const v = this.os.validar(rec.cambio);
@@ -206,7 +206,7 @@ export class Proceso {
       }
     }
     if (estado === "ANALISIS" && s.listo && s.carril === "directo" && rec.carril && rec.carril !== "directo" && rec.cambio)
-      err.push(`Registraste el carril ${rec.carril} y ya hay un change (${rec.cambio}); elegí uno u otro (si cambió la decisión corré \`rec carril ${rec.key} directo\` y no uses el change).`);
+      err.push(`Registraste el carril ${rec.carril} y ya hay un change (${rec.cambio}); elegí uno u otro (si cambió la decisión corré \`orqen carril ${rec.key} directo\` y no uses el change).`);
     if (estado === "DESARROLLO" && s.completado && rec.cambio) {
       const pendientes = this.os.tareas(rec.cambio).filter((t) => !t.hecha);
       if (pendientes.length) err.push(`Quedan tareas sin tildar en tasks.md: ${pendientes.map((t) => t.descripcion).join(" | ")}`);
@@ -236,7 +236,7 @@ export class Proceso {
   }
 
   // ================================================================ cierre del análisis
-  /** Con el OK del analista: estimación, registro en factory/, commit de la spec (si hay) y SIS vinculado al REC. */
+  /** Con el OK del analista: estimación, registro en orqen/work/, commit de la spec (si hay) y SIS vinculado al REC. */
   private async cerrarAnalisis(rec: Rec, s: Record<string, any>) {
     rec.artefactos.estimacion_horas = rec.cambio
       ? this.os.tareas(rec.cambio).reduce((a, t) => a + (t.horas ?? 0), 0)
@@ -294,8 +294,8 @@ export class Proceso {
           if (!rec.artefactos.pr) {
             this.intentar(() => this.ws.push(rec.rama));
             rec.artefactos.pr = this.intentar(() => this.ws.abrirPr({
-              key: k, rama: rec.rama, cambio: rec.cambio, cambio_dir: rec.cambio ? `openspec/changes/${rec.cambio}` : `factory/${k}/ronda-${rec.ronda}`,
-              cuerpo: rec.cambio ? `openspec/changes/${rec.cambio}/proposal.md` : `factory/${k}/ronda-${rec.ronda}/analisis.md`,
+              key: k, rama: rec.rama, cambio: rec.cambio, cambio_dir: rec.cambio ? `openspec/changes/${rec.cambio}` : `orqen/work/${k}/ronda-${rec.ronda}`,
+              cuerpo: rec.cambio ? `openspec/changes/${rec.cambio}/proposal.md` : `orqen/work/${k}/ronda-${rec.ronda}/analisis.md`,
               titulo: rec.artefactos.ANALISIS?.resumen?.slice(0, 80) ?? rec.cambio,
             })) ?? "";
           }
@@ -419,7 +419,7 @@ export class Proceso {
             `*Criterios de aceptación:*\n${lista(a.criterios_aceptacion ?? [])}\n\nEl script, el rollback y la verificación los propone la etapa EJECUCION y se publican en el REC.`
           : `Desarrollo del requerimiento ${rec.key}. *Carril:* ${a.carril} — ${a.justificacion_carril}\n\n` +
             `*Resumen:* ${rec.artefactos.ANALISIS?.especificacion?.resumen ?? a.resumen}\n\n` +
-            `*Rama:* rec/${rec.key.toLowerCase()}\n` + (rec.cambio ? `*OpenSpec change:* openspec/changes/${rec.cambio}/\n` : `*Sin spec (carril directo):* factory/${rec.key}/ronda-${rec.ronda}/analisis.md\n`) +
+            `*Rama:* rec/${rec.key.toLowerCase()}\n` + (rec.cambio ? `*OpenSpec change:* openspec/changes/${rec.cambio}/\n` : `*Sin spec (carril directo):* orqen/work/${rec.key}/ronda-${rec.ronda}/analisis.md\n`) +
             `*Estimación:* ${rec.artefactos.estimacion_horas ?? "?"} h\n\n` +
             `*${rec.cambio ? "Tareas" : "Plan"}:*\n${lista(tareas.map((t) => t.descripcion))}\n\n` +
             `*${rec.cambio ? "Escenarios de aceptación" : "Criterios de aceptación"}:*\n${lista(esc.map((e) => rec.cambio ? `${e.requisito} › ${e.escenario}` : e.escenario))}`,
@@ -430,7 +430,7 @@ export class Proceso {
     if (!rec.artefactos.sis_vinculado) {
       await this.jira.vincular(rec.sis, rec.key, this.cfg.sis.link);
       await this.jira.comentar(rec.key, `Análisis cerrado${rec.analista ? ` con ${rec.analista}` : ""}. Creé ${rec.sis} (carril ${operativo ? "operativo" : a.carril}) para el seguimiento; el seguimiento técnico va por ahí y acá sigo informando los hitos.`);
-      await this.jira.comentar(rec.sis, `Creado a partir de ${rec.key} al cerrarse el análisis. Registro: factory/${rec.key}/.`);
+      await this.jira.comentar(rec.sis, `Creado a partir de ${rec.key} al cerrarse el análisis. Registro: orqen/work/${rec.key}/.`);
       rec.artefactos.sis_vinculado = true;
       this.store.save(rec);
     }
@@ -462,11 +462,11 @@ export class Proceso {
   }
 
   private async intentarAsync(fn: () => Promise<unknown>) {
-    try { await fn(); } catch (e) { console.error(`[rec] aviso: ${(e as Error).message}`); }
+    try { await fn(); } catch (e) { console.error(`[orqen] aviso: ${(e as Error).message}`); }
   }
 
   private intentar<T>(fn: () => T): T | undefined {
-    try { return fn(); } catch (e) { console.error(`[rec] aviso: ${(e as Error).message}`); return undefined; }
+    try { return fn(); } catch (e) { console.error(`[orqen] aviso: ${(e as Error).message}`); return undefined; }
   }
 
   private async mover(rec: Rec, hacia: Estado, detalle: string, agente?: string) {
@@ -491,7 +491,7 @@ export class Proceso {
         if (ts) await this.jira.transicionar(rec.sis, ts);
       }
     } catch (e) {
-      console.error(`[rec] no pude actualizar label/transición en Jira: ${(e as Error).message}`);
+      console.error(`[orqen] no pude actualizar label/transición en Jira: ${(e as Error).message}`);
     }
   }
 }

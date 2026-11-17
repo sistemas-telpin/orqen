@@ -1,14 +1,14 @@
 {
-  "name": "rec-kit",
+  "name": "orqen-cli",
   "version": "0.2.0",
   "private": true,
   "type": "module",
-  "description": "Proceso REC agnóstico de agente: AGENTS.md + CLI en TypeScript",
+  "description": "Proceso orqen agnóstico de agente: AGENTS.md + CLI en TypeScript",
   "engines": {
     "node": ">=20.12"
   },
   "scripts": {
-    "rec": "tsx scripts/cli.ts",
+    "orqen": "tsx scripts/cli.ts",
     "test": "node --import tsx --test test/*.test.ts",
     "typecheck": "tsc --noEmit"
   },

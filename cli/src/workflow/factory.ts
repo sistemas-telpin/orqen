@@ -3,6 +3,7 @@
  *
  *   state.json                   projection of the current state (the operational source of truth is cli/.state)
  *   log.md                       one line per transition
+ *   round-N/support.md|json      first-line outcome (SUPPORT_STAGE=on): reply to the client or escalation to the analyst
  *   round-N/analysis.md|json     what was decided in the grilling: summary, criteria, decisions, lane, SIS
  *   round-N/execution/           script, steps, rollback and verification of the operational lane
  *   round-N/devel-pr.md          explanation of the PR to the devel branch (`orqen pr`)

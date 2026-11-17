@@ -5,6 +5,20 @@ import { LANES, type Lane, type AgentState } from "./states.ts";
 const list = z.array(z.string());
 
 export const SCHEMAS = {
+  SUPPORT: z.object({
+    summary: z.string().min(20).describe("What the client reports, in business terms"),
+    checked: list.min(1).describe("What was checked to answer: the issue and comments, similar requests, the knowledge base, the repository"),
+    outcome: z.enum(["resolved", "escalate"]).describe("resolved = the client can be answered without development or analysis; escalate = the analyst must take it"),
+    client_response: z.string().default("").describe("Reply to the client. Mandatory when resolved; optional interim reply when escalating"),
+    escalation_summary: z.string().default("").describe("Mandatory when escalating: what is known, what was tried, what is missing and why it needs an analyst"),
+    support_ok: z.boolean().default(false).describe("The support person explicitly approved the outcome and the text that will reach the client. Mandatory"),
+  }).superRefine((s, ctx) => {
+    const missing = (path: string, message: string) => ctx.addIssue({ code: "custom", path: [path], message });
+    if (!s.support_ok) missing("support_ok", "The support person must approve the outcome and the client reply (support_ok=true)");
+    if (s.outcome === "resolved" && s.client_response.trim().length < 20) missing("client_response", "When resolved, write the reply to the client (≥20 characters)");
+    if (s.outcome === "escalate" && s.escalation_summary.trim().length < 20) missing("escalation_summary", "When escalating, explain what is known and why an analyst is needed (≥20 characters)");
+  }),
+
   ANALYSIS: z.object({
     summary: z.string().min(20).describe("What the client asks for, in business terms"),
     type: z.enum(["feature", "change", "bug", "query", "performance", "other"]),

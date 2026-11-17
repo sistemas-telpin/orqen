@@ -14,6 +14,7 @@ export interface Rec {
   change: string;                // id of the OpenSpec change
   route?: Route;                 // set by the analysis; the operational → development escalation changes it
   lane?: Lane;                   // direct | light | full (development route only); set by the analyst in the analysis
+  supporter?: string;            // who handled the request in SUPPORT
   analyst?: string;              // who drove the analysis
   sis?: string;                  // key of the SIS created when the analysis closed
   artifacts: Record<string, any>;

@@ -1,7 +1,7 @@
 ## Customer request workflow (REC)
 
 ```text
-ANALYSIS ⇄ WAITING_CLIENT → DEVELOPMENT ⇄ TESTING
+[SUPPORT] → ANALYSIS ⇄ WAITING_CLIENT → DEVELOPMENT ⇄ TESTING
   → CODE_REVIEW → DELIVERY → ACCEPTANCE → CLOSED
   Issues that require intervention → BLOCKED
 ```
@@ -9,7 +9,7 @@ ANALYSIS ⇄ WAITING_CLIENT → DEVELOPMENT ⇄ TESTING
 ### Working with the person
 
 orqen works alongside the person; it does not replace them. While someone is on the other side (they invoked
-`/orqen:analyze`, `/orqen:implement`, `/orqen:pr`, a review command, or asked you directly; `human_present: true` in the context):
+`/orqen:support`, `/orqen:analyze`, `/orqen:implement`, `/orqen:pr`, a review command, or asked you directly; `human_present: true` in the context):
 
 - **Say what you are about to do before doing it**, in one or two lines, and **wait for their OK** before each important step:
   choosing the lane, writing or changing the spec, the implementation plan, any change outside the plan, deleting or
@@ -20,6 +20,23 @@ orqen works alongside the person; it does not replace them. While someone is on 
 - **After each step, report in a few lines what you did and what comes next.**
 - When nobody can answer (`human_present: false`, unattended `orqen cycle`): do not guess. If the doubt changes the outcome,
   run `orqen block <KEY> "<specific question>"`; orqen posts it to Jira and a person answers with `/approve <answer>`.
+
+### Support (optional)
+
+With `SUPPORT_STAGE=on`, a new request waits for a support person before the analyst.
+
+1. Start with `/orqen:support REC-1234` or `orqen support REC-1234 --person "<name>"`. A person from support leads this stage.
+2. Read the issue, comments, similar requests, and the documented behavior. Look for the answer before asking the person, and ask them only what you cannot find.
+3. Agree the outcome with the person and obtain their explicit approval of the exact reply to the customer:
+
+   | Outcome | When | Next |
+   | --- | --- | --- |
+   | `resolved` | The answer needs no change in code, data, or configuration | `ACCEPTANCE`: orqen comments the reply and the customer confirms with `/approve` or `/reject <reason>`. No SIS is created |
+   | `escalate` | A new feature, a defect, a data or configuration change, or anything you cannot answer with confidence | `ANALYSIS`: the analyst starts from `previous_stages.SUPPORT` instead of from zero |
+
+4. Run `orqen complete <KEY> <output.json>`. Never promise dates, scope, or changes to the customer. When unsure, escalate.
+
+The analyst can still take a `NEW` request directly with `orqen analyze`, and can take over one in `SUPPORT` that nobody is working on.
 
 ### Analysis
 
@@ -48,8 +65,8 @@ Propose the steps, rollback, and read-only verification. A person authorized by 
 
 ### Work on a stage
 
-- `orqen pending` lists work for analysts and agents.
-- `orqen take <KEY>` claims an agent stage and prints its instructions, issue context, feedback, and JSON output schema. Use `orqen analyze` for analysis.
+- `orqen pending` lists work for support, analysts, and agents.
+- `orqen take <KEY>` claims an agent stage and prints its instructions, issue context, feedback, and JSON output schema. Use `orqen support` for support and `orqen analyze` for analysis.
 - Run `orqen complete <KEY> <output.json>` when the output is ready. Correct validation errors and retry until the command reports success. Stop after completing the stage.
 - If you cannot proceed, run `orqen block <KEY> "<specific reason>"`. Human reviewers use `/approve` or `/reject <reason>` in Jira.
 - orqen writes `state.json`, `log.md`, and `round-N/analysis.md` and `.json` under `orqen/work/<KEY>/`. Operational rounds also record execution details under `execution/`. The authoritative workflow state is stored under `orqen/state/` or `cli/.state/`, depending on how the project is configured.

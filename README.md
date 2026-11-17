@@ -8,10 +8,11 @@ Su arquitectura permite que múltiples agentes colaboren de manera coordinada en
 
 Uno de sus pilares es el aprendizaje continuo a partir de la experiencia: aprovechar los resultados de desarrollos anteriores para enriquecer una base de conocimiento reutilizable y mejorar progresivamente los procesos de trabajo.
 
-El análisis lo conduce un **analista** con el agente (`/orqen:analyze REC-1234`); el resto lo lleva el agente con aprobaciones humanas.
+Opcionalmente, una persona de **soporte** atiende primero el reclamo con el agente (`/orqen:support REC-1234`) e intenta responderle al cliente. Si no alcanza, lo escala al analista. El análisis lo conduce un **analista** con el agente (`/orqen:analyze REC-1234`); el resto lo lleva el agente con aprobaciones humanas.
 
 | Quién              | Qué corre                                                                                                        |
 | ------------------ | ---------------------------------------------------------------------------------------------------------------- |
+| Soporte (opcional) | `/orqen:support REC-1234`: busca la respuesta, la redacta para el cliente y, si no se puede resolver, escala al analista con un resumen |
 | Analista           | `/orqen:analyze REC-1234`: analiza el REC, elige el carril, escribe la spec si hace falta y crea el SIS en Jira   |
 | Agente             | `/orqen:implement SIS-442`: implementa la spec o el plan aprobado · `/orqen:pr SIS-442`: abre el PR a desarrollo |
 | Diseñador de e2e   | `/orqen:e2e-review SIS-442`: valida visualmente los tests e2e                                                     |
@@ -24,10 +25,53 @@ El análisis lo conduce un **analista** con el agente (`/orqen:analyze REC-1234`
 - **CLI `orqen`** (paquete npm, Node ≥ 20.12): maneja la máquina de estados, Jira, git, los PRs, los entornos de prueba y OpenSpec.
   Es determinística: el agente produce contenido y `orqen` decide el flujo.
 - **`AGENTS.md` / `CLAUDE.md`**: lo que lee el agente. Explican el proceso y las reglas, y le indican que use la CLI.
-- **Plugin de Claude Code** (`orqen/plugin/`): los comandos `/orqen:analyze`, `/orqen:implement`, `/orqen:e2e-review`, `/orqen:pr` y `/orqen:code-review`, y el skill `orqen:grilling`.
-- **`orqen/stages/`**: las guías de cada etapa (análisis, especificación, desarrollo, testing, entrega, ejecución y verificación). Se pueden editar.
+- **Plugin de Claude Code** (`orqen/plugin/`): los comandos `/orqen:support`, `/orqen:analyze`, `/orqen:implement`, `/orqen:e2e-review`, `/orqen:pr` y `/orqen:code-review`, y el skill `orqen:grilling`.
+- **`orqen/stages/`**: las guías de cada etapa (soporte, análisis, especificación, desarrollo, testing, entrega, ejecución y verificación). Se pueden editar.
 - **`orqen/work/<KEY>/`**: registro y estado de cada REC dentro del repo (lo escribe `orqen`).
 - **`openspec/config.yaml`**: reglas del proceso REC aplicadas a los artefactos de OpenSpec.
+
+## Soporte (opcional): `/orqen:support REC-1234`
+
+Es la etapa **antes del analista**: la persona que recibe el reclamo intenta responderle al cliente sin llegar a un análisis ni a
+un desarrollo. Está apagada por defecto; se activa con `SUPPORT_STAGE=on` en `orqen/.env`. Con la etapa apagada, el flujo es el de siempre
+(`NEW` → `ANALYSIS`).
+
+```mermaid
+flowchart TD
+    A["/orqen:support REC-1234"] --> B["orqen support: reserva el REC (NEW → SUPPORT),<br/>carga el contexto y crea orqen/work/REC-1234/"]
+    B --> C["El agente busca la respuesta<br/>(reclamo, pedidos parecidos, specs, código; solo lectura)"]
+    C --> D{"Resultado<br/>(lo acuerda la persona de soporte)"}
+    D -->|"resuelto"| E["Redacta la respuesta al cliente<br/>→ la persona la aprueba"]
+    D -->|"escalar"| F["Redacta el resumen para el analista<br/>→ la persona lo aprueba"]
+    E --> G["orqen complete: valida · publica la respuesta en Jira<br/>· registra support.md"] --> H(["ACCEPTANCE<br/>el cliente confirma con /approve o /reject"])
+    F --> I["orqen complete: valida · comenta en Jira<br/>· registra support.md"] --> J(["ANALYSIS<br/>el analista parte del resumen"])
+```
+
+**Quién y cómo.** La conduce una persona de soporte con el agente, igual que el análisis con el analista: el agente propone, la
+persona decide. `orqen complete` rechaza la salida si falta el **OK explícito** de la persona (`support_ok`) sobre el resultado y sobre
+el texto exacto que le llegará al cliente. No hay una lista de personas de soporte: puede tomarlo cualquiera.
+
+| Resultado  | Cuándo                                                                                                                       | Qué pasa                                                                                                                                                       |
+| ---------- | ---------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `resolved` | Se responde sin tocar código, datos ni configuración: una consulta de uso, una causa y solución conocidas, algo ya documentado | `orqen` publica la respuesta y el REC pasa a **ACCEPTANCE**. **No se crea SIS.** Si el cliente hace `/reject <motivo>`, abre la ronda 2 y lo toma el analista |
+| `escalate` | Pide algo nuevo, es un defecto que requiere código, una corrección de datos o de configuración, o no hay certeza de la respuesta | El REC pasa a **ANALYSIS** con el `escalation_summary` (qué se sabe, qué se probó, qué falta). Se puede mandar además un acuse breve al cliente (opcional)    |
+
+Ante la duda, **escalar**: una respuesta equivocada le cuesta una ronda al cliente; una escalación de más le cuesta unos minutos al
+analista. El agente nunca promete fechas, alcance ni cambios al cliente.
+
+**Qué no cambia.**
+
+- El analista puede tomar un REC `NEW` directamente con `orqen analyze`, sin pasar por soporte. También puede tomar uno en `SUPPORT`
+  que nadie esté atendiendo; si hay una sesión de soporte activa, `orqen` se lo impide.
+- El agente no escribe en Jira: los comentarios los publica `orqen` en `complete`, solo con el OK de la persona.
+- Es una etapa de persona: `orqen cycle` (modo desatendido) nunca la toma.
+
+**Qué queda registrado.** `orqen/work/REC-1234/round-1/support.md` (resultado, qué se revisó, respuesta al cliente y escalación) y
+`support.json` (la salida validada). Cuando el analista abre el REC escalado, recibe todo eso en `previous_stages.SUPPORT`, y la guía de
+análisis le indica partir de ahí en vez de repetir el trabajo. La guía de la etapa está en `orqen/stages/support.md` y se puede editar.
+
+`orqen pending` lista los REC para soporte aparte de los del analista y los del agente. Un REC resuelto por soporte no tiene rama, así que su
+registro en `orqen/work/` no se commitea solo (como pasa con el carril operativo).
 
 ## Análisis: `/orqen:analyze REC-1234`
 
@@ -62,6 +106,8 @@ orqen/work/REC-1234/
 ├── state.json             proyección del estado (state, lane, sis, branch, change, analyst)
 ├── log.md                 una línea por transición
 └── round-1/
+    ├── support.md         (solo con soporte) resultado, qué se revisó, respuesta al cliente y escalación
+    ├── support.json       la salida validada de soporte
     ├── analysis.md        resumen, criterios, decisiones del grilling, carril y justificación, SIS, estimación
     ├── analysis.json      la salida validada de la etapa
     ├── devel-pr.md        explicación del PR a desarrollo (orqen pr)
@@ -204,6 +250,7 @@ flowchart LR
     classDef final fill:#dcfce7,stroke:#16a34a,color:#14532d
     classDef bloq fill:#fee2e2,stroke:#dc2626,color:#7f1d1d
 
+    SUPPORT["SUPPORT (opcional)<br/>(soporte + agente)"]:::agente
     ANALYSIS["ANALYSIS<br/>(analista + agente)"]:::agente
     ESPERA["WAITING_CLIENT<br/>(máx. 3 rondas)"]:::humano
     DESA["DEVELOPMENT"]:::agente
@@ -214,6 +261,8 @@ flowchart LR
     CLOSED(["CLOSED"]):::final
     BLOQ{{"BLOCKED"}}:::bloq
 
+    SUPPORT -->|"escala con resumen"| ANALYSIS
+    SUPPORT -->|"resuelto: respuesta al cliente"| CONF
     ANALYSIS <-->|preguntas / respuestas| ESPERA
     ANALYSIS -->|"OK analista: carril + SIS"| DESA
     DESA <-->|tests fallan / pasan| TEST
@@ -233,6 +282,7 @@ Jira, git, PR y `openspec archive` los ejecuta solo `orqen`; el agente produce c
 
 | Estado         | Quién             | Qué pasa                                                                                                      | OpenSpec                                                                                                                                                      |
 | -------------- | ----------------- | ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| SUPPORT        | soporte + agente  | opcional (`SUPPORT_STAGE=on`): busca la respuesta y la redacta con la persona. **Resuelto** → ACCEPTANCE (sin SIS); **escalar** → ANALYSIS con el resumen | —                                                                                                                                                             |
 | ANALYSIS       | analista + agente | grilling → OK → carril → spec (si corresponde) → SIS vinculado al REC                                         | lee `openspec/specs`; liviano/completo: `orqen lane` crea el change y `orqen complete` exige `validate --strict`, artefactos completos y `(Nh)` en cada tarea |
 | WAITING_CLIENT | cliente           | responde en Jira (máx. 3 rondas)                                                                              | —                                                                                                                                                             |
 | DEVELOPMENT    | agente            | implementa con el entorno levantado; con spec tilda `tasks.md`, en directo sigue el `plan`                    | flujo _apply_; `orqen` rechaza si queda alguna tarea sin tildar                                                                                               |
@@ -328,6 +378,7 @@ actualizan solos; para los editados elegís conservar, reemplazar o dejar una co
 | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------ |
 | `JIRA_URL`, `JIRA_USER`, `JIRA_TOKEN`, `JIRA_DEPLOYMENT`      | Conexión a Jira (`cloud` o `server`)                                                       |
 | `REC_JQL`                                                    | Qué REC procesa `orqen`                                                                    |
+| `SUPPORT_STAGE`                                              | `on`: los REC nuevos pasan primero por soporte (`/orqen:support`). Por defecto `off`. No hay lista de personas de soporte: puede tomarlo cualquiera |
 | `SIS_PROJECT`, `SIS_TYPE`, `SIS_LINK`, `SIS_TYPE_OPERATIONAL` | Cómo se crea y vincula el SIS                                                              |
 | `JIRA_TRANSITIONS`, `SIS_TRANSITIONS`                        | Transiciones de Jira por estado                                                            |
 | `APPROVERS_ANALYSIS`, `APPROVERS_CODE`, `APPROVERS_CLIENT`, `APPROVERS_EXECUTION` | Quién puede decidir en cada gate de Jira, con cuentas de Jira (vacío = cualquiera). `APPROVERS_CODE` también destraba un BLOCKED |
@@ -425,6 +476,8 @@ Los modelos son comandos headless, así que se puede usar cualquier agente: `--s
 
 ## Uso
 
+**Soporte (opcional)**: con `SUPPORT_STAGE=on`, en Claude Code, `/orqen:support REC-1234`. En otro agente: _"atendé el REC-1234 como soporte"_ (`orqen support` → búsqueda → `orqen complete`). Si resuelve, `orqen` publica la respuesta y el cliente confirma con `/approve` o `/reject <motivo>`; si escala, el analista parte del resumen. El analista también puede tomar un REC nuevo directo con `analyze`.
+
 **Análisis (analista)**: en Claude Code, `/orqen:analyze REC-1234`. En otro agente: _"analizá el REC-1234"_ (el agente lee
 `AGENTS.md` y corre `orqen analyze` → grilling → `orqen lane` → `orqen complete`).
 
@@ -439,14 +492,14 @@ apply de la spec o plan → `orqen complete`).
 
 **Resto de las etapas, interactivo**: _"procesá el REC REC-123"_ → `orqen take` → trabaja → `orqen complete`.
 
-**Desatendido** (cron, CI o servidor), solo etapas de agente — **nunca** ANALYSIS:
+**Desatendido** (cron, CI o servidor), solo etapas de agente — **nunca** SUPPORT ni ANALYSIS:
 
 ```sh
 orqen cycle --loop     # cada REC_INTERVAL_SEC: avanza gates y lanza AGENT_CMD por REC pendiente
 ```
 
 Para cambiar de agente alcanza con cambiar `AGENT_CMD`, por ejemplo a `codex exec --full-auto {prompt}`.
-Los REC nuevos no se toman solos: quedan en NEW hasta que un analista corre `analyze`.
+Los REC nuevos no se toman solos: quedan en NEW hasta que soporte corre `support` (con `SUPPORT_STAGE=on`) o un analista corre `analyze`.
 
 ### Comandos
 
@@ -458,7 +511,8 @@ orqen create project [nombre] [--stack <id>] [--dir <carpeta>] · orqen create s
 orqen env setup | up [--all] | test [tipo] | status | down
 orqen swarm "<tarea>" [--parallel N] [--plan-only | --plan plan.json] [--small C] [--large C] [--yes]
 
-orqen pending [--json]                 REC con trabajo: para analizar / para un agente
+orqen pending [--json]                 REC con trabajo: para soporte / para analizar / para un agente
+orqen support <KEY> [--person N]       Abre la atención de soporte (SUPPORT_STAGE=on)
 orqen analyze <KEY> [--analyst N]      Abre el análisis con un analista
 orqen lane <KEY> <direct|light|full>   Registra el carril (light/full: rama + change de OpenSpec)
 orqen take <KEY> [--agent N]           Reserva una etapa de agente y prepara rama y entorno

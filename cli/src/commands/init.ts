@@ -198,7 +198,7 @@ export async function init(o: OpcionesInit) {
     ...(faltanEnv.length ? [`Complete ${pc.cyan(RUTA_ENV)}: missing ${faltanEnv.join(", ")}. Git ignores this file.`] : []),
     `Review ${pc.cyan(ARCHIVO_CONFIG)}, then try: ${pc.cyan("orqen env up")} · ${pc.cyan("orqen env test")} · ${pc.cyan("orqen env down")}`,
     `Open Claude Code in this folder (restart it if it was open) and accept ${pc.bold("Trust this folder")}: ` +
-      `the commands appear as ${pc.cyan("/orqen:analyze")}, ${pc.cyan("/orqen:implement")}, ${pc.cyan("/orqen:e2e-review")}, ${pc.cyan("/orqen:pr")} ` +
+      `the commands appear as ${pc.cyan("/orqen:support")}, ${pc.cyan("/orqen:analyze")}, ${pc.cyan("/orqen:implement")}, ${pc.cyan("/orqen:e2e-review")}, ${pc.cyan("/orqen:pr")} ` +
       gris(`(type /orqen: to list them; check with /plugin → orqen@${mk})`),
     `Commit the changes (orqen/, .claude/, .claude-plugin/, AGENTS.md, CLAUDE.md, openspec/) so the team gets the same commands.`,
   ];

@@ -129,7 +129,7 @@ export function marketplace(actual: string | undefined): { texto: string; nombre
   j.plugins = Array.isArray(j.plugins) ? j.plugins : [];
   const entrada = {
     name: "orqen", source: `./${DIR_ORQEN}/plugin`,
-    description: "ORQEN: /orqen:analyze (analyst interview, lane, spec, and SIS) and /orqen:implement",
+    description: "ORQEN: /orqen:support (first-line answer or escalation), /orqen:analyze (analyst interview, lane, spec, and SIS) and /orqen:implement",
   };
   const i = j.plugins.findIndex((p: any) => p?.name === "orqen");
   if (i >= 0) j.plugins[i] = { ...j.plugins[i], ...entrada }; else j.plugins.push(entrada);

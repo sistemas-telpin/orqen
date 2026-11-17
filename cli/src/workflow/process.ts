@@ -28,8 +28,8 @@ const CMD = /^\s*\/(approve|reject)\b\s*([\s\S]*)/i;
 export const VERDICTS = { approve: "Approvable", minor: "Approvable with minor changes", reject: "Reject" } as const;
 const JIRA_MAX = 30_000;   // Jira rejects comments over 32767 characters
 
-/** `for` says who has to act: the analyst (NEW/ANALYSIS) or an unattended agent. */
-export interface Pending { key: string; state: AgentState | "NEW"; for: "analyst" | "agent"; takenBy?: string }
+/** `for` says who has to act: support (SUPPORT, or NEW with SUPPORT_STAGE=on), the analyst (NEW/ANALYSIS) or an unattended agent. */
+export interface Pending { key: string; state: AgentState | "NEW"; for: "support" | "analyst" | "agent"; takenBy?: string }
 export type CompleteResult = { ok: true; next: State } | { ok: false; errors: string[] };
 
 export class Process {
@@ -47,10 +47,10 @@ export class Process {
         const rec = this.store.get(key) ?? newRec(key);
         if (isGate(rec.state)) await this.reviewGate(rec as Rec & { state: keyof typeof GATES });
         else if (rec.state === "BLOCKED") await this.reviewUnblock(rec);
-        if (rec.state === "NEW") pending.push({ key, state: "NEW", for: "analyst" });
+        if (rec.state === "NEW") pending.push({ key, state: "NEW", for: this.cfg.supportStage ? "support" : "analyst" });
         else if (isAgentState(rec.state)) {
           const lock = this.activeLock(rec);
-          pending.push({ key, state: rec.state, for: rec.state === "ANALYSIS" ? "analyst" : "agent", takenBy: lock?.agent });
+          pending.push({ key, state: rec.state, for: rec.state === "ANALYSIS" ? "analyst" : rec.state === "SUPPORT" ? "support" : "agent", takenBy: lock?.agent });
         }
       } catch (e) {
         await this.block(key, `Error reviewing the REC: ${(e as Error).message}`, "process");
@@ -59,18 +59,43 @@ export class Process {
     return pending;
   }
 
+  // ================================================================ support
+  /**
+   * Opens (or resumes) the first-line handling of a REC (SUPPORT_STAGE=on). The support person drives it; the agent helps them
+   * find an answer. The stage ends resolved (the client confirms in ACCEPTANCE) or escalated to the analyst.
+   */
+  async support(key: string, agent = "agent", person = agent) {
+    if (!this.cfg.supportStage) throw new Error("The support stage is off (SUPPORT_STAGE=off): use `orqen analyze` to analyze the request.");
+    const rec = this.store.get(key) ?? newRec(key);
+    if (rec.state !== "NEW" && rec.state !== "SUPPORT")
+      throw new Error(`${key} is not waiting for support (state: ${rec.state}).${rec.state === "ANALYSIS" ? " It was escalated to the analyst: use `orqen analyze`." : ""}`);
+    if (rec.state === "NEW") {
+      rec.supporter = person;
+      await this.jira.comment(key, `${person} (support) is handling this request.`);
+      await this.move(rec, "SUPPORT", "taken by support", agent);
+    }
+    rec.supporter = person;
+    this.store.save(rec);
+    return this.take(key, agent, true);
+  }
+
   // ================================================================ analyze
   /** Opens (or resumes) the analysis of a REC. An analyst drives it; the agent does the grilling with them. */
   async analyze(key: string, agent = "agent", analyst = agent) {
     const rec = this.store.get(key) ?? newRec(key);
     if (rec.state === "WAITING_CLIENT")
       throw new Error(`${key} is waiting for client answers in Jira. When they reply it goes back to ANALYSIS (\`orqen pending\`).`);
-    if (rec.state !== "NEW" && rec.state !== "ANALYSIS")
+    if (rec.state !== "NEW" && rec.state !== "SUPPORT" && rec.state !== "ANALYSIS")
       throw new Error(`${key} already went through the analysis (state: ${rec.state}). If it must be redone, a rejection or an escalation sends it back to ANALYSIS.`);
-    if (rec.state === "NEW") {
+    if (rec.state === "SUPPORT") {   // the analyst takes it over before support finished: do not steal a session in progress
+      const held = this.activeLock(rec);
+      if (held && held.agent !== agent) throw new Error(`${key} is being handled by support ("${held.agent}" since ${held.since}). Wait for them to finish or escalate it.`);
+    }
+    if (rec.state === "NEW" || rec.state === "SUPPORT") {
+      const from = rec.state;
       rec.analyst = analyst;
       await this.jira.comment(key, `${analyst} started analyzing this request.`);
-      await this.move(rec, "ANALYSIS", "registered by analyst", agent);
+      await this.move(rec, "ANALYSIS", from === "SUPPORT" ? "taken by the analyst before support finished" : "registered by analyst", agent);
     }
     rec.analyst = analyst;
     this.store.save(rec);
@@ -106,6 +131,8 @@ export class Process {
       throw new Error(`${key} has no work for an agent (state: ${rec?.state ?? "unknown"}). Run \`orqen pending\`.`);
     if (rec.state === "ANALYSIS" && !fromAnalyze)
       throw new Error(`The analysis of ${key} is driven by an analyst: use /orqen:analyze ${key} (or \`orqen analyze ${key}\`).`);
+    if (rec.state === "SUPPORT" && !fromAnalyze)
+      throw new Error(`Support for ${key} is driven by a person: use /orqen:support ${key} (or \`orqen support ${key}\`).`);
     const lock = this.activeLock(rec);
     if (lock && lock.agent !== agent) throw new Error(`${key} was already taken by "${lock.agent}" since ${lock.since}.`);
     rec.lock = { agent, since: new Date().toISOString() };
@@ -149,7 +176,7 @@ export class Process {
         key, state, round: rec.round, branch: rec.branch || undefined,
         // A person is on the other side (everything but the unattended `orqen cycle`): keep them informed and ask them.
         human_present: agent !== "cycle",
-        analyst: rec.analyst, lane: rec.lane, factory: `orqen/work/${key}/round-${rec.round}`,
+        supporter: rec.supporter, analyst: rec.analyst, lane: rec.lane, factory: `orqen/work/${key}/round-${rec.round}`,
         issue, sis: rec.sis, comments, environment,
         openspec,
         ...(["DEVELOPMENT", "TESTING"].includes(state) ? { tasks: this.tasksOf(rec) } : {}),
@@ -252,7 +279,7 @@ export class Process {
     if (!rec || !isAgentState(rec.state)) return { ok: false, errors: [`${key} is not in an agent stage`] };
     // an expired lock stays valid while nobody else took the REC (the grilling can last longer than REC_LOCK_MIN)
     const lock = this.activeLock(rec) ?? (rec.lock?.agent === agent ? rec.lock : undefined);
-    if (!lock) return { ok: false, errors: [`Run \`orqen ${rec.state === "ANALYSIS" ? "analyze" : "take"} ${key}\` first`] };
+    if (!lock) return { ok: false, errors: [`Run \`orqen ${rec.state === "ANALYSIS" ? "analyze" : rec.state === "SUPPORT" ? "support" : "take"} ${key}\` first`] };
     if (lock.agent !== agent) return { ok: false, errors: [`${key} is taken by "${lock.agent}"`] };
 
     const state = rec.state;
@@ -369,6 +396,20 @@ export class Process {
   private async publish(rec: Rec, state: AgentState, s: Record<string, any>, next: State) {
     const k = rec.key;
     switch (state) {
+      case "SUPPORT": {
+        const resolved = s.outcome === "resolved";
+        this.fac.write(rec, "support.json", JSON.stringify(s, null, 2) + "\n");
+        this.fac.write(rec, "support.md",
+          `# ${k} — support (round ${rec.round})\n\n- **Support:** ${rec.supporter ?? "?"}\n- **Outcome:** ${s.outcome}\n\n## Summary\n\n${s.summary}\n\n` +
+          `## Checked\n\n${bullets(s.checked)}\n\n` +
+          (s.client_response.trim() ? `## Reply to the client\n\n${s.client_response.trim()}\n\n` : "") +
+          (s.escalation_summary.trim() ? `## Escalation\n\n${s.escalation_summary.trim()}\n` : ""));
+        if (resolved)
+          return this.jira.comment(k, `${s.client_response.trim()}\n\n_Answered by support${rec.supporter ? ` (${rec.supporter})` : ""}._\n` +
+            `To confirm the request is solved, comment */approve*. To report that it is not, comment */reject <reason>*.`);
+        return this.jira.comment(k, (s.client_response.trim() ? `${s.client_response.trim()}\n\n` : "") +
+          `*Support${rec.supporter ? ` (${rec.supporter})` : ""}*\n${s.summary}\n\n*Escalated to analysis:*\n${s.escalation_summary.trim()}\n\n*Checked:*\n${bullets(s.checked)}`);
+      }
       case "ANALYSIS": {
         let t = `*Analysis*${rec.analyst ? ` (analyst: ${rec.analyst})` : ""}\n${s.summary}\n\n*Type:* ${s.type}\n\n*Acceptance criteria:*\n${bullets(s.acceptance_criteria)}`;
         if (s.risks.length) t += `\n\n*Risks:*\n${bullets(s.risks)}`;

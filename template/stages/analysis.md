@@ -6,7 +6,7 @@ A human analyst leads this stage. Use the `orqen:grilling` skill when available,
 
 ### 1. Read the context
 
-- Read the issue and the full conversation. Comments with `is_agent: true` come from previous rounds. Look in `human_feedback` for customer answers or the rejection that started this round.
+- Read the issue and the full conversation. Comments with `is_agent: true` come from previous rounds. If `previous_stages.SUPPORT` exists, support already looked at this request: start from its `escalation_summary` and `checked` instead of repeating the work. Look in `human_feedback` for customer answers or the rejection that started this round.
 - Use Jira MCP only to read issues, comments, links, and similar requests. If it is unavailable, use `orqen search '<JQL>'`. orqen handles Jira writes.
 - Read the current specs using `openspec list --specs` and `openspec show <capability>`. Read the implementation where necessary. Ask the analyst only about information you cannot obtain from the repository or Jira.
 

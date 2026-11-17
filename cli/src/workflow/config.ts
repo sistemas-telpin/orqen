@@ -22,6 +22,8 @@ function repoRoot(): string {
 export interface Config {
   jiraUrl: string; jiraUser: string; jiraToken: string; jiraDeployment: "cloud" | "server";
   jql: string;
+  /** SUPPORT_STAGE=on: new requests wait for the support person first (the analyst can still take a NEW one directly). */
+  supportStage: boolean;
   /** analysis = analysts (they also unblock BLOCKED together with code). */
   approvers: { analysis?: string[]; code: string[]; client: string[]; execution?: string[] };
   jiraTransitions: Record<string, string>;
@@ -54,6 +56,7 @@ export function loadConfig(over: Partial<Config> = {}): Config {
     jiraUrl: env("JIRA_URL"), jiraUser: env("JIRA_USER"), jiraToken: env("JIRA_TOKEN"),
     jiraDeployment: env("JIRA_DEPLOYMENT", "cloud") as "cloud" | "server",
     jql: env("REC_JQL", "project = REC AND labels = rec-agente AND statusCategory != Done"),
+    supportStage: ["on", "true", "1", "yes"].includes(env("SUPPORT_STAGE").toLowerCase()),
     approvers: {
       analysis: split(env("APPROVERS_ANALYSIS")),
       code: split(env("APPROVERS_CODE")),

@@ -12,10 +12,11 @@ import { Process } from "../workflow/process.ts";
 import { Store } from "../workflow/store.ts";
 import { GitWorkspace } from "../workflow/workspace.ts";
 
-export const WORKFLOW_COMMANDS = ["pending", "analyze", "lane", "take", "complete", "pr", "review", "schema", "block", "release", "search", "status", "cycle"];
+export const WORKFLOW_COMMANDS = ["pending", "support", "analyze", "lane", "take", "complete", "pr", "review", "schema", "block", "release", "search", "status", "cycle"];
 
 export const WORKFLOW_HELP = `Customer request workflow:
   pending [--json]                      List pending analyst and agent work
+  support <KEY> [--person NAME]         Start first-line support (SUPPORT_STAGE=on)
   analyze <KEY> [--analyst NAME]        Start analysis
   lane <KEY> <direct|light|full>        Record the lane
   take <KEY> [--agent NAME]             Claim an agent stage
@@ -35,6 +36,7 @@ export async function runWorkflow(cmd: string, rest: string[]) {
   const has = (n: string) => { const i = rest.indexOf(`--${n}`); if (i >= 0) rest.splice(i, 1); return i >= 0; };
   const agent = flag("agent") ?? process.env.REC_AGENT ?? "agent";
   const analyst = flag("analyst") ?? process.env.REC_ANALYST ?? "";
+  const person = flag("person") ?? process.env.REC_SUPPORT ?? "";
 
   /** Accepts the REC key or its SIS key (the REC's current SIS) and always returns the REC key. */
   function toRec(key?: string): string {
@@ -117,11 +119,24 @@ export async function runWorkflow(cmd: string, rest: string[]) {
         const p = await flow.review();
         if (has("json")) return console.log(JSON.stringify(p, null, 2));
         if (!p.length) return console.log("No RECs with pending work.");
-        for (const who of ["analyst", "agent"] as const) {
+        for (const who of ["support", "analyst", "agent"] as const) {
           const xs = p.filter((x) => x.for === who);
           if (!xs.length) continue;
-          console.log(who === "analyst" ? "To analyze (/orqen:analyze <KEY>):" : "For an agent (orqen take <KEY>):");
+          console.log(who === "support" ? "For support (/orqen:support <KEY>; an analyst can still take a NEW one with /orqen:analyze):"
+            : who === "analyst" ? "To analyze (/orqen:analyze <KEY>):" : "For an agent (orqen take <KEY>):");
           for (const x of xs) console.log(`  ${x.key.padEnd(12)} ${x.state.padEnd(15)} ${x.takenBy ? `(taken by ${x.takenBy})` : ""}`);
+        }
+        return;
+      }
+      case "support": {
+        const key = rest[0];
+        if (!key) { console.error("Usage: orqen support <KEY> [--person NAME]"); process.exitCode = 1; return; }
+        try {
+          const { context } = await flow.support(key, agent, person || agent);
+          console.log(renderTake(key, context));
+        } catch (e) {
+          console.error(`✘ ${(e as Error).message}`);
+          process.exitCode = 1;
         }
         return;
       }

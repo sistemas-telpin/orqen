@@ -1,6 +1,0 @@
-{
-  "name": "orqen",
-  "version": "0.1.0",
-  "description": "Orqen, proceso REC: /orqen:analizar conduce el análisis de un REC con el analista, propone el carril, genera la spec si corresponde y crea el SIS en Jira. /orqen:implementar implementa el SIS (aplica la spec de OpenSpec si la tiene).",
-  "author": { "name": "Telpin" }
-}

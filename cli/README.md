@@ -14,13 +14,13 @@ orqen init               # Run from the repository you want to initialize
 3. Uses an installed AI agent to review a short repository summary in the background. It validates the proposal with Zod. Use `--deep` to let the agent explore the repository or `--no-ai` to use automatic detection only.
 4. Lets you confirm or edit components, the command that starts each part, tests, migrations, and seed commands.
 5. Finds a compatible OpenSpec installation (version 2.x), installs it if needed, and runs `openspec init` for the selected tools with English artifact output.
-6. Preserves existing connector selection (the requests system the client sees and an optional issues system for the team) and general settings. Provider accounts are configured afterwards in Settings > Connectors and stored in `~/.orqen/providers.env`, shared across repositories. Initialization never asks for tokens. `orqen connectors` checks the configured resources.
+6. Configures the connectors: the requests system the client sees and an optional issues system for the team (Jira, GitHub or Asana). It asks for the project/filter and the account, checks them against the tool and, if the check fails, lets you fix them, save them anyway or skip (`orqen connectors setup` later). The selection goes to `orqen/config.yaml`; provider accounts go to `~/.orqen/providers.env`, shared across repositories (Enter keeps an existing token). Existing connectors and general settings are kept by default. `orqen connectors` checks the configured resources.
 7. Writes the environment configuration (no Docker in between), agent instructions, plugin, stage guides, and manifest. It merges the OpenSpec workflow rules with the repository's existing configuration.
 
 `init` configures an existing project without requesting, cloning or reading the external stack catalog. It reuses any database scripts already installed in the project; new service scripts come from `bootstrap`.
 
 
-Other options include `--agent "<command>"`, `--tools claude,codex`, and `--no-openspec`. Non-interactive runs use the defaults. If a managed file conflicts, `--yes` writes the proposed version alongside the original.
+Other options include `--agent "<command>"`, `--tools claude,codex`, `--no-openspec`, `--no-connectors` (skip the step), and `--connectors <file|->` (connectors as JSON, same format as `orqen connectors set`, for non-interactive runs; `--yes` alone keeps the current ones). Non-interactive runs use the defaults. If a managed file conflicts, `--yes` writes the proposed version alongside the original.
 
 ## Create a new project
 

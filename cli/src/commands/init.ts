@@ -9,8 +9,9 @@ import { agentesInstalados, comandoRapido, explorarConAgente, explorarRapidoAisl
 import { ARCHIVO_CONFIG, entornosDesdeStack, escribirConfig, existeConfig, leerConfig, type Config } from "../lib/config.ts";
 import { detectar } from "../lib/detect.ts";
 import { escribirEnv, leerEnv, RUTA_ENV } from "../lib/env.ts";
-import { missingSecrets } from "../lib/connectors-setup.ts";
-import { providerEnv } from "../lib/provider-credentials.ts";
+import { checkSummary, missingSecrets, setupConnectorsStep } from "../lib/connectors-setup.ts";
+import { checkDraft, parseDraft, type Draft } from "../lib/connectors-edit.ts";
+import { providerEnv, providerFile, saveProviders } from "../lib/provider-credentials.ts";
 import { aplicar, marketplace, planificar, type Cambio, type Decision, MARKETPLACE } from "../lib/kit.ts";
 import {
   estadoOpenSpec, esRepoNode, inicializarOpenSpec, instalarOpenSpec,
@@ -39,6 +40,10 @@ export interface OpcionesInit {
   herramientas?: string[];
   /** Called from `orqen bootstrap`: the logo was already shown. */
   sinLogo?: boolean;
+  /** Skip the connectors step (keep the ones the repository already has). */
+  sinConectores?: boolean;
+  /** Connectors draft as JSON ({"conectores": …, "env": …}, like `orqen connectors set`): a file path or "-" for stdin. */
+  conectores?: string;
   /** Stack and environments already known (from a tool): skip detection, AI analysis and review. */
   predefinido?: { stack: Stack; entornos: Config["entornos"] };
 }
@@ -65,6 +70,7 @@ export async function init(o: OpcionesInit) {
       "Initialization will:",
       "  • Detect the stack and propose environments with your AI agent",
       "  • Install and configure OpenSpec",
+      "  • Connect where the requests and issues live (Jira, GitHub or Asana)",
       "  • Prepare the repository for agents to work independently",
     ],
   });
@@ -138,9 +144,11 @@ export async function init(o: OpcionesInit) {
   if (!o.sinOpenspec) openspecCfg = await prepararOpenSpec(repo, agentes.map((a) => a.id), o.herramientas, yes);
   const rama = await texto("Base branch for request branches and pull requests", ramaBase(repo), yes);
 
-  // Provider accounts are configured once in Settings, never during repository initialization.
   const previous = existeConfig(repo) ? leerConfig(repo) : undefined;
   const datosEnv = leerEnv(repo) ? undefined : {};
+
+  // Connectors: what goes in config.yaml (project, filter…) and the provider accounts, shared by this user's repositories.
+  const conectores = await prepararConectores(repo, previous?.conectores, o, yes);
 
   // 4. Review the proposal.
   if (enCurso) {
@@ -168,7 +176,7 @@ export async function init(o: OpcionesInit) {
     agente: { comando: comandoAgente },
     openspec: openspecCfg,
     stack,
-    ...(previous?.conectores ? { conectores: previous.conectores } : {}),
+    ...(conectores?.conectores ?? previous?.conectores ? { conectores: conectores?.conectores ?? previous?.conectores } : {}),
     ...(previous?.general ? { general: previous.general } : {}),
     entornos: pre ? pre.entornos : entornosDesdeStack(stack),
   };
@@ -182,6 +190,10 @@ export async function init(o: OpcionesInit) {
   p.note(resumenPlan(plan, config), "Files to write");
   if (!(await confirmar("Write these files?", true, yes))) { p.outro("Canceled. The kit was not written."); return; }
 
+  if (conectores) {
+    saveProviders(conectores.conectores, conectores.env, providerEnv(repo));
+    p.log.success(`Connectors saved ${gris(`(provider accounts for this user in ${providerFile()})`)}`);
+  }
   escribirConfig(repo, config);
   const res = await aplicar(repo, plan, (c) => resolverConflicto(c, yes));
   if (datosEnv) {
@@ -197,7 +209,7 @@ export async function init(o: OpcionesInit) {
   const mk = marketplace(existsSync(join(repo, MARKETPLACE)) ? readFileSync(join(repo, MARKETPLACE), "utf8") : undefined).nombre;
   const pasos = [
     ...(!config.conectores ? [`Connect where the tickets live: ${pc.cyan("orqen connectors setup")} (Jira, GitHub or Asana).`] : []),
-    ...(faltanEnv.length ? [`Configure provider accounts in Settings > Connectors: missing ${faltanEnv.join(", ")}. These accounts are shared across repositories.`] : []),
+    ...(faltanEnv.length ? [`Complete the provider accounts with ${pc.cyan("orqen connectors setup")}: missing ${faltanEnv.join(", ")}. These accounts are shared across your repositories.`] : []),
     `Review ${pc.cyan(ARCHIVO_CONFIG)}, then try: ${pc.cyan("orqen env up")} · ${pc.cyan("orqen env test")} · ${pc.cyan("orqen env down")}`,
     `Open Claude Code in this folder (restart it if it was open) and accept ${pc.bold("Trust this folder")}: ` +
       `the commands appear as ${pc.cyan("/orqen:tutorial")} (start here if you are new), ${pc.cyan("/orqen:support")}, ${pc.cyan("/orqen:analyze")}, ${pc.cyan("/orqen:list")}, ${pc.cyan("/orqen:implement")}, ${pc.cyan("/orqen:pr")}, ${pc.cyan("/orqen:review")} (QA), ${pc.cyan("/orqen:approve")} ` +
@@ -207,6 +219,24 @@ export async function init(o: OpcionesInit) {
   if (o.sinLogo) return;   // `orqen bootstrap` shows its own next steps
   p.note(pasos.map((x, i) => `${pc.bold(`${i + 1}.`)} ${x}`).join("\n"), "Next steps");
   p.outro(`${magenta("//")} ${pc.bold("From request to production.")}`);
+}
+
+/** Connectors step: from --connectors (JSON), interactively, or kept as they were (--yes, --no-connectors). */
+async function prepararConectores(repo: string, prev: Config["conectores"], o: OpcionesInit, yes: boolean): Promise<Draft | undefined> {
+  if (o.sinConectores) return undefined;
+  const env = providerEnv(repo);
+  if (o.conectores) {
+    const draft = parseDraft(JSON.parse(readFileSync(o.conectores === "-" ? 0 : resolve(o.conectores), "utf8")));
+    const s = p.spinner();
+    s.start("Checking the connectors…");
+    const result = await checkDraft(draft, env).catch((e) => [{ role: "requests" as const, configured: true, ok: false, detail: (e as Error).message }]);
+    const ok = result.every((r) => !r.configured || r.ok);
+    s.stop(ok ? "Connectors checked" : "Some connectors could not be checked; they are saved anyway");
+    p.note(checkSummary(result), "Connectors");
+    return draft;
+  }
+  if (yes) return undefined;
+  return setupConnectorsStep(repo, prev, env);
 }
 
 /** Let the agent inspect the repository directly. */

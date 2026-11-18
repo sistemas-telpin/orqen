@@ -36,7 +36,8 @@ test("config.yaml connectors: defaults per tool and credentials from orqen/.env"
   assert.match(other.kind === "jira" ? other.query : "", /^project = dev AND labels = orqen/);
   const gh = connectorSettings({ tipo: "github", repo: "acme/app", proyecto: 7 }, {}) as GithubSettings;
   assert.deepEqual(gh.project, { owner: "acme", number: 7, field: "Status" });
-  assert.equal(gh.query, "is:open label:orqen");
+  assert.equal(gh.query, "is:open", "with a Project, the project says which issues are requests");
+  assert.equal((connectorSettings({ tipo: "github", repo: "acme/app" }, {}) as GithubSettings).query, "is:open label:orqen");
   assert.equal(gh.prefix, "GH");
   const as = connectorSettings({ tipo: "asana", proyecto: "1204", prefijo: "tk" }, env) as AsanaSettings;
   assert.deepEqual([as.token, as.tag, as.prefix], ["a", "orqen", "TK"]);
@@ -72,14 +73,16 @@ test("GitHub: issues as tickets, comments, labels, and the Status field of a pro
     if (u === "/graphql") {
       if (body.query.includes("repositoryOwner")) return [200, { data: { repositoryOwner: { projectV2: { id: "P", fields: { nodes: [{}, { id: "F", name: "Status", options: [{ id: "o1", name: "Todo" }, { id: "o2", name: "In progress" }] }] } } } } }];
       if (body.query.includes("addProjectV2ItemById")) return [200, { data: { addProjectV2ItemById: { item: { id: `item-${body.variables.c}` } } } }];
+      if (body.query.includes("items(")) return [200, { data: { node: { items: { nodes: [4, 9, 11].map((number) => ({ isArchived: false, fieldValueByName: { name: "Todo" }, content: { __typename: "Issue", number, state: "OPEN", repository: { nameWithOwner: "acme/app" } } })), pageInfo: { hasNextPage: false, endCursor: null } } } } }];
       return [200, { data: { updateProjectV2ItemFieldValue: { projectV2Item: { id: "x" } } } }];
     }
     return [404, { message: u }];
   });
   t.after(s.close);
-  const gh = new GithubTracker(connectorSettings({ tipo: "github", repo: "acme/app", proyecto: 3 }, { GITHUB_TOKEN: "tk" }) as GithubSettings, s.url);
+  // Project + search qualifiers: the project's issues that also match the search (#11 has no label).
+  const gh = new GithubTracker(connectorSettings({ tipo: "github", repo: "acme/app", proyecto: 3, filtro: "is:open label:orqen" }, { GITHUB_TOKEN: "tk" }) as GithubSettings, s.url);
   assert.deepEqual(await gh.pending(), ["GH-4", "GH-9"]);
-  assert.match(decodeURIComponent(s.calls[0].path), /q=repo:acme\/app is:issue is:open label:orqen/);
+  assert.match(decodeURIComponent(s.calls.find((c) => c.path.startsWith("/search/issues"))!.path), /q=repo:acme\/app is:issue is:open label:orqen/);
   const tk = await gh.ticket("GH-4");
   assert.deepEqual([tk.title, tk.description, tk.reportedBy, tk.url], ["Export", "CSV", "client", "https://github.com/acme/app/issues/4"]);
   assert.equal((await gh.comments("GH-4"))[0].body, "/approve");
@@ -173,6 +176,9 @@ test("GitHub pending reads the Project column, paginates, and ignores other repo
     assert.deepEqual(await tracker.pending(), ["REQ-1", "REQ-6"]);
     assert.deepEqual(await tracker.statuses(), [{ value: "Backlog", label: "Backlog" }, { value: "Ready", label: "Ready" }]);
   }
+  // Without a column: every open issue of the project, whatever its status.
+  const any = new GithubTracker(connectorSettings({ tipo: "github", repo: "team/app", proyecto: 4 }, { GITHUB_TOKEN: "test" }, "REQ") as GithubSettings, s.url);
+  assert.deepEqual(await any.pending(), ["REQ-1", "REQ-2", "REQ-6"]);
   const invalid = new GithubTracker(connectorSettings({ tipo: "github", repo: "team/app", proyecto: 4, estado: "Unknown" }, { GITHUB_TOKEN: "test" }) as GithubSettings, s.url);
   await assert.rejects(invalid.pending(), /no "Unknown" status/);
   assert.equal(s.calls.some((call) => call.path.startsWith("/search/issues")), false, "Column names must not be searched as issue text");

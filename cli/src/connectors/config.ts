@@ -101,7 +101,8 @@ export function connectorSettings(c: ConectorYaml, env: Env, prefix?: string): C
     return {
       kind: "github", transitions, repo, labels,
       token: env[`${p}_TOKEN`] || env.GH_TOKEN || "",
-      query: c.filtro || (c.estado ? "is:open" : `is:open ${labels.map((l) => `label:${l}`).join(" ")}`),
+      // With a GitHub Project the project itself says which issues are requests: no label is required by default.
+      query: c.filtro || (c.estado || c.proyecto ? "is:open" : `is:open ${labels.map((l) => `label:${l}`).join(" ")}`),
       ...(c.estado ? { status: c.estado } : {}),
       prefix: (prefix || c.prefijo || "GH").toUpperCase(),
       project: c.proyecto ? { owner: c.duenio_proyecto || repo.split("/")[0], number: Number(c.proyecto), field: c.campo || "Status" } : undefined,

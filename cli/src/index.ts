@@ -26,6 +26,8 @@ Commands:
       --agent "<cmd>"     Headless agent command (e.g. "claude -p --permission-mode acceptEdits")
       --tools a,b         Tools for \`openspec init\` (claude,codex,cursor,github-copilot...)
       --no-openspec       Skip OpenSpec installation and initialization
+      --no-connectors     Skip the connectors step (keep the current ones; set them later with \`orqen connectors setup\`)
+      --connectors <file> Connectors as JSON ({"conectores": …, "env": …}, like \`orqen connectors set\`; "-" = stdin)
   bootstrap [name]        Create a new project from a stack (code, tools to run it, and orqen ready)
       --tools-repo <repo> GitHub stack catalog (any repo name), cloned inside cli/tools
       --list              List the stacks from your catalog
@@ -73,6 +75,8 @@ async function main() {
       tools: { type: "string" },
       "tools-repo": { type: "string" },
       "no-openspec": { type: "boolean" },
+      "no-connectors": { type: "boolean" },
+      connectors: { type: "string" },
       "no-cli": { type: "boolean" },
       "no-kit": { type: "boolean" },
       all: { type: "boolean" },
@@ -104,7 +108,7 @@ async function main() {
     case "init":
       return init({
         dir: (v.dir as string) ?? resto[0], yes: !!v.yes, sinIa: !!v["no-ai"], profundo: !!v.deep, sinAnimacion: !!v["no-animation"], agente: v.agent as string | undefined,
-        sinOpenspec: !!v["no-openspec"],
+        sinOpenspec: !!v["no-openspec"], sinConectores: !!v["no-connectors"], conectores: v.connectors as string | undefined,
         herramientas: typeof v.tools === "string" ? v.tools.split(",").map((s) => s.trim()).filter(Boolean) : undefined,
       });
     case "bootstrap":

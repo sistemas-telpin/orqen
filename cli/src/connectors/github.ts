@@ -76,7 +76,48 @@ export class GithubTracker implements Tracker {
     return out;
   }
 
-  pending() { return this.search(this.s.query); }
+  /** A Project column is a field value, not text to search in the issue title/body. */
+  async pending() {
+    if (!this.s.project) {
+      if (this.s.status) throw new Error("Select a GitHub Project before choosing a pending status");
+      return this.search(this.s.query);
+    }
+    if (!this.s.status && this.s.query.includes(":")) return this.search(this.s.query);
+    const project = await this.project();
+    const oldColumn = project.field?.options.find((option) => option.name.toLowerCase() === this.s.query.trim().toLowerCase());
+    const status = this.s.status || oldColumn?.name;
+    if (!status) return this.search(this.s.query);
+    if (!project.field?.options.some((option) => option.name.toLowerCase() === status.toLowerCase())) throw new Error(`GitHub Project has no "${status}" status in field "${this.s.project.field}"`);
+    const keys: string[] = [];
+    let cursor: string | null = null;
+    do {
+      const d = await this.graphql(
+        `query($id:ID!,$cursor:String,$field:String!){ node(id:$id){ ... on ProjectV2 { items(first:100,after:$cursor){ nodes { isArchived fieldValueByName(name:$field){ ... on ProjectV2ItemFieldSingleSelectValue { name } } content { __typename ... on Issue { number state repository { nameWithOwner } } } } pageInfo { hasNextPage endCursor } } } } }`,
+        { id: project.id, cursor, field: this.s.project.field },
+      );
+      const page = d?.node?.items;
+      if (!page) throw new Error("Could not read the issues of the selected GitHub Project");
+      for (const item of page.nodes ?? []) {
+        const issue = item?.content;
+        if (!item?.isArchived && item?.fieldValueByName?.name?.toLowerCase() === status.toLowerCase() &&
+            issue?.__typename === "Issue" && issue.state === "OPEN" && issue.repository?.nameWithOwner?.toLowerCase() === this.s.repo.toLowerCase()) keys.push(keyOf(this.s.prefix, issue.number));
+      }
+      cursor = page.pageInfo.hasNextPage ? page.pageInfo.endCursor : null;
+    } while (cursor);
+    // Preserve explicitly configured issue qualifiers as an additional filter.
+    if (!oldColumn && this.s.query.trim() && this.s.query.trim() !== "is:open") {
+      const matching = new Set(await this.search(this.s.query));
+      return [...new Set(keys)].filter((key) => matching.has(key));
+    }
+    return [...new Set(keys)];
+  }
+
+  async statuses(): Promise<Array<{ value: string; label: string }>> {
+    if (!this.s.project) return [];
+    const project = await this.project();
+    if (!project.field) throw new Error(`The GitHub Project has no "${this.s.project.field}" status field`);
+    return project.field.options.map((option) => ({ value: option.name, label: option.name }));
+  }
 
   async search(query: string) {
     const q = `repo:${this.s.repo} is:issue ${query}`.trim();
@@ -167,6 +208,7 @@ export class GithubTracker implements Tracker {
       let extra = "";
       if (this.s.project) {
         const p = await this.project();
+        if (this.s.status && !p.field?.options.some((option) => option.name.toLowerCase() === this.s.status!.toLowerCase())) throw new Error(`GitHub Project has no "${this.s.status}" status`);
         extra = p.field ? `, project ${this.s.project.number} (field ${this.s.project.field}: ${p.field.options.map((o) => o.name).join(", ")})` : `, project ${this.s.project.number} WITHOUT field "${this.s.project.field}"`;
       }
       return { ok: true, detail: `repo ${r.full_name}${extra}` };

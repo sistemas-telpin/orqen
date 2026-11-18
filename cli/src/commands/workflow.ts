@@ -1,5 +1,6 @@
 /** Workflow commands shared by the repository wrapper and the installed CLI. */
 import { ejecutar, partirComando } from "../lib/proc.ts";
+import { providerEnv, saveProviders, providerFile } from "../lib/provider-credentials.ts";
 import { stageGuideFile } from "../lib/stage-guides.ts";
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
@@ -15,22 +16,31 @@ import { Process } from "../workflow/process.ts";
 import { Store } from "../workflow/store.ts";
 import { GitWorkspace } from "../workflow/workspace.ts";
 
-export const WORKFLOW_COMMANDS = ["pending", "support", "analyze", "lane", "take", "complete", "pr", "review", "code-review", "schema", "block", "release", "search", "status", "cycle", "connectors"];
+export const WORKFLOW_COMMANDS = ["list", "qa", "approve", "pending", "support", "analyze", "lane", "take", "complete", "pr", "review", "code-review", "schema", "block", "release", "search", "status", "cycle", "connectors"];
 
-export const WORKFLOW_HELP = `Customer request workflow:
-  pending [--json]                      List pending analyst and agent work
+export const WORKFLOW_HELP = `Customer request workflow (the 9 steps):
+  list requests [--json] [--all]        1 · Everyone's work list, by role (advances what is already decided; takes nothing)
+  support <KEY> [--person NAME]         2 · First-line support (/orqen:support)
+  analyze <KEY> [--analyst NAME]        3 · Analysis (/orqen:analyze)
+  list issues [--json]                  4 · Development queue: issues nobody took, the ones that came back marked
+  take <KEY> [--agent NAME]             5 · Claim an agent stage (/orqen:implement)
+  pr <KEY> [<explanation.md>]           6 · Inspect or open the integration PR (/orqen:pr)
+  review <KEY> approve|reject [--reason TEXT] [--report FILE]   7 · QA decision in QA_REVIEW, full lane (/orqen:review)
+  list prs [--json]                     8 · Senior's queue: PRs to review and whether the review is on the last commit
+  approve <KEY> [--changes <comment.md|->] [--person NAME]   9 · Senior: approve the PR or request changes (/orqen:approve)
+  pending [--json]                      List pending analyst and agent work (older list)
   support <KEY> [--person NAME]         Start first-line support
   analyze <KEY> [--analyst NAME]        Start analysis
   lane <KEY> <direct|light|full>        Record the lane
   take <KEY> [--agent NAME]             Claim an agent stage
   complete <KEY> <output.json|->       Validate output and advance the workflow
   pr <KEY> [<explanation.md>]          Inspect or open the integration PR
-  review <KEY> approve|reject [--reason TEXT] [--report FILE]  QA decision (QA_REVIEW, full lane only)
+  qa <KEY> <report.md|-> --verdict <approve|reject> [--person NAME]   Same QA decision, with the report as the reason
   code-review <KEY> <report.md|-> --verdict <approve|minor|reject>   Record the senior's code review report (CODE_REVIEW)
   schema <STAGE> · block <KEY> <reason> · release <KEY> · search <query>
   status [KEY] [--json] · cycle [--loop]
   connectors [setup|get|check <json>|set <json>] [--json] Show/check the connectors, or set them up (get/check/set: used by the app)
-  connectors github-choices <json|-> <requests|issues> <repositories|projects> List GitHub choices for a draft`;
+  connectors github-choices <json|-> <requests|issues> <repositories|projects|statuses> List GitHub choices for a draft`;
 
 /** The person at this machine: Git's user.name for this repository, otherwise the system user. */
 export function quienSoy(repo: string): string | undefined {
@@ -54,7 +64,10 @@ export async function runWorkflow(cmd: string, rest: string[]) {
   // Who is at this machine (analyst / support person): nobody has to type it. The connector account is usually a
   // shared bot that writes on the tickets; this name says which person did the work ("Mateo started analyzing…").
   const analyst = flag("analyst") || envWithLegacy(process.env, "ORQEN_ANALYST", "REC_ANALYST") || quienSoy(cfg.repoPath);
-  const person = flag("person") || envWithLegacy(process.env, "ORQEN_SUPPORT", "REC_SUPPORT") || quienSoy(cfg.repoPath);
+  const personFlag = flag("person");
+  const person = personFlag || envWithLegacy(process.env, "ORQEN_SUPPORT", "REC_SUPPORT") || quienSoy(cfg.repoPath);
+  /** QA and the senior: the person at this machine (or --person). */
+  const me = personFlag || quienSoy(cfg.repoPath);
 
   /** Accepts the request key or the current issue key of a known request, and always returns the request key. */
   function toKey(key?: string): string {
@@ -134,6 +147,65 @@ export async function runWorkflow(cmd: string, rest: string[]) {
 
   async function dispatch() {
     switch (cmd) {
+      case "list": {
+        const what = (rest[0] ?? "requests").toLowerCase();
+        const json = has("json"), all = has("all");
+        if (!["requests", "issues", "prs"].includes(what)) { console.error("Usage: orqen list <requests|issues|prs> [--json]"); process.exitCode = 1; return; }
+        if (what === "prs") {
+          const q = await flow.prQueue();
+          if (json) return console.log(JSON.stringify(q, null, 2));
+          if (!q.length) return console.log("No PRs waiting for code review.");
+          for (const b of q) console.log(`  ${b.work.padEnd(12)} ${(b.lane ?? "").padEnd(7)} ${b.pr}\n${"".padEnd(15)}${b.qa ? `QA ${b.qa} · ` : ""}review: ${b.review?.status}${b.review?.detail ? ` (${b.review.detail})` : ""}`);
+          return;
+        }
+        const board = await flow.board(all);
+        if (what === "issues") {
+          const q = board.filter((b) => b.state === "DEVELOPMENT");
+          if (json) return console.log(JSON.stringify(q, null, 2));
+          if (!q.length) return console.log("No issues in development.");
+          for (const b of q) console.log(`  ${b.work.padEnd(12)} ${(b.lane ?? "").padEnd(7)} ${b.estimated_hours !== undefined ? `${b.estimated_hours}h`.padEnd(6) : "".padEnd(6)} ${b.takenBy ? `taken by ${b.takenBy}` : "free"}${b.returned ? `  ↩ ${b.returned.split("\n")[0].slice(0, 80)}` : ""}`);
+          return;
+        }
+        if (json) return console.log(JSON.stringify(board, null, 2));
+        if (!board.length) return console.log("No open requests.");
+        const titles: Record<string, string> = { support: "Support (L1)", analyst: "Analyst (L2)", developer: "Development", qa: "QA", senior: "Senior", client: "Waiting for the client", gate: "Waiting for an approval on the request", blocked: "Blocked", done: "Closed" };
+        for (const role of Object.keys(titles)) {
+          const xs = board.filter((b) => b.role === role);
+          if (!xs.length) continue;
+          console.log(`${titles[role]}:`);
+          for (const b of xs) console.log(`  ${b.work.padEnd(12)} ${b.state.padEnd(15)} ${(b.next[0]?.command ?? "").padEnd(28)} ${b.takenBy ? `(taken by ${b.takenBy} since ${b.since?.slice(0, 16).replace("T", " ")})` : ""}`);
+        }
+        return;
+      }
+      case "qa": {
+        try {
+          const verdict = flag("verdict") ?? "";
+          const key = toKey(rest[0]);
+          if (!rest[1]) throw new Error("Usage: orqen qa <KEY> <report.md|-> --verdict <approve|reject>");
+          const body = rest[1] === "-" ? readFileSync(0, "utf8") : readFileSync(rest[1], "utf8");
+          const r = await flow.qaReview(key, verdict, body, body, me || "qa");
+          console.log(`✔ QA review #${r.n} (${verdict}) → ${r.next}${r.path ? ` · report: ${r.path}` : ""}`);
+        } catch (e) {
+          console.error(`✘ ${(e as Error).message}`);
+          process.exitCode = 1;
+        }
+        return;
+      }
+      case "approve": {
+        try {
+          const changes = flag("changes");
+          const comment = flag("comment");
+          const key = toKey(rest[0]);
+          if (!key) throw new Error("Usage: orqen approve <KEY> [--changes <comment.md|->] [--comment <text>]");
+          const body = changes !== undefined ? (changes === "-" || changes === "" ? readFileSync(0, "utf8") : readFileSync(changes, "utf8")) : (comment ?? "");
+          const r = await flow.decide(key, changes !== undefined ? "changes" : "approve", body, me || "senior", agent);
+          console.log(r.state === "DEVELOPMENT" ? `✔ changes requested on ${r.url}: back to development` : `✔ PR approved (${r.url}) → ${r.state}`);
+        } catch (e) {
+          console.error(`✘ ${(e as Error).message}`);
+          process.exitCode = 1;
+        }
+        return;
+      }
       case "pending": {
         const p = await flow.review();
         if (has("json")) return console.log(JSON.stringify(p, null, 2));
@@ -277,7 +349,8 @@ export async function runWorkflow(cmd: string, rest: string[]) {
         if (has("json")) {
           if (rest[0]) {
             const item = store.get(toKey(rest[0]));
-            return console.log(JSON.stringify(item ? { ...item, events: store.events(item.key) } : null, null, 2));
+            const b = item ? flow.boardItem(item) : undefined;
+            return console.log(JSON.stringify(item ? { ...item, role: b!.role, next: b!.next, qa_status: b!.qa, returned: b!.returned, events: store.events(item.key) } : null, null, 2));
           }
           return console.log(JSON.stringify(store.all().map((r) => ({
             key: r.key, state: r.state, issue: r.issue, lane: r.lane, route: r.route, round: r.round, branch: r.branch || undefined,
@@ -312,17 +385,17 @@ export async function runWorkflow(cmd: string, rest: string[]) {
           const { existeConfig, leerConfig } = await import("../lib/config.ts");
           const { leerEnv } = await import("../lib/env.ts");
           const conectores = existeConfig(cfg.repoPath) ? leerConfig(cfg.repoPath).conectores : undefined;
-          return console.log(JSON.stringify({ ...connectorsView(conectores, leerEnv(cfg.repoPath) ?? {}), legacy: cfg.connectors.legacy ?? [] }, null, 2));
+          return console.log(JSON.stringify({ ...connectorsView(conectores, providerEnv(cfg.repoPath)), legacy: cfg.connectors.legacy ?? [] }, null, 2));
         }
         if (rest[0] === "github-choices") {
           const { githubChoices, parseDraft } = await import("../lib/connectors-edit.ts");
           const { leerEnv } = await import("../lib/env.ts");
-          return console.log(JSON.stringify(await githubChoices(parseDraft(draftInput()), { ...process.env, ...(leerEnv(cfg.repoPath) ?? {}) }, rest[2], rest[3]), null, 2));
+          return console.log(JSON.stringify(await githubChoices(parseDraft(draftInput()), providerEnv(cfg.repoPath), rest[2], rest[3]), null, 2));
         }
         if (rest[0] === "check") {
           const { checkDraft, parseDraft } = await import("../lib/connectors-edit.ts");
           const { leerEnv } = await import("../lib/env.ts");
-          const result = await checkDraft(parseDraft(draftInput()), { ...process.env, ...(leerEnv(cfg.repoPath) ?? {}) });
+          const result = await checkDraft(parseDraft(draftInput()), providerEnv(cfg.repoPath));
           return console.log(JSON.stringify({ connectors: result }, null, 2));
         }
         if (rest[0] === "set") {
@@ -337,27 +410,28 @@ export async function runWorkflow(cmd: string, rest: string[]) {
             const { updateGeneral } = await import("../lib/general-settings.ts");
             config.conectores = updateGeneral(config, config.general, false).conectores;
           }
+          const keys = saveProviders(draft.conectores, draft.env, providerEnv(cfg.repoPath));
           escribirConfig(cfg.repoPath, config);
-          const env = draft.env;
-          if (Object.keys(env).length) {
-            const plantilla = join(cfg.repoPath, "orqen", ".env.example");
-            escribirEnv(cfg.repoPath, existsSync(plantilla) ? readFileSync(plantilla, "utf8") : "", { ...(leerEnv(cfg.repoPath) ?? {}), ...env });
+          const local = leerEnv(cfg.repoPath) ?? {};
+          const clear: Record<string, string> = {};
+          for (const key of keys) if (local[key]) clear[key] = "";
+          if (Object.keys(clear).length) {
+            const file = join(cfg.repoPath, RUTA_ENV);
+            escribirEnv(cfg.repoPath, readFileSync(file, "utf8"), clear);
           }
-          return console.log(`✔ Connectors saved in orqen/config.yaml${Object.keys(env).length ? ` and ${RUTA_ENV}` : ""}`);
+          return console.log(`✔ Connectors saved in orqen/config.yaml. Provider accounts saved for this user in ${providerFile()}`);
         }
         if (rest[0] === "setup") {
           const { askConnectors } = await import("../lib/connectors-setup.ts");
           const { leerConfig, escribirConfig } = await import("../lib/config.ts");
-          const { leerEnv, escribirEnv, RUTA_ENV } = await import("../lib/env.ts");
           const { existsSync } = await import("node:fs");
           const config = leerConfig(cfg.repoPath);
-          const env = leerEnv(cfg.repoPath) ?? {};
+          const env = providerEnv(cfg.repoPath);
           const r = await askConnectors(cfg.repoPath, config.conectores, env);
           config.conectores = r.conectores;
+          saveProviders(r.conectores, r.env, env);
           escribirConfig(cfg.repoPath, config);
-          const plantilla = join(cfg.repoPath, "orqen", ".env.example");
-          escribirEnv(cfg.repoPath, existsSync(plantilla) ? readFileSync(plantilla, "utf8") : "", { ...env, ...r.env });
-          console.log(`✔ Saved in orqen/config.yaml (conectores) and ${RUTA_ENV}. Check them with: orqen connectors`);
+          console.log("✔ Providers saved for this user. Project resource selection saved in orqen/config.yaml.");
           return;
         }
         const show = async (role: "requests" | "issues") => {

@@ -79,7 +79,7 @@ test("orqen update --yes reports current files and preserves user edits", () => 
   assert.match(r2.salida, /Kit 0\.0\.9 → 0\.1\.0/);
   assert.equal(readFileSync(join(repo, "orqen/stages/delivery.md"), "utf8"), "# Local delivery guide\n");
   assert.ok(existsSync(join(repo, "orqen/stages/delivery.md.orqen-new")));
-  assert.match(readFileSync(join(repo, "orqen/.env.example"), "utf8"), /JIRA_URL/);
+  assert.match(readFileSync(join(repo, "orqen/.env.example"), "utf8"), /providers\.env/);
 });
 
 test("orqen update prompts for init when configuration is absent", () => {

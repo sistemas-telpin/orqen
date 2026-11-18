@@ -152,6 +152,33 @@ test("general Jira prefixes translate requests, creation, links and URLs to nati
   assert.equal(canLinkNatively(jira, new JiraTracker({ ...settings, prefix: "TKT" })), false);
 });
 
+test("GitHub pending reads the Project column, paginates, and ignores other repositories, drafts and archived items", async (t) => {
+  const item = (number: number, status = "Backlog", repo = "team/app", type = "Issue", archived = false) => ({ isArchived: archived, fieldValueByName: { name: status }, content: { __typename: type, number, state: "OPEN", repository: { nameWithOwner: repo } } });
+  const s = await server((req, body) => {
+    assert.equal(req.url, "/graphql");
+    if (body.query.includes("repositoryOwner")) return [200, { data: { repositoryOwner: { projectV2: { id: "P", fields: { nodes: [{ id: "F", name: "Status", options: [{ id: "B", name: "Backlog" }, { id: "R", name: "Ready" }] }] } } } } }];
+    assert.equal(body.variables.id, "P");
+    assert.equal(body.variables.field, "Status");
+    const next = body.variables.cursor === "next";
+    return [200, { data: { node: { items: {
+      nodes: next ? [item(6), item(1)] : [item(1), item(2, "Ready"), item(3, "Backlog", "other/repo"), item(4, "Backlog", "team/app", "DraftIssue"), item(5, "Backlog", "team/app", "Issue", true), { ...item(7), content: { ...item(7).content, state: "CLOSED" } }],
+      pageInfo: { hasNextPage: !next, endCursor: next ? null : "next" },
+    } } } }];
+  });
+  t.after(s.close);
+  for (const config of [
+    { tipo: "github" as const, repo: "team/app", proyecto: 4, filtro: "Backlog" },
+    { tipo: "github" as const, repo: "team/app", proyecto: 4, estado: "Backlog" },
+  ]) {
+    const tracker = new GithubTracker(connectorSettings(config, { GITHUB_TOKEN: "test" }, "REQ") as GithubSettings, s.url);
+    assert.deepEqual(await tracker.pending(), ["REQ-1", "REQ-6"]);
+    assert.deepEqual(await tracker.statuses(), [{ value: "Backlog", label: "Backlog" }, { value: "Ready", label: "Ready" }]);
+  }
+  const invalid = new GithubTracker(connectorSettings({ tipo: "github", repo: "team/app", proyecto: 4, estado: "Unknown" }, { GITHUB_TOKEN: "test" }) as GithubSettings, s.url);
+  await assert.rejects(invalid.pending(), /no "Unknown" status/);
+  assert.equal(s.calls.some((call) => call.path.startsWith("/search/issues")), false, "Column names must not be searched as issue text");
+});
+
 test("Asana: tagged tasks of the project, stories as comments, sections as transitions", async (t) => {
   const s = await server((req, body) => {
     const u = req.url!;

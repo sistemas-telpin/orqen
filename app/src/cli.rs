@@ -10,7 +10,7 @@ use serde_json::Value;
 /// CREATE_NO_WINDOW | BELOW_NORMAL_PRIORITY_CLASS: the CLI (node) and git never take the CPU from the UI thread,
 /// so the opening animation and scrolling stay smooth while several of them start at once.
 #[cfg(windows)]
-const CHILD_FLAGS: u32 = 0x0800_0000 | 0x0000_4000;
+pub(crate) const CHILD_FLAGS: u32 = 0x0800_0000 | 0x0000_4000;
 
 #[derive(Clone, Debug)]
 pub struct Cli {

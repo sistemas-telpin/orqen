@@ -16,7 +16,7 @@ const catalogo = join(repoTemporal(), "unavailable-catalog");
 function orqen(cwd: string, input: string | undefined, ...args: string[]) {
   const r = spawnSync(process.execPath, [TSX, CLI, ...args], {
     cwd, input, encoding: "utf8",
-    env: { ...process.env, NO_COLOR: "1", ORQEN_TOOLS_DIR: catalogo, ORQEN_TOOLS_REPO: "not-a-github-repository", JIRA_URL: "", JIRA_USER: "", JIRA_TOKEN: "", GITHUB_TOKEN: "", GH_TOKEN: "" },
+    env: { ...process.env, ORQEN_USER_CONFIG_DIR: join(catalogo, "user"), NO_COLOR: "1", ORQEN_TOOLS_DIR: catalogo, ORQEN_TOOLS_REPO: "not-a-github-repository", JIRA_URL: "", JIRA_USER: "", JIRA_TOKEN: "", GITHUB_TOKEN: "", GH_TOKEN: "" },
   });
   return { codigo: r.status, salida: r.stdout, error: r.stderr };
 }
@@ -83,7 +83,8 @@ test("orqen connectors set / get / check: what the app's editor runs", () => {
   assert.equal(set.codigo, 0, set.error);
   const cfg = parse(readFileSync(join(repo, "orqen/config.yaml"), "utf8"));
   assert.equal(cfg.conectores.requests.transiciones.DELIVERY, "Entregado");
-  assert.match(readFileSync(join(repo, "orqen/.env"), "utf8"), /JIRA_TOKEN=secret-token-1234/);
+  assert.doesNotMatch(readFileSync(join(repo, "orqen/.env"), "utf8"), /secret-token-1234/);
+  assert.match(readFileSync(join(catalogo, "user", "providers.env"), "utf8"), /JIRA_TOKEN=secret-token-1234/);
 
   const get = orqen(repo, undefined, "connectors", "get", "--json");
   assert.equal(get.codigo, 0, get.error);
@@ -111,7 +112,7 @@ test("orqen connectors set / get / check: what the app's editor runs", () => {
   const savedGeneral = parse(readFileSync(join(repo, "orqen/config.yaml"), "utf8"));
   assert.equal(savedGeneral.general.prefijos.requests, "REQ");
   assert.equal(savedGeneral.conectores.requests.filtro, draft.conectores.requests.filtro);
-  assert.match(readFileSync(join(repo, "orqen/.env"), "utf8"), /JIRA_TOKEN=secret-token-1234/);
+  assert.doesNotMatch(readFileSync(join(repo, "orqen/.env"), "utf8"), /secret-token-1234/);
   // Saving providers later preserves the independently configured prefixes.
   const saveProviders = orqen(repo, JSON.stringify(draft), "connectors", "set", "-");
   assert.equal(saveProviders.codigo, 0, saveProviders.error);

@@ -9,8 +9,8 @@ import { agentesInstalados, comandoRapido, explorarConAgente, explorarRapidoAisl
 import { ARCHIVO_CONFIG, entornosDesdeStack, escribirConfig, existeConfig, leerConfig, type Config } from "../lib/config.ts";
 import { detectar } from "../lib/detect.ts";
 import { escribirEnv, leerEnv, RUTA_ENV } from "../lib/env.ts";
-import { askConnectors, missingSecrets } from "../lib/connectors-setup.ts";
-import type { ConectoresYaml } from "../connectors/config.ts";
+import { missingSecrets } from "../lib/connectors-setup.ts";
+import { providerEnv } from "../lib/provider-credentials.ts";
 import { aplicar, marketplace, planificar, type Cambio, type Decision, MARKETPLACE } from "../lib/kit.ts";
 import {
   estadoOpenSpec, esRepoNode, inicializarOpenSpec, instalarOpenSpec,
@@ -138,9 +138,9 @@ export async function init(o: OpcionesInit) {
   if (!o.sinOpenspec) openspecCfg = await prepararOpenSpec(repo, agentes.map((a) => a.id), o.herramientas, yes);
   const rama = await texto("Base branch for request branches and pull requests", ramaBase(repo), yes);
 
-  // Ask where the tickets live (and the approvers) while the agent works.
-  const pedido = await pedirConectores(repo, yes);
-  const datosEnv = pedido.env;
+  // Provider accounts are configured once in Settings, never during repository initialization.
+  const previous = existeConfig(repo) ? leerConfig(repo) : undefined;
+  const datosEnv = leerEnv(repo) ? undefined : {};
 
   // 4. Review the proposal.
   if (enCurso) {
@@ -168,7 +168,8 @@ export async function init(o: OpcionesInit) {
     agente: { comando: comandoAgente },
     openspec: openspecCfg,
     stack,
-    ...(pedido.conectores ? { conectores: pedido.conectores } : {}),
+    ...(previous?.conectores ? { conectores: previous.conectores } : {}),
+    ...(previous?.general ? { general: previous.general } : {}),
     entornos: pre ? pre.entornos : entornosDesdeStack(stack),
   };
   const vars = { RESUMEN_STACK: resumenStack(stack), BASE_BRANCH: config.proyecto.rama_base, AGENT_CMD: comandoAgente ? `${comandoAgente}` : "claude -p --permission-mode acceptEdits" };
@@ -187,7 +188,7 @@ export async function init(o: OpcionesInit) {
     escribirEnv(repo, readFileSync(join(repo, "orqen", ".env.example"), "utf8"), datosEnv);
     p.log.success(`${RUTA_ENV} created ${gris("(ignored by Git)")}`);
   }
-  const env = leerEnv(repo) ?? {};
+  const env = providerEnv(repo);
   const faltanEnv = config.conectores ? missingSecrets(config.conectores, env) : [];
   const lado = res.filter((r) => r.accion === "guardado-al-lado");
   p.log.success(`${ARCHIVO_CONFIG} and kit v${VERSION_CLI} installed`);
@@ -196,43 +197,16 @@ export async function init(o: OpcionesInit) {
   const mk = marketplace(existsSync(join(repo, MARKETPLACE)) ? readFileSync(join(repo, MARKETPLACE), "utf8") : undefined).nombre;
   const pasos = [
     ...(!config.conectores ? [`Connect where the tickets live: ${pc.cyan("orqen connectors setup")} (Jira, GitHub or Asana).`] : []),
-    ...(faltanEnv.length ? [`Complete ${pc.cyan(RUTA_ENV)}: missing ${faltanEnv.join(", ")}. Git ignores this file. Then check with ${pc.cyan("orqen connectors")}.`] : []),
+    ...(faltanEnv.length ? [`Configure provider accounts in Settings > Connectors: missing ${faltanEnv.join(", ")}. These accounts are shared across repositories.`] : []),
     `Review ${pc.cyan(ARCHIVO_CONFIG)}, then try: ${pc.cyan("orqen env up")} · ${pc.cyan("orqen env test")} · ${pc.cyan("orqen env down")}`,
     `Open Claude Code in this folder (restart it if it was open) and accept ${pc.bold("Trust this folder")}: ` +
-      `the commands appear as ${pc.cyan("/orqen:tutorial")} (start here if you are new), ${pc.cyan("/orqen:support")}, ${pc.cyan("/orqen:analyze")}, ${pc.cyan("/orqen:implement")}, ${pc.cyan("/orqen:pr")}, ${pc.cyan("/orqen:review")} (QA), ${pc.cyan("/orqen:code-review")} ` +
+      `the commands appear as ${pc.cyan("/orqen:tutorial")} (start here if you are new), ${pc.cyan("/orqen:support")}, ${pc.cyan("/orqen:analyze")}, ${pc.cyan("/orqen:list")}, ${pc.cyan("/orqen:implement")}, ${pc.cyan("/orqen:pr")}, ${pc.cyan("/orqen:review")} (QA), ${pc.cyan("/orqen:approve")}, ${pc.cyan("/orqen:code-review")} ` +
       gris(`(type /orqen: to list them; check with /plugin → orqen@${mk})`),
     `Commit the changes (orqen/, .claude/, .claude-plugin/, AGENTS.md, CLAUDE.md, openspec/) so the team gets the same commands.`,
   ];
   if (o.sinLogo) return;   // `orqen bootstrap` shows its own next steps
   p.note(pasos.map((x, i) => `${pc.bold(`${i + 1}.`)} ${x}`).join("\n"), "Next steps");
   p.outro(`${magenta("//")} ${pc.bold("From request to production.")}`);
-}
-
-/**
- * Ask where the tickets live (requests = what the client sees, issues = optional team issues) and the approvers.
- * Keeps the previous `conectores` and orqen/.env when the person does not want to review them; with --yes nothing is asked.
- */
-async function pedirConectores(repo: string, yes: boolean): Promise<{ conectores?: ConectoresYaml; env?: Record<string, string> }> {
-  const actual = leerEnv(repo);
-  let previos: ConectoresYaml | undefined;
-  try { previos = existeConfig(repo) ? leerConfig(repo).conectores ?? undefined : undefined; } catch { previos = undefined; }
-  if (yes) return { conectores: previos, env: actual ? undefined : {} };
-  const hay = !!previos || !!actual;
-  if (hay && !(await confirmar(`Connectors are already configured. Review them?`, false, false))) return { conectores: previos, env: undefined };
-  if (!(await confirmar(`Connect where the tickets live now (Jira, GitHub or Asana)? ${gris(`(tokens go to ${RUTA_ENV}, which Git ignores)`)}`, true, false)))
-    return { conectores: previos, env: actual ? undefined : {} };
-  const previo = (k: string) => (actual?.[k] && !/your-company|tu-empresa/.test(actual[k]) ? actual[k] : "");
-  const r = await askConnectors(repo, previos, actual ?? {});
-  const v: Record<string, string> = { ...r.env };
-  if (await confirmar(`Configure stage approvers? ${gris("(otherwise anyone can approve)")}`, false, false)) {
-    const pedir = (k: string, quien: string) => texto(`${quien} ${gris("(comma-separated accounts of the requests system, empty for anyone)")}`, previo(k), false);
-    v.APPROVERS_CODE = await pedir("APPROVERS_CODE", "Code review");
-    v.APPROVERS_CLIENT = await pedir("APPROVERS_CLIENT", "Customer acceptance");
-    v.APPROVERS_ANALYSIS = await pedir("APPROVERS_ANALYSIS", "Analysts who can unblock requests");
-    v.APPROVERS_EXECUTION = await pedir("APPROVERS_EXECUTION", "Operational changes (database or infrastructure)");
-  }
-  // Keep existing settings that were not prompted for.
-  return { conectores: r.conectores, env: { ...actual, ...v } };
 }
 
 /** Let the agent inspect the repository directly. */

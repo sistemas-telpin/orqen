@@ -141,6 +141,11 @@ for (const lane of ["light", "full"] as const) {
     await f.complete(f.record().issue!, development, 1); f.state("DEVELOPMENT");
     f.file(`${dir}/tasks.md`, readFileSync(join(f.repo, dir, "tasks.md"), "utf8").replaceAll("- [ ]", "- [x]"));
     await testAndReview(f);
+    if (lane === "full") {
+      // step 7 already ran in QA_REVIEW (testAndReview): the senior's queue shows QA as approved
+      const listed = JSON.parse(await f.command(["list", "prs", "--json"]));
+      assert.deepEqual([listed[0].qa, listed[0].role], ["approved", "senior"]);
+    }
     await f.human("senior", "/approve");
     await finish(f);
     assert.ok(existsSync(join(f.repo, "openspec/specs/invoice-export/spec.md")));

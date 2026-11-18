@@ -10,7 +10,7 @@ import { existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { ARCHIVO_CONFIG, leerConfig } from "../lib/config.ts";
-import { leerEnv } from "../lib/env.ts";
+import { providerEnv } from "../lib/provider-credentials.ts";
 import { connectorSettings } from "../connectors/config.ts";
 import { legacyConnectors } from "../connectors/legacy.ts";
 import { ejemploClave, nombreHerramienta } from "../connectors/describe.ts";
@@ -35,7 +35,7 @@ export function buscarRepo(desde: string): string | undefined {
 export function datosDelRepo(repo: string, plataforma: NodeJS.Platform = process.platform): DatosTutorial {
   let cfg: ReturnType<typeof leerConfig> | undefined;
   try { cfg = leerConfig(repo); } catch { /* invalid config: generic examples */ }
-  const env = leerEnv(repo) ?? {};
+  const env = providerEnv(repo);
   const real = (v?: string) => (v && !/your-company|tu-empresa/.test(v) ? v : undefined);
   const c = cfg?.conectores
     ? { requests: connectorSettings(cfg.conectores.requests, env, cfg.general?.prefijos.requests), issues: cfg.conectores.issues ? connectorSettings(cfg.conectores.issues, env, cfg.general?.prefijos.issues) : undefined }

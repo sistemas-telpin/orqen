@@ -26,6 +26,7 @@ test("installs the kit idempotently", async () => {
   assert.match(leer(repo, ".gitignore"), /orqen\/state\//);
   assert.equal(JSON.parse(leer(repo, ".claude-plugin/marketplace.json")).plugins[0].source, "./orqen/plugin");
   assert.match(leer(repo, "orqen/.env.example"), /AGENT_CMD=claude -p/);
+  assert.doesNotMatch(leer(repo, "orqen/.env"), /^(?:JIRA_TOKEN|GITHUB_TOKEN|ASANA_TOKEN)=/m);
   assert.ok(Object.keys(leerManifest(repo).archivos).includes("AGENTS.md#orqen"));
 
   const otra = planificar(repo, vars);

@@ -1,5 +1,5 @@
 /**
- * Connector settings: `conectores` in orqen/config.yaml (what and where) + secrets in orqen/.env (tokens).
+ * Connector settings: `conectores` in orqen/config.yaml (what and where) + shared provider credentials in ~/.orqen/providers.env.
  *
  *   conectores:
  *     requests:                    # where the client's requests arrive (what the client sees)
@@ -20,12 +20,14 @@ export const KINDS = ["jira", "github", "asana"] as const;
 /** One connector as written in config.yaml (keys in Spanish, like the rest of the file). */
 export const ConectorYaml = z.object({
   tipo: z.enum(KINDS),
-  /** Prefix of the variables in orqen/.env with the credentials (default JIRA / GITHUB / ASANA). */
+  /** Prefix of the shared provider credential variables (default JIRA / GITHUB / ASANA). */
   credenciales: z.string().nullish(),
   /** Jira: base URL (can also come from <CREDENCIALES>_URL). */
   url: z.string().nullish(),
   /** Which tickets orqen handles: JQL (Jira), GitHub search qualifiers, or an Asana tag. */
   filtro: z.string().nullish(),
+  /** GitHub Project status whose issues are shown in Pending. Separate from issue search qualifiers. */
+  estado: z.string().nullish(),
   /** Jira: project key where the issue is created. GitHub: Projects (v2) number. Asana: project gid. */
   proyecto: z.union([z.string(), z.number()]).nullish(),
   /** Jira: issue types for the issue and the link type between both. */
@@ -63,6 +65,7 @@ export interface JiraSettings extends Base {
 export interface GithubSettings extends Base {
   kind: "github"; token: string; repo: string; query: string; prefix: string; labels: string[];
   project?: { owner: string; number: number; field: string };
+  status?: string;
 }
 export interface AsanaSettings extends Base {
   kind: "asana"; token: string; project: string; tag: string; prefix: string;
@@ -74,10 +77,14 @@ export const DEFAULT_LABEL = "orqen";
 
 type Env = Record<string, string | undefined>;
 
+export function credentialsPrefix(c: Pick<ConectorYaml, "tipo" | "credenciales">): string {
+  return c.credenciales || (c.tipo === "jira" ? "JIRA" : c.tipo === "github" ? "GITHUB" : "ASANA");
+}
+
 export function connectorSettings(c: ConectorYaml, env: Env, prefix?: string): ConnectorSettings {
   const transitions = { ...(c.transiciones ?? {}) };
   if (c.tipo === "jira") {
-    const p = c.credenciales || "JIRA";
+    const p = credentialsPrefix(c);
     const project = c.proyecto ? String(c.proyecto) : "";
     return {
       kind: "jira", transitions, ...(prefix ? { prefix: prefix.toUpperCase() } : {}),
@@ -88,18 +95,19 @@ export function connectorSettings(c: ConectorYaml, env: Env, prefix?: string): C
     };
   }
   if (c.tipo === "github") {
-    const p = c.credenciales || "GITHUB";
+    const p = credentialsPrefix(c);
     const repo = c.repo || "";
     const labels = c.etiquetas?.length ? c.etiquetas : [DEFAULT_LABEL];
     return {
       kind: "github", transitions, repo, labels,
       token: env[`${p}_TOKEN`] || env.GH_TOKEN || "",
-      query: c.filtro || `is:open ${labels.map((l) => `label:${l}`).join(" ")}`,
+      query: c.filtro || (c.estado ? "is:open" : `is:open ${labels.map((l) => `label:${l}`).join(" ")}`),
+      ...(c.estado ? { status: c.estado } : {}),
       prefix: (prefix || c.prefijo || "GH").toUpperCase(),
       project: c.proyecto ? { owner: c.duenio_proyecto || repo.split("/")[0], number: Number(c.proyecto), field: c.campo || "Status" } : undefined,
     };
   }
-  const p = c.credenciales || "ASANA";
+  const p = credentialsPrefix(c);
   return {
     kind: "asana", transitions,
     token: env[`${p}_TOKEN`] || "", project: c.proyecto ? String(c.proyecto) : "",

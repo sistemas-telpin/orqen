@@ -167,10 +167,11 @@ export function pasosTutorial(d: DatosTutorial, i: Idioma): Paso[] {
           tx(` TESTING       nadie        automático (o pedile a Claude: "procesá el ${recNum}")`,
              ` TESTING       nobody       automatic (or ask Claude: "process ${recNum}")`),
           tx(` CODE_REVIEW   desarrollo   /orqen:pr ${sisNum}  (abre el PR)`, ` CODE_REVIEW   developer    /orqen:pr ${sisNum}  (opens the PR)`),
+          tx(`               QA           /orqen:review ${sisNum}  (solo carril completo)`, `               QA           /orqen:review ${sisNum}  (full lane only)`),
           d.gate === "github"
-            ? tx(`               senior       /orqen:code-review ${sisNum}, después Approve en GitHub`, `               senior       /orqen:code-review ${sisNum}, then Approve on GitHub`)
-            : tx(`               senior       /orqen:code-review ${sisNum}, después /approve en ${H}`, `               senior       /orqen:code-review ${sisNum}, then /approve in ${H}`),
-          tx(" DELIVERY      nadie        automático", " DELIVERY      nobody       automatic"),
+            ? tx(`               senior       /orqen:approve ${sisNum}  (o Approve en GitHub)`, `               senior       /orqen:approve ${sisNum}  (or Approve on GitHub)`)
+            : tx(`               senior       /orqen:approve ${sisNum}  (o /approve en ${H})`, `               senior       /orqen:approve ${sisNum}  (or /approve in ${H})`),
+          tx(` DELIVERY      senior       /orqen:approve ${sisNum}  (entrega al cliente)`, ` DELIVERY      senior       /orqen:approve ${sisNum}  (delivers to the client)`),
           tx(` ACCEPTANCE    cliente      /approve o /reject en ${H}`, ` ACCEPTANCE    customer     /approve or /reject in ${H}`),
           tx(` BLOCKED       aprobador    /approve <qué hacer> en ${H}`, ` BLOCKED       approver     /approve <what to do> in ${H}`),
         ] },
@@ -260,17 +261,17 @@ export function pasosTutorial(d: DatosTutorial, i: Idioma): Paso[] {
         { t: "cmd", lineas: [`/orqen:pr ${sisNum}`] },
         { t: "p", texto: tx(`Tenés que estar en la rama del pedido. El agente escribe la explicación y orqen sube los cambios y abre el PR contra ${d.ramaDevel}.`,
           `You must be on the request branch. The agent writes the explanation, and orqen pushes the changes and opens the PR against ${d.ramaDevel}.`) },
-        { t: "h", texto: tx("3. QA (solo carril completo)", "3. QA (full lane only)") },
+        { t: "h", texto: tx("3. QA revisa los e2e del cambio (solo carril completo)", "3. QA reviews the e2e of the change (full lane only)") },
         { t: "cmd", lineas: [`/orqen:review ${sisNum}`] },
-        { t: "p", texto: tx("QA mira en pantalla los e2e del cambio y aprueba (sigue el senior) o pide cambios (vuelve a desarrollo). Los carriles directo y liviano no pasan por QA.",
-          "QA checks the e2e of the change on screen and approves (the senior is next) or requests changes (it goes back to development). The direct and light lanes skip QA.") },
+        { t: "p", texto: tx("Después de los tests, el pedido pasa a QA_REVIEW. El agente cruza los escenarios con los e2e del cambio y los deja listos para verlos en pantalla. QA aprueba (sigue el senior) o pide cambios (vuelve a desarrollo). Los carriles directo y liviano no pasan por QA y van directo al senior.",
+          "After testing, the request moves to QA_REVIEW. The agent matches the scenarios with the e2e of the change and runs them on screen. QA approves (the senior is next) or requests changes (back to development). The direct and light lanes skip QA and go straight to the senior.") },
         { t: "h", texto: tx("4. Code review (senior)", "4. Code review (senior)") },
-        { t: "cmd", lineas: [`/orqen:code-review ${sisNum}`] },
+        { t: "cmd", lineas: [`/orqen:list prs`, `/orqen:approve ${sisNum}`] },
         { t: "p", texto: d.gate === "github"
-          ? tx("El agente revisa el PR y le da al senior un informe. Después el senior entra al PR en GitHub y pone Approve (sigue la entrega) o Request changes (vuelve a desarrollo con sus comentarios).",
-               "The agent reviews the PR and gives the senior a report. Then the senior opens the PR on GitHub and clicks Approve (delivery comes next) or Request changes (it goes back to development with the comments).")
-          : tx(`El agente revisa el PR y le da al senior un informe. Después el senior comenta en ${H} /approve (sigue la entrega) o /reject motivo (vuelve a desarrollo).`,
-               `The agent reviews the PR and gives the senior a report. Then the senior comments /approve (delivery comes next) or /reject reason (back to development) in ${H}.`) },
+          ? tx("Si quiere, el agente le arma al senior un informe del PR. El senior aprueba (queda el Approve en el PR de GitHub y sigue la entrega) o pide cambios (vuelven a desarrollo como indicación). Solo vale sobre el último commit.",
+               "If they want, the agent writes the senior a report on the PR. The senior approves (the Approve is posted on the GitHub PR and delivery comes next) or requests changes (they go back to development). It only counts on the last commit.")
+          : tx(`Si quiere, el agente le arma al senior un informe del PR. El senior aprueba (sigue la entrega) o pide cambios (vuelven a desarrollo); orqen lo registra en ${H}.`,
+               `If they want, the agent writes the senior a report on the PR. The senior approves (delivery comes next) or requests changes (back to development); orqen records it in ${H}.`) },
       ],
     },
     {
@@ -350,7 +351,8 @@ export function pasosTutorial(d: DatosTutorial, i: Idioma): Paso[] {
       bloques: [
         { t: "pre", lineas: [
           tx(" MIRAR (terminal)", " LOOK (terminal)"),
-          tx("   orqen pending                 qué hay para hacer", "   orqen pending                 what needs doing"),
+          tx("   orqen list requests           qué hay para hacer, por rol", "   orqen list requests           what needs doing, by role"),
+          tx("   orqen list issues | prs       cola de desarrollo / del senior", "   orqen list issues | prs       developer / senior queue"),
           tx(`   orqen status ${recNum.padEnd(16)} en qué etapa está`, `   orqen status ${recNum.padEnd(16)} which stage it is in`),
           tx("   orqen env status              qué está prendido y dónde está su log", "   orqen env status              what is running and where its log is"),
           tx("   git status / git diff         qué está cambiando el agente", "   git status / git diff         what the agent is changing"),
@@ -361,7 +363,7 @@ export function pasosTutorial(d: DatosTutorial, i: Idioma): Paso[] {
           tx(`   /orqen:implement ${sisNum.padEnd(12)} desarrollo`, `   /orqen:implement ${sisNum.padEnd(12)} developer`),
           tx(`   /orqen:pr ${sisNum.padEnd(19)} desarrollo (abre el PR)`, `   /orqen:pr ${sisNum.padEnd(19)} developer (opens the PR)`),
           tx(`   /orqen:review ${sisNum.padEnd(15)} QA (carril completo)`, `   /orqen:review ${sisNum.padEnd(15)} QA (full lane)`),
-          tx(`   /orqen:code-review ${sisNum.padEnd(10)} senior`, `   /orqen:code-review ${sisNum.padEnd(10)} senior`),
+          tx(`   /orqen:approve ${sisNum.padEnd(14)} senior (aprueba o pide cambios)`, `   /orqen:approve ${sisNum.padEnd(14)} senior (approves or requests changes)`),
           "",
           tx(` DECIDIR (${H} / GitHub)`, ` DECIDE (${H} / GitHub)`),
           tx("   /approve   /reject motivo     comentario en el request", "   /approve   /reject reason     comment on the request"),

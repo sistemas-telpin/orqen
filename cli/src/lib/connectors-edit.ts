@@ -4,16 +4,13 @@
  *   `orqen connectors check -`     checks a draft ({"conectores": …, "env": …} on stdin) without saving it
  *   `orqen connectors set -`       saves it (workflow.ts)
  */
-import { connectorSettings, ConectoresYaml, type ConectorYaml } from "../connectors/config.ts";
+import { connectorSettings, ConectoresYaml, credentialsPrefix, type ConectorYaml } from "../connectors/config.ts";
+export { credentialsPrefix } from "../connectors/config.ts";
 import { trackerFor } from "../connectors/index.ts";
 import { GithubTracker } from "../connectors/github.ts";
 import { checkFailure } from "../connectors/types.ts";
 
 type Env = Record<string, string | undefined>;
-
-export function credentialsPrefix(c: Pick<ConectorYaml, "tipo" | "credenciales">): string {
-  return c.credenciales || (c.tipo === "jira" ? "JIRA" : c.tipo === "github" ? "GITHUB" : "ASANA");
-}
 
 /** Values left by the .env template: treated as empty. */
 const PLACEHOLDER = /your-company|tu-empresa|^changeme$|^xxx+$/i;
@@ -63,14 +60,14 @@ export interface CheckResult { role: "requests" | "issues"; configured: boolean;
 export async function githubChoices(draft: Draft, current: Env, role: string, resource: string) {
   role = role === "external" ? "requests" : role === "internal" ? "issues" : role;   // names used by earlier versions of the app
   if (role !== "requests" && role !== "issues") throw new Error("Expected requests or issues connector role");
-  if (resource !== "repositories" && resource !== "projects") throw new Error("Expected repositories or projects");
+  if (resource !== "repositories" && resource !== "projects" && resource !== "statuses") throw new Error("Expected repositories or projects or statuses");
   const c = role === "requests" ? draft.conectores.requests : draft.conectores.issues;
   if (c?.tipo !== "github") throw new Error("Select a GitHub connector first");
   const settings = connectorSettings(c, { ...current, ...draft.env });
   if (settings.kind !== "github") throw new Error("Expected GitHub settings");
   const tracker = new GithubTracker(settings);
   try {
-    const items = resource === "repositories" ? await tracker.repositories() : await tracker.projects(c.duenio_proyecto || settings.repo.split("/")[0]);
+    const items = resource === "repositories" ? await tracker.repositories() : resource === "statuses" ? await tracker.statuses() : await tracker.projects(c.duenio_proyecto || settings.repo.split("/")[0]);
     return { ok: true, items };
   } catch (e) { return { ok: false, detail: checkFailure(e, "https://api.github.com") }; }
 }

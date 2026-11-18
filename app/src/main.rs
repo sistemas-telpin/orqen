@@ -2,6 +2,7 @@
 //! Each project is a tab; a second `orqen` adds its folder to the open window.
 #![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
 
+mod agent;
 mod assets;
 mod cli;
 mod connectors;

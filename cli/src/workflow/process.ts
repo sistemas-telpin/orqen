@@ -37,6 +37,8 @@ export interface BoardItem {
   key: string; issue?: string; work: string; state: State; lane?: string; route?: string; role: Role;
   takenBy?: string; since?: string; returned?: string; estimated_hours?: number; pr?: string;
   qa?: "pending" | "approved"; next: NextStep[]; updated?: string;
+  /** DELIVERY: whether a person already merged the PR into the development branch (orqen never merges it). */
+  merge?: "pending" | "merged";
   review?: { status: "none" | "current" | "stale" | "unknown"; detail?: string };
 }
 export type CompleteResult = { ok: true; next: State } | { ok: false; errors: string[] };
@@ -64,6 +66,7 @@ export class Process {
         const item = this.store.get(key) ?? newWorkItem(key);
         if (isGate(item.state)) await this.reviewGate(item as WorkItem & { state: keyof typeof GATES });
         else if (item.state === "BLOCKED") await this.reviewUnblock(item);
+        else if (item.state === "DELIVERY") await this.checkMerge(item);   // quiet: "unknown" just keeps waiting
         if (item.state === "NEW") pending.push({ key, state: "NEW", for: this.cfg.supportStage ? "support" : "analyst" });
         else if (isAgentState(item.state)) {
           const lock = this.activeLock(item);
@@ -101,13 +104,18 @@ export class Process {
       estimated_hours: item.artifacts.estimated_hours, pr: item.artifacts.devel_pr,
       qa: needsQa(item) && item.state === "QA_REVIEW" ? "pending" : needsQa(item) && item.state === "CODE_REVIEW" ? "approved" : undefined,
       next: nextSteps(item, this.cfg), updated: this.store.events(item.key).at(-1)?.ts,
+      merge: item.state === "DELIVERY" && item.artifacts.devel_pr ? (item.artifacts.devel_pr_merged ? "merged" : "pending") : undefined,
     };
   }
 
-  /** Step 8: requests waiting for code review, with whether the senior's review on the PR is on the last commit. */
+  /**
+   * Step 8: requests waiting for code review, with whether the senior's review on the PR is on the last commit,
+   * and approved PRs still waiting for a person to merge them (DELIVERY, merge pending).
+   */
   async prQueue(): Promise<BoardItem[]> {
-    const items = (await this.board()).filter((b) => b.state === "CODE_REVIEW" && b.pr);
+    const items = (await this.board()).filter((b) => b.pr && (b.state === "CODE_REVIEW" || b.merge === "pending"));
     for (const b of items) {
+      if (b.state === "DELIVERY") { b.review = { status: "current", detail: "approved: waiting for the merge" }; continue; }
       if (this.cfg.codeReviewGate !== "github" || !this.ws.prReviews) { b.review = { status: "none" }; continue; }
       try {
         const snap = this.ws.prReviews(b.pr!);
@@ -253,6 +261,19 @@ export class Process {
       this.attempt(() => this.ws.push(item.branch));
     }
     this.store.save(item);
+    // The PR is merged by a person (orqen never merges it); the delivery to the client waits for it. The archive commit
+    // above is already on the branch, so it goes in with the merge.
+    if (state === "DELIVERY") {
+      const m = await this.checkMerge(item).catch((e) => { delete item.lock; this.store.save(item); throw e; });
+      if (m.status !== "merged") {
+        delete item.lock;
+        this.store.save(item);
+        const how = `Merge it by hand into ${this.cfg.develBranch}${item.artifacts.archive ? " (it already includes the OpenSpec archive)" : ""}`;
+        throw new Error(m.status === "open"
+          ? `The PR of ${key} is approved but not merged yet: ${item.artifacts.devel_pr}\n${how}; orqen detects it, then run this again to deliver to the client.`
+          : `orqen could not read whether the PR of ${key} is merged (${m.detail}): ${item.artifacts.devel_pr}\n${how}, confirm it with \`orqen merged ${key}\` and run this again.`);
+      }
+    }
 
     const comments = (await this.requests.comments(key)).map((c) => ({
       author: c.authorName, date: c.created, text: c.body, is_agent: isBotComment(c.body),
@@ -693,7 +714,7 @@ export class Process {
       if (item.state === "ACCEPTANCE" && action === "reject") {
         // new round: the previous change is already archived → the analyst re-analyzes (new lane, change and issue)
         item.round++; item.change = ""; item.questionRounds = 0; item.testingAttempts = 0; delete item.lane;
-        delete item.artifacts.archive; delete item.artifacts.devel_pr; delete item.artifacts.issue_linked;
+        delete item.artifacts.archive; delete item.artifacts.devel_pr; delete item.artifacts.devel_pr_merged; delete item.artifacts.issue_linked;
         if (item.issue) { (item.artifacts.previous_issues ??= []).push(item.issue); delete item.issue; }  // the new round gets its own issue
       }
       return this.move(item, gate[action === "approve" ? "approve" : "reject"], `/${action} by ${c.authorName} ${reason}`.trim());
@@ -766,6 +787,47 @@ export class Process {
   private async commentBoth(item: WorkItem, text: string) {
     await this.requests.comment(item.key, text);
     if (item.issue && this.issues) await this.attemptAsync(() => this.issues!.comment(item.issue!, text));
+  }
+
+  // ================================================================ merge (by a person)
+  /**
+   * DELIVERY: reads whether the integration PR was merged. orqen never merges it; a person does it by hand and orqen records it
+   * (devel_pr_merged) and comments it once. No PR, or a workspace that cannot read PRs: nothing to wait for. A PR closed
+   * without merging is an error (it needs a person: reopen and merge it, or block the request).
+   */
+  private async checkMerge(item: WorkItem): Promise<{ status: "merged" | "open" | "unknown"; detail?: string }> {
+    const url = item.artifacts.devel_pr as string | undefined;
+    if (!url || item.artifacts.devel_pr_merged) return { status: "merged" };
+    if (!this.ws.prState) return { status: "unknown", detail: "this workspace cannot read PRs" };
+    let pr;
+    try { pr = this.ws.prState(url); } catch (e) {
+      // no gh, not logged in, or a PR outside GitHub (DEVEL_PR_COMMAND): a person confirms it with `orqen merged`
+      return { status: "unknown", detail: ((e as Error).message.split("\n")[0] || "gh failed").slice(0, 200) };
+    }
+    if (pr.state === "CLOSED") throw new Error(`The PR ${url} was closed without merging: reopen and merge it, or block the request.`);
+    if (pr.state !== "MERGED") return { status: "open" };
+    await this.recordMerge(item, pr.mergedBy, pr.mergedAt);
+    return { status: "merged" };
+  }
+
+  /** `orqen merged <KEY>`: a person confirms they merged the PR by hand (when orqen cannot read it from GitHub). */
+  async confirmMerge(key: string, person: string) {
+    const item = this.store.get(key);
+    if (!item) throw new Error(`${key} is unknown to orqen.`);
+    if (item.state !== "DELIVERY") throw new Error(`${key} is in ${item.state}: the merge is confirmed in DELIVERY, after the senior approves the PR.`);
+    if (!item.artifacts.devel_pr) throw new Error(`${key} has no PR: there is nothing to merge.`);
+    if (item.artifacts.devel_pr_merged) return item.artifacts.devel_pr_merged as { at: string; by?: string };
+    await this.recordMerge(item, person, undefined, true);
+    return item.artifacts.devel_pr_merged as { at: string; by?: string };
+  }
+
+  private async recordMerge(item: WorkItem, by: string | undefined, at = new Date().toISOString(), confirmed = false) {
+    const url = item.artifacts.devel_pr as string;
+    item.artifacts.devel_pr_merged = { at, by, ...(confirmed ? { confirmed_by_hand: true } : {}) };
+    this.store.save(item);
+    const what = `PR merged into ${this.cfg.develBranch}${by ? ` by ${by}` : ""}${confirmed ? " (confirmed by hand)" : ""}`;
+    this.store.log(item.key, { ts: new Date().toISOString(), from: item.state, to: item.state, detail: what, agent: "process" });
+    await this.attemptAsync(() => this.commentBoth(item, `${what}: ${url}`));
   }
 
   // ================================================================ utilities

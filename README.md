@@ -17,7 +17,7 @@ Opcionalmente, una persona de **soporte** atiende primero el reclamo con el agen
 | Persona nueva      | `/orqen:tutorial` (o `orqen tutorial` en la terminal): 12 pasos cortos, en el idioma del sistema, con qué correr en cada etapa, cómo avanza un pedido y cómo mirar al agente y los entornos |
 | Soporte (opcional) | `/orqen:support SOP-1234`: busca la respuesta, la redacta para el cliente y, si no se puede resolver, escala al analista con un resumen |
 | Analista           | `/orqen:analyze SOP-1234`: analiza el pedido, elige el carril, escribe la spec si hace falta y crea el issue (si hay)|
-| Agente             | `/orqen:implement DEV-442`: implementa la spec o el plan aprobado · `/orqen:pr DEV-442`: abre el PR a desarrollo |
+| Agente             | `/orqen:implement DEV-442`: implementa la spec o el plan aprobado y corre solo TESTING (la regresión completa) · `/orqen:pr DEV-442`: abre el PR a desarrollo |
 | Todos              | `/orqen:list requests` (`orqen list requests`): la lista de trabajo por rol, sin tomar nada · desarrollo: `/orqen:list issues` · senior: `/orqen:list prs` |
 | QA                 | `/orqen:review DEV-442`: solo carril completo, en `QA_REVIEW`; revisa en pantalla los e2e del cambio y aprueba (`orqen review … approve`) o pide cambios (vuelve a desarrollo) |
 | Senior             | `/orqen:approve DEV-442`: informe opcional del PR (`/orqen:code-review`), después aprueba o pide cambios (`orqen approve`, queda el review en el PR) y entrega al cliente |
@@ -191,7 +191,7 @@ aprueba solo si la suite pasó y todo está cubierto. Si no, vuelve a DEVELOPMEN
 | Paso | Tests |
 | --- | --- |
 | DEVELOPMENT (`/orqen:implement`) | Unit tests del código que cambia y los **e2e de los Scenarios o criterios que agrega o toca** el cambio. Corre solo esos: `orqen env test unitarios` y `orqen env test e2e -- <archivos o filtro>` |
-| TESTING (automático, todos los carriles) | **Todos** los tests configurados: unit, integración, la **regresión e2e completa** y visual. Es el único paso que corre la regresión entera |
+| TESTING (lo corre el agente solo al terminar `/orqen:implement`, todos los carriles) | **Todos** los tests configurados: unit, integración, la **regresión e2e completa** y visual. Es el único paso que corre la regresión entera |
 | QA_REVIEW (solo carril completo) | No repite la regresión: QA valida con criterio y en pantalla los e2e del cambio |
 
 ## QA: `/orqen:review DEV-3312` (solo carril completo)
@@ -274,6 +274,11 @@ Con `CODE_REVIEW_GATE=github` (el valor por defecto) el senior **no necesita com
 y `orqen` lo lee con `gh` en cada `orqen pending` / `orqen cycle`:
 
 - **Approve** → el pedido pasa a DELIVERY y se comenta en el pedido y el issue.
+- **El merge lo hace una persona.** orqen nunca mergea el PR: después del approve, alguien lo mergea a mano a `desarrollo`.
+  orqen lo detecta solo (en `orqen list`, `orqen cycle` o al retomar DELIVERY), lo comenta en el request y el issue, y recién
+  ahí sigue la entrega al cliente. Antes de pedir el merge, DELIVERY archiva el change de OpenSpec y lo pushea a la rama, así
+  entra con el mismo merge. `orqen list prs` muestra los PRs aprobados que esperan el merge. Si el PR se cierra sin mergear, orqen lo avisa.
+  Si orqen no puede leer el PR (sin `gh`, o un PR fuera de GitHub con `DEVEL_PR_COMMAND`), quien lo mergeó lo confirma con `orqen merged <KEY>`.
 - **Request changes** → vuelve a DEVELOPMENT y el texto del review llega al agente como feedback (si no tiene texto, se le indica el PR).
 - Si hay un approve y un request changes a la vez, **gana el pedido de cambios**.
 - Solo cuentan los reviews hechos sobre el **commit actual del PR**: si después del review alguien empuja (por ejemplo `/orqen:pr` con ajustes de e2e), hace falta un review nuevo. Es lo mismo que "dismiss stale approvals" de GitHub, y conviene activarlo también en la protección de rama.
@@ -335,7 +340,7 @@ Tickets, git, PR y `openspec archive` los ejecuta solo `orqen`; el agente produc
 | TESTING        | `orqen` + agente  | `orqen` corre la suite y el agente mapea test ↔ **cada Scenario** (directo: cada **criterio de aceptación**). No abre PR | si falta alguno, se rechaza                                                                                                                         |
 | QA_REVIEW      | QA                | solo carril completo: revisa en pantalla los e2e del cambio (`/orqen:review`) y aprueba (→ CODE_REVIEW) o pide cambios (→ DEVELOPMENT) | — |
 | CODE_REVIEW    | senior            | revisa el PR a desarrollo (`/orqen:pr`) con el informe de `/orqen:code-review` y decide con un review en GitHub | —                                                                                                                                                             |
-| DELIVERY       | `orqen` + agente  | `orqen` archiva (si hubo spec) y el agente escribe notas y mensaje al cliente                                 | `openspec archive` fusiona los deltas en `openspec/specs` y se empuja a la rama del PR                                                                       |
+| DELIVERY       | `orqen` + agente  | `orqen` archiva (si hubo spec), espera el merge manual del PR y el agente escribe notas y mensaje al cliente                                 | `openspec archive` fusiona los deltas en `openspec/specs` y se empuja a la rama del PR                                                                       |
 | ACCEPTANCE     | cliente           | `/approve` cierra; `/reject` abre la ronda 2 (vuelve a ANALYSIS: nuevo carril, change y issue)                  | nuevo change `…-r2`                                                                                                                                           |
 
 Si se agotan los reintentos o hay un error, el pedido pasa a **BLOCKED**. Una persona destraba con `/approve <indicaciones>`
@@ -642,6 +647,7 @@ orqen complete <KEY> <salida.json|->   Valida la salida de la etapa y avanza el 
 orqen pr <KEY> [<explicación.md>] [--title T]                     Sin archivo: informa. Con archivo: commit + push + PR a DEVEL_BRANCH
 orqen review <KEY> approve|reject [--reason T] [--report F]           Decisión de QA (QA_REVIEW, solo carril completo)
 orqen code-review <KEY> <informe.md|-> --verdict <approve|minor|reject> Registra el informe del code review (CODE_REVIEW)
+orqen merged <KEY> [--person NOMBRE]     Confirma el merge manual del PR cuando orqen no puede leerlo (sin gh)
 orqen status [KEY]                     Estado actual y log
 orqen schema <ETAPA>                   JSON Schema de la salida de una etapa
 orqen block <KEY> <motivo>             Escala a una persona

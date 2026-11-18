@@ -18,6 +18,7 @@ export interface EnvironmentResult {
 
 /** A review left on the PR (GitHub). `commit` is the commit it was submitted on. */
 export interface PrReview { id: string; author: string; state: string; commit: string; body: string }
+export interface PrState { state: "OPEN" | "MERGED" | "CLOSED"; mergedAt?: string; mergedBy?: string }
 
 export interface Workspace {
   prepareBranch(key: string): string;
@@ -32,6 +33,8 @@ export interface Workspace {
   openPr(vars: Record<string, string>, command: string): string;
   /** Reviews of the PR and its head commit; the senior's decision when CODE_REVIEW_GATE=github. */
   prReviews?(url: string): { head: string; reviews: PrReview[] };
+  /** State of the PR (gh): whether a person already merged it, and who. */
+  prState?(url: string): PrState;
   /** Posts the senior's review on the PR with their own GitHub session (gh). */
   reviewPr?(url: string, action: "approve" | "request-changes", body: string): void;
 }
@@ -145,6 +148,14 @@ export class GitWorkspace implements Workspace {
       head: j.headRefOid,
       reviews: (j.reviews ?? []).map((r) => ({ id: r.id, author: r.author?.login ?? "", state: r.state, commit: r.commit?.oid ?? "", body: r.body ?? "" })),
     };
+  }
+
+  prState(url: string): PrState {
+    const out = execFileSync("gh", ["pr", "view", url, "--json", "state,mergedAt,mergedBy"], {
+      cwd: this.cfg.repoPath, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"],
+    });
+    const j = JSON.parse(out) as { state: string; mergedAt?: string; mergedBy?: { login?: string } };
+    return { state: j.state === "MERGED" ? "MERGED" : j.state === "CLOSED" ? "CLOSED" : "OPEN", mergedAt: j.mergedAt || undefined, mergedBy: j.mergedBy?.login || undefined };
   }
 
   reviewPr(url: string, action: "approve" | "request-changes", body: string) {

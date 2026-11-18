@@ -110,7 +110,8 @@ test("senior with the ticket gate: approve moves to delivery", async () => {
   await p.decide("REQ-1", "approve", "", "Seni");
   assert.equal(get().state, "DELIVERY");
   const b = (await p.board()).find((x) => x.key === "REQ-1")!;
-  assert.deepEqual([b.role, b.next[0].command], ["senior", "/orqen:approve REQ-1"]);
+  // approved: a person merges the PR by hand before the delivery
+  assert.deepEqual([b.role, b.merge, b.next.map((n) => n.command)], ["senior", "pending", ["merge https://gh/pr/1", "/orqen:approve REQ-1"]]);
 });
 
 test("senior with the GitHub gate: the review goes on the PR and only counts on the last commit", async () => {

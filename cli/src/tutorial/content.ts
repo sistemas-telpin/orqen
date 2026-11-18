@@ -164,8 +164,8 @@ export function pasosTutorial(d: DatosTutorial, i: Idioma): Paso[] {
           ...(d.soporte ? [tx(` SUPPORT       soporte      /orqen:support ${recNum}`, ` SUPPORT       support      /orqen:support ${recNum}`)] : []),
           tx(` ANALYSIS      analista     /orqen:analyze ${recNum}`, ` ANALYSIS      analyst      /orqen:analyze ${recNum}`),
           tx(` DEVELOPMENT   desarrollo   /orqen:implement ${sisNum}`, ` DEVELOPMENT   developer    /orqen:implement ${sisNum}`),
-          tx(` TESTING       nadie        automático (o pedile a Claude: "procesá el ${recNum}")`,
-             ` TESTING       nobody       automatic (or ask Claude: "process ${recNum}")`),
+          tx(` TESTING       el agente    automático, al terminar /orqen:implement`,
+             ` TESTING       the agent    automatic, when /orqen:implement finishes`),
           tx(` CODE_REVIEW   desarrollo   /orqen:pr ${sisNum}  (abre el PR)`, ` CODE_REVIEW   developer    /orqen:pr ${sisNum}  (opens the PR)`),
           tx(`               QA           /orqen:review ${sisNum}  (solo carril completo)`, `               QA           /orqen:review ${sisNum}  (full lane only)`),
           d.gate === "github"
@@ -242,9 +242,10 @@ export function pasosTutorial(d: DatosTutorial, i: Idioma): Paso[] {
           tx("Corre los tests. Si algo falla, lo arregla.", "It runs the tests. If something fails, it fixes it."),
           tx("Te muestra un resumen y te pide OK para cerrar la etapa.", "It shows you a summary and asks for your OK to close the stage."),
           tx("Con tu OK, orqen revisa que esté todo hecho, apaga lo que levantó y pasa el pedido a TESTING.", "With your OK, orqen checks that everything is done, stops what it started, and moves the request to TESTING."),
+          tx("Enseguida el agente corre TESTING solo, sin pedirte nada: todos los tests y la regresión e2e completa. Te cuenta el resultado.", "Right away the agent runs TESTING on its own, without asking you anything: every test and the full e2e regression. It tells you the result."),
         ] },
         { t: "h", texto: LISTO },
-        { t: "p", texto: tx('El agente te dice "Sigue TESTING". Ahí termina tu parte por ahora.', 'The agent says "Next: TESTING". Your part ends there for now.') },
+        { t: "p", texto: tx('Si los tests pasan, el agente te dice que sigue el PR (/orqen:pr). Si fallan, te muestra el diagnóstico y te pregunta si lo arregla ahora.', 'If the tests pass, the agent tells you the PR comes next (/orqen:pr). If they fail, it shows you the diagnosis and asks whether to fix it now.') },
         { t: "tip", texto: tx("Si el pedido vuelve con cambios pedidos (de testing o del senior), corré el mismo comando: el agente arranca por lo que hay que corregir.",
           "If the request comes back with requested changes (from testing or the senior), run the same command: the agent starts with what needs fixing.") },
       ],
@@ -255,8 +256,8 @@ export function pasosTutorial(d: DatosTutorial, i: Idioma): Paso[] {
       bloques: [
         { t: "h", texto: tx("1. Testing (automático)", "1. Testing (automatic)") },
         { t: "p", texto: tx(
-          `orqen levanta todo el proyecto${e2e.length ? ` (también ${nombres(e2e)})` : ""}, corre todos los tests (también la regresión e2e completa) y lo apaga. Si pasan, sigue QA (solo carril completo) o CODE_REVIEW. Si fallan, vuelve a DEVELOPMENT.`,
-          `orqen starts the whole project${e2e.length ? ` (including ${nombres(e2e)})` : ""}, runs every test (including the full e2e regression), and stops it. If they pass, next is QA (full lane only) or CODE_REVIEW. If they fail, it goes back to DEVELOPMENT.`) },
+          `Lo corre el agente al terminar /orqen:implement, sin intervención: orqen levanta todo el proyecto${e2e.length ? ` (también ${nombres(e2e)})` : ""}, corre todos los tests (también la regresión e2e completa) y lo apaga. Si pasan, sigue QA (solo carril completo) o CODE_REVIEW. Si fallan, vuelve a DEVELOPMENT.`,
+          `The agent runs it when /orqen:implement finishes, with no intervention: orqen starts the whole project${e2e.length ? ` (including ${nombres(e2e)})` : ""}, runs every test (including the full e2e regression), and stops it. If they pass, next is QA (full lane only) or CODE_REVIEW. If they fail, it goes back to DEVELOPMENT.`) },
         { t: "h", texto: tx("2. Abrir el PR (desarrollo)", "2. Open the PR (developer)") },
         { t: "cmd", lineas: [`/orqen:pr ${sisNum}`] },
         { t: "p", texto: tx(`Tenés que estar en la rama del pedido. El agente escribe la explicación y orqen sube los cambios y abre el PR contra ${d.ramaDevel}.`,

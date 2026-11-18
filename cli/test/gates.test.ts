@@ -379,3 +379,52 @@ test("analysis cannot advance when not ready or while customer questions remain"
     assert.equal(jira.created.length, 0);
   }
 });
+
+test("DELIVERY waits for a person to merge the PR: orqen detects it, records it once and only then delivers", async () => {
+  const { jira, cfg } = setup();
+  jira.issues["DEV-9"] = { title: "issue" }; jira.coms["DEV-9"] = [];
+  let pr: { state: "OPEN" | "MERGED" | "CLOSED"; mergedBy?: string } = { state: "OPEN" };
+  const ws: Workspace = { ...failingTests, prState: () => ({ ...pr, mergedAt: pr.state === "MERGED" ? "2026-11-18T12:00:00Z" : undefined }) };
+  const store = new Store(cfg.stateDir);
+  const flow = new Process(cfg, both(jira), store, ws, fakeOs);
+  store.save({ ...newWorkItem("REQ-1"), state: "DELIVERY", branch: "orqen/req-1", change: "req-1-algo", issue: "DEV-9", artifacts: { devel_pr: "https://example.test/pr/7" } });
+
+  // not merged: the archive is already pushed to the PR, the delivery is refused and nothing stays locked
+  await assert.rejects(flow.take("REQ-1", "delivery"), /not merged yet[\s\S]*Merge it by hand into desarrollo \(it already includes the OpenSpec archive\)/);
+  assert.equal(store.get("REQ-1")!.lock, undefined);
+  assert.ok(store.get("REQ-1")!.artifacts.archive);
+  assert.equal(flow.boardItem(store.get("REQ-1")!).merge, "pending");
+  assert.match(flow.boardItem(store.get("REQ-1")!).next[0].command, /^merge https:\/\/example.test\/pr\/7/);
+  assert.deepEqual((await flow.prQueue()).map((b) => [b.key, b.review?.detail]), [["REQ-1", "approved: waiting for the merge"]]);
+
+  // a person merges it by hand: the cycle detects it and comments it once on both tickets
+  pr = { state: "MERGED", mergedBy: "marta" };
+  await flow.review(); await flow.review();
+  assert.deepEqual(store.get("REQ-1")!.artifacts.devel_pr_merged, { at: "2026-11-18T12:00:00Z", by: "marta" });
+  assert.equal(jira.coms["REQ-1"].filter((c) => /PR merged into desarrollo by marta/.test(c.body)).length, 1);
+  assert.match(jira.last("DEV-9"), /PR merged into desarrollo by marta/);
+  assert.equal(flow.boardItem(store.get("REQ-1")!).merge, "merged");
+  const t = await flow.take("REQ-1", "delivery");
+  assert.equal(t.item.state, "DELIVERY");
+
+  // closed without merging: it says so instead of waiting forever
+  store.save({ ...newWorkItem("REQ-2"), state: "DELIVERY", branch: "orqen/req-2", artifacts: { devel_pr: "https://example.test/pr/8" } });
+  jira.issues["REQ-2"] = { title: "Otro" };
+  pr = { state: "CLOSED" };
+  await assert.rejects(flow.take("REQ-2", "delivery"), /closed without merging/);
+  assert.equal(store.get("REQ-2")!.lock, undefined);
+
+  // gh cannot read it (not installed, or a PR outside GitHub): the person who merged it confirms it by hand
+  const noGh = new Process(cfg, both(jira), store, { ...failingTests, prState: () => { throw new Error("spawn gh ENOENT"); } }, fakeOs);
+  store.save({ ...newWorkItem("REQ-3"), state: "DELIVERY", branch: "orqen/req-3", artifacts: { devel_pr: "https://gitlab.example/mr/3" } });
+  jira.issues["REQ-3"] = { title: "Tercero" }; jira.coms["REQ-3"] = [];
+  await noGh.review();
+  assert.equal(store.get("REQ-3")!.artifacts.devel_pr_merged, undefined);   // the cycle just keeps waiting
+  await assert.rejects(noGh.take("REQ-3", "delivery"), /could not read whether the PR[\s\S]*orqen merged REQ-3/);
+  store.save({ ...newWorkItem("REQ-4"), state: "CODE_REVIEW", artifacts: { devel_pr: "https://gitlab.example/mr/4" } });
+  await assert.rejects(noGh.confirmMerge("REQ-4", "Marta"), /is in CODE_REVIEW: the merge is confirmed in DELIVERY/);
+  const m = await noGh.confirmMerge("REQ-3", "Marta");
+  assert.equal(m.by, "Marta");
+  assert.match(jira.last("REQ-3"), /PR merged into desarrollo by Marta \(confirmed by hand\)/);
+  assert.equal((await noGh.take("REQ-3", "delivery")).item.state, "DELIVERY");
+});

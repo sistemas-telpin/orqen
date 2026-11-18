@@ -16,7 +16,7 @@ import { Process } from "../workflow/process.ts";
 import { Store } from "../workflow/store.ts";
 import { GitWorkspace } from "../workflow/workspace.ts";
 
-export const WORKFLOW_COMMANDS = ["list", "qa", "approve", "pending", "support", "analyze", "lane", "take", "complete", "pr", "review", "code-review", "schema", "block", "release", "search", "status", "cycle", "connectors"];
+export const WORKFLOW_COMMANDS = ["list", "qa", "approve", "merged", "pending", "support", "analyze", "lane", "take", "complete", "pr", "review", "code-review", "schema", "block", "release", "search", "status", "cycle", "connectors"];
 
 export const WORKFLOW_HELP = `Customer request workflow (the 9 steps):
   list requests [--json] [--all]        1 · Everyone's work list, by role (advances what is already decided; takes nothing)
@@ -28,6 +28,7 @@ export const WORKFLOW_HELP = `Customer request workflow (the 9 steps):
   review <KEY> approve|reject [--reason TEXT] [--report FILE]   7 · QA decision in QA_REVIEW, full lane (/orqen:review)
   list prs [--json]                     8 · Senior's queue: PRs to review and whether the review is on the last commit
   approve <KEY> [--changes <comment.md|->] [--person NAME]   9 · Senior: approve the PR or request changes (/orqen:approve)
+  merged <KEY> [--person NAME]          After approval a person merges the PR by hand; confirm it when orqen cannot read it from GitHub
   pending [--json]                      List pending analyst and agent work (older list)
   support <KEY> [--person NAME]         Start first-line support
   analyze <KEY> [--analyst NAME]        Start analysis
@@ -154,7 +155,7 @@ export async function runWorkflow(cmd: string, rest: string[]) {
         if (what === "prs") {
           const q = await flow.prQueue();
           if (json) return console.log(JSON.stringify(q, null, 2));
-          if (!q.length) return console.log("No PRs waiting for code review.");
+          if (!q.length) return console.log("No PRs waiting for code review or merge.");
           for (const b of q) console.log(`  ${b.work.padEnd(12)} ${(b.lane ?? "").padEnd(7)} ${b.pr}\n${"".padEnd(15)}${b.qa ? `QA ${b.qa} · ` : ""}review: ${b.review?.status}${b.review?.detail ? ` (${b.review.detail})` : ""}`);
           return;
         }
@@ -200,6 +201,18 @@ export async function runWorkflow(cmd: string, rest: string[]) {
           const body = changes !== undefined ? (changes === "-" || changes === "" ? readFileSync(0, "utf8") : readFileSync(changes, "utf8")) : (comment ?? "");
           const r = await flow.decide(key, changes !== undefined ? "changes" : "approve", body, me || "senior", agent);
           console.log(r.state === "DEVELOPMENT" ? `✔ changes requested on ${r.url}: back to development` : `✔ PR approved (${r.url}) → ${r.state}`);
+        } catch (e) {
+          console.error(`✘ ${(e as Error).message}`);
+          process.exitCode = 1;
+        }
+        return;
+      }
+      case "merged": {
+        try {
+          const key = toKey(rest[0]);
+          if (!key) throw new Error("Usage: orqen merged <KEY> [--person NAME]");
+          const m = await flow.confirmMerge(key, me || agent);
+          console.log(`✔ PR merge recorded${m.by ? ` (${m.by})` : ""}: continue the delivery with /orqen:approve ${rest[0]}`);
         } catch (e) {
           console.error(`✘ ${(e as Error).message}`);
           process.exitCode = 1;

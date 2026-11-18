@@ -49,7 +49,11 @@ async function main() {
   if (crudos[0] === "swarm") return swarm(crudos.slice(1));
   if (crudos[0] === "tutorial") return tutorial(crudos.slice(1));
   if (crudos[0] === "lang") return lang(crudos.slice(1));
+  // `orqen env test e2e -- <args>`: everything after `--` goes to the test command untouched
+  const sep = crudos.indexOf("--");
+  const extra = sep >= 0 ? crudos.slice(sep + 1) : [];
   const { values: v, positionals } = parseArgs({
+    args: sep >= 0 ? crudos.slice(0, sep) : crudos,
     allowPositionals: true,
     strict: false,
     options: {
@@ -98,7 +102,7 @@ async function main() {
     case "update":
       return update({ dir: (v.dir as string) ?? resto[0], yes: !!v.yes, sinCli: !!v["no-cli"], sinOpenspec: !!v["no-openspec"], sinKit: !!v["no-kit"], sinAnimacion: !!v["no-animation"] });
     case "env":
-      return entorno(resto[0], resto.slice(1), { dir: v.dir as string | undefined, todos: !!v.all });
+      return entorno(resto[0], resto.slice(1), { dir: v.dir as string | undefined, todos: !!v.all, extra });
     default:
       console.error(`Unknown command: ${cmd}\n${AYUDA}`);
       process.exitCode = 1;

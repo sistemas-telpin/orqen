@@ -100,11 +100,13 @@ process that uses it. **orqen manages them on its own; never ask a person to ope
   waits until they respond, and runs migrations and seed commands. Read `environment` in the agent context for status,
   variables, and test commands.
 - `orqen complete` stops them when development ends.
+- Test scope: during `DEVELOPMENT`, write and run unit tests and the e2e of the Scenarios or criteria the change touches (`orqen env test e2e -- <files or filter>`). `TESTING` runs every test type, including the full e2e regression. In the full lane, QA then reviews the e2e of the change.
 - During `TESTING`, orqen starts every process (including `cuando: e2e` ones such as the frontend), runs the full test suite,
   and stops them.
 
 ```sh
 orqen env test [unitarios|integracion|e2e|visual]
+orqen env test e2e -- <files or filter>  # Only the e2e of this change
 orqen env status   # what is running and where each process log is
 orqen env up --all # only when development also needs the frontend (e2e / visual)
 ```

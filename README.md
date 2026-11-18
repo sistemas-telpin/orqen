@@ -164,7 +164,7 @@ flowchart TD
     D -->|"liviano / completo"| E["Apply de OpenSpec<br/>(openspec-apply-change)<br/>proposal + design + specs + tasks<br/>→ tilda cada tarea en tasks.md"]
     D -->|"directo<br/>sin spec"| F["Implementa el plan del análisis<br/>en orden"]
     E --> G
-    F --> G["Tests por cada Scenario / criterio de aceptación<br/>+ orqen env test y linters"]
+    F --> G["Unit tests + e2e de los Scenarios / criterios que toca el cambio<br/>+ orqen env test (solo esos) y linters"]
     G -->|"falla algo"| G
     G --> H["orqen complete SIS-442 salida.json<br/>(rechaza si quedan tareas sin tildar; baja el entorno)"]
     H --> I(["TESTING<br/>una etapa por vez: el agente corta acá"])
@@ -181,6 +181,14 @@ El agente mapea **cada Scenario** (carril directo: cada **criterio de aceptació
 aprueba solo si la suite pasó y todo está cubierto. Si no, vuelve a DEVELOPMENT; al tercer intento fallido pasa a BLOCKED.
 
 **Testing no abre ningún PR**: al aprobar, el REC pasa a CODE_REVIEW y el PR se abre con `/orqen:pr`.
+
+### Qué tests corre cada paso
+
+| Paso | Tests |
+| --- | --- |
+| DEVELOPMENT (`/orqen:implement`) | Unit tests del código que cambia y los **e2e de los Scenarios o criterios que agrega o toca** el cambio. Corre solo esos: `orqen env test unitarios` y `orqen env test e2e -- <archivos o filtro>` |
+| TESTING (automático, todos los carriles) | **Todos** los tests configurados: unit, integración, la **regresión e2e completa** y visual. Es el único paso que corre la regresión entera |
+| Revisión de e2e (QA) | No repite la regresión: valida con criterio y en pantalla los e2e del cambio |
 
 ## Revisión de e2e: `/orqen:e2e-review SIS-3312`
 
@@ -461,6 +469,7 @@ entornos:
 orqen env setup                                    # instala dependencias
 orqen env up [--all]                               # procesos + migraciones + seeds (--all: también los de e2e)
 orqen env test [unitarios|integracion|e2e|visual]
+orqen env test e2e -- tests/login.spec.ts         # solo esos tests: lo que va después de -- se suma al comando
 orqen env status                                   # qué está corriendo y dónde está su log
 orqen env down                                     # corta lo que levantó orqen
 ```

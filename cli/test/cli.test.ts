@@ -106,6 +106,23 @@ test("orqen env test uses variables from orqen/config.yaml", () => {
   assert.match(mal.salida, /✘ e2e/);
 });
 
+test("orqen env test <type> -- <args> appends the arguments to that type's command (only the e2e of a change)", () => {
+  const repo = repoTemporal({ "README.md": "x" });
+  mkdirSync(join(repo, "orqen"), { recursive: true });
+  writeFileSync(join(repo, "orqen/config.yaml"), stringify({
+    version: 1, orqen: { cli: "0.1.0", kit: "0.1.0" }, proyecto: { nombre: "x", rama_base: "main" },
+    openspec: { instalacion: "global" }, stack: { resumen: "x" },
+    entornos: { tests: { e2e: `node -e "process.exit(process.argv[1] === 'tests/a.spec.ts' && process.argv[2] === 'login ok' ? 0 : 3)"` } },
+  }));
+  const ok = orqen(repo, "env", "test", "e2e", "--", "tests/a.spec.ts", "login ok");
+  assert.equal(ok.codigo, 0, ok.salida);
+  const sinFiltro = orqen(repo, "env", "test", "e2e");
+  assert.equal(sinFiltro.codigo, 1);
+  const sinTipo = orqen(repo, "env", "test", "--", "tests/a.spec.ts");
+  assert.equal(sinTipo.codigo, 1);
+  assert.match(sinTipo.salida, /Name the test type/);
+});
+
 
 test("init reuses project-local database scripts without a stack repository", () => {
   const repo = repoTemporal(MONOREPO);

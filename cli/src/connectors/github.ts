@@ -82,12 +82,11 @@ export class GithubTracker implements Tracker {
       if (this.s.status) throw new Error("Select a GitHub Project before choosing a pending status");
       return this.search(this.s.query);
     }
-    if (!this.s.status && this.s.query.includes(":")) return this.search(this.s.query);
+    // The project's issues (in one status, or in any status when none is chosen), narrowed by the search qualifiers if there are any.
     const project = await this.project();
-    const oldColumn = project.field?.options.find((option) => option.name.toLowerCase() === this.s.query.trim().toLowerCase());
+    const oldColumn = this.s.query.includes(":") ? undefined : project.field?.options.find((option) => option.name.toLowerCase() === this.s.query.trim().toLowerCase());
     const status = this.s.status || oldColumn?.name;
-    if (!status) return this.search(this.s.query);
-    if (!project.field?.options.some((option) => option.name.toLowerCase() === status.toLowerCase())) throw new Error(`GitHub Project has no "${status}" status in field "${this.s.project.field}"`);
+    if (status && !project.field?.options.some((option) => option.name.toLowerCase() === status.toLowerCase())) throw new Error(`GitHub Project has no "${status}" status in field "${this.s.project.field}"`);
     const keys: string[] = [];
     let cursor: string | null = null;
     do {
@@ -99,7 +98,7 @@ export class GithubTracker implements Tracker {
       if (!page) throw new Error("Could not read the issues of the selected GitHub Project");
       for (const item of page.nodes ?? []) {
         const issue = item?.content;
-        if (!item?.isArchived && item?.fieldValueByName?.name?.toLowerCase() === status.toLowerCase() &&
+        if (!item?.isArchived && (!status || item?.fieldValueByName?.name?.toLowerCase() === status.toLowerCase()) &&
             issue?.__typename === "Issue" && issue.state === "OPEN" && issue.repository?.nameWithOwner?.toLowerCase() === this.s.repo.toLowerCase()) keys.push(keyOf(this.s.prefix, issue.number));
       }
       cursor = page.pageInfo.hasNextPage ? page.pageInfo.endCursor : null;

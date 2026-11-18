@@ -16,7 +16,11 @@ const TSX = fileURLToPath(new URL("../node_modules/tsx/dist/cli.mjs", import.met
 const catalogo = join(repoTemporal(), "unavailable-catalog");
 
 function orqen(cwd: string, ...args: string[]) {
-  const r = spawnSync(process.execPath, [TSX, CLI, ...args], { cwd, encoding: "utf8", env: { ...process.env, NO_COLOR: "1", ORQEN_TOOLS_DIR: catalogo, ORQEN_TOOLS_REPO: "not-a-github-repository" } });
+  return orqenCon({}, cwd, ...args);
+}
+
+function orqenCon(env: Record<string, string>, cwd: string, ...args: string[]) {
+  const r = spawnSync(process.execPath, [TSX, CLI, ...args], { cwd, encoding: "utf8", env: { ...process.env, NO_COLOR: "1", ORQEN_TOOLS_DIR: catalogo, ORQEN_TOOLS_REPO: "not-a-github-repository", ...env } });
   return { codigo: r.status, salida: r.stdout + r.stderr };
 }
 
@@ -49,6 +53,30 @@ test("orqen init --yes writes the repository configuration", () => {
   assert.ok(!existsSync(join(repo, "docker-compose.orqen.yml")), "no Docker in between");
   assert.match(readFileSync(join(repo, "AGENTS.md"), "utf8"), /orqen env up/);
   assert.ok(existsSync(join(repo, "orqen/manifest.json")));
+});
+
+test("orqen init --connectors saves the connectors and the provider accounts outside the repository", () => {
+  const repo = repoTemporal(MONOREPO);
+  const usuario = repoTemporal({}, false);
+  const draft = join(usuario, "connectors.json");
+  writeFileSync(draft, JSON.stringify({
+    conectores: { requests: { tipo: "jira", proyecto: "SOP", filtro: "project = SOP AND labels = orqen" }, issues: { tipo: "github", repo: "my-org/my-repo", etiquetas: ["orqen"] } },
+    // Unreachable on purpose: the check fails, the connectors are saved anyway.
+    env: { JIRA_URL: "http://127.0.0.1:9", JIRA_USER: "bot@example.com", JIRA_TOKEN: "jira-secret-token", JIRA_DEPLOYMENT: "server" },
+  }));
+  const r = orqenCon({ ORQEN_USER_CONFIG_DIR: usuario, GITHUB_TOKEN: "", GH_TOKEN: "" }, repo, "init", "--yes", "--no-ai", "--no-openspec", "--connectors", draft);
+  assert.equal(r.codigo, 0, r.salida);
+  assert.match(r.salida, /Connectors saved/);
+  const cfg = parse(readFileSync(join(repo, "orqen/config.yaml"), "utf8"));
+  assert.equal(cfg.conectores.requests.tipo, "jira");
+  assert.equal(cfg.conectores.issues.repo, "my-org/my-repo");
+  assert.ok(!readFileSync(join(repo, "orqen/config.yaml"), "utf8").includes("jira-secret-token"), "no secrets in config.yaml");
+  assert.match(readFileSync(join(usuario, "providers.env"), "utf8"), /JIRA_TOKEN=.*jira-secret-token/);
+
+  // Re-running init with --no-connectors keeps them.
+  const r2 = orqenCon({ ORQEN_USER_CONFIG_DIR: usuario }, repo, "init", "--yes", "--no-ai", "--no-openspec", "--no-connectors");
+  assert.equal(r2.codigo, 0, r2.salida);
+  assert.equal(parse(readFileSync(join(repo, "orqen/config.yaml"), "utf8")).conectores.requests.filtro, "project = SOP AND labels = orqen");
 });
 
 test("orqen init reports when the directory is not a Git repository", () => {

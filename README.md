@@ -396,11 +396,11 @@ orqen init
    si hay un agente de IA instalado, le pide que revise un resumen del repo (`--deep` para que lo explore entero, `--no-ai` para solo detección automática).
 3. Te deja confirmar o editar componentes, el comando que levanta cada parte (`npm run dev`, `npm start`…), tests, migraciones y seeds.
 4. Instala OpenSpec (2.x) si hace falta y corre `openspec init` para las herramientas elegidas.
-5. Conserva la configuración existente. Las cuentas de proveedores se administran después en **Configuración → Conectores** y se comparten entre repositorios; la inicialización no pide tokens.
+5. Configura los conectores: dónde llegan los requests del cliente y, opcional, dónde se cargan los issues del equipo (Jira, GitHub o Asana). Pide el proyecto/filtro y la cuenta, los prueba contra la herramienta y, si falla, deja corregir, guardar igual o dejarlo para después (`orqen connectors setup`). La selección va en `orqen/config.yaml`; las cuentas, en `~/.orqen/providers.env` (compartidas entre repositorios; si ya existen, Enter las conserva). Si el repo ya tenía conectores, por defecto se conservan.
 6. Escribe la configuración del entorno (sin Docker de por medio), `AGENTS.md` / `CLAUDE.md`, el plugin, las guías de etapa y el manifiesto,
    y fusiona las reglas del proceso con el `openspec/config.yaml` existente.
 
-Opciones: `--yes` (no interactivo), `--agent "<comando>"`, `--tools claude,codex`, `--no-openspec`.
+Opciones: `--yes` (no interactivo; conserva los conectores que haya), `--agent "<comando>"`, `--tools claude,codex`, `--no-openspec`, `--no-connectors` (saltea el paso), `--connectors <archivo|->` (los conectores en JSON, el mismo formato que `orqen connectors set`, para correrlo sin preguntas).
 
 **Plugin para Claude Code** (da los comandos `/orqen:*` y el skill de grilling), una vez por usuario:
 

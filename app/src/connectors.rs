@@ -44,7 +44,7 @@ pub struct ConnectorsEditor {
     scroll: ScrollHandle,
     /// Opened from "Add" on the internal ticket: show that section.
     focus_internal: bool,
-    choices: [ConnectorChoices; 4],
+    choices: [ConnectorChoices; 5],
 }
 
 impl EventEmitter<Saved> for ConnectorsEditor {}
@@ -69,7 +69,8 @@ const FIELDS: &[(&str, &str, &str, &str, &str, &str, bool)] = &[
     ("int.jira.type", "Tipo de ticket", "Issue type", "Task", "", "", false),
     ("ext.github.repo", "Repositorio (dueño/nombre)", "Repository (owner/name)", "mi-org/soporte", "", "", false),
     ("ext.github.project", "Número de GitHub Project (opcional)", "GitHub Project number (optional)", "7", "Para mover la tarjeta de columna según la etapa.", "To move the card between columns by stage.", false),
-    ("ext.github.filter", "Qué issues toma orqen", "Which issues orqen takes", "is:open label:orqen", "Calificadores de búsqueda de GitHub.", "GitHub search qualifiers.", false),
+    ("ext.github.status", "Estado del tablero para Pendientes", "Board status for Pending", "Backlog", "Elegí la columna donde entran los requerimientos.", "Choose the column where requirements arrive.", false),
+    ("ext.github.filter", "Filtro adicional de issues (opcional)", "Additional issue filter (optional)", "is:open label:orqen", "Para filtrar por etiqueta o texto. La columna del tablero se elige arriba.", "Filter by label or text. Select the board column above.", false),
     ("ext.github.token", "Token de GitHub", "GitHub token", "", "Vacío: usa tu sesión de `gh`.", "Empty: uses your `gh` session.", true),
     ("int.github.repo", "Repositorio del equipo (dueño/nombre)", "Team repository (owner/name)", "mi-org/mi-repo", "", "", false),
     ("int.github.project", "Número de GitHub Project (opcional)", "GitHub Project number (optional)", "7", "", "", false),
@@ -88,7 +89,7 @@ impl ConnectorsEditor {
     pub fn new(cli: Cli, es: bool, focus_internal: bool, cx: &mut Context<Self>) -> Self {
         let inputs = FIELDS.iter().map(|f| (f.0, cx.new(|cx| TextInput::new(cx, f.3, String::new(), f.6)))).collect();
         let mut this = Self { cli, es, current: Load::Loading, ext: "jira", int: "none", int_own_account: false, deploy: ["cloud", "cloud"], inputs, checking: false, results: None, saving: false, error: None, scroll: ScrollHandle::new(), focus_internal, choices: Default::default() };
-        for id in ["ext.github.token", "int.github.token", "ext.github.repo", "int.github.repo"] {
+        for id in ["ext.github.token", "int.github.token", "ext.github.repo", "int.github.repo", "ext.github.project", "ext.github.status"] {
             if let Some(input) = this.input(id) {
                 cx.observe(&input, |this, _, cx| { this.results = None; this.refresh_choices(cx); cx.notify(); }).detach();
             }
@@ -128,14 +129,15 @@ impl ConnectorsEditor {
             let visible = kind == "github";
             let parent = "repositories";
             let connector = &draft["conectores"][yaml_role];
-            for (offset, resource) in [(0, parent), (1, "projects")] {
-                let index = i + offset;
+            for (offset, resource) in [(0, parent), (1, "projects"), (2, "statuses")] {
+                if offset == 2 && i != 0 { continue; }
+                let index = if offset == 2 { 4 } else { i + offset };
                 let ready = s(connector, "repo").contains('/');
-                if kind == "none" || !visible || offset == 1 && !ready {
+                if kind == "none" || !visible || offset > 0 && !ready || offset == 2 && s(connector, "proyecto").is_empty() {
                     self.choices[index] = ConnectorChoices::default(); continue;
                 }
                 let key = json!([kind, draft["env"], self.prefix(editor_role, kind),
-                    if offset == 1 { json!([connector["repo"], connector["duenio_proyecto"]]) } else { Value::Null }]).to_string();
+                    if offset > 0 { json!([connector["repo"], connector["duenio_proyecto"], if offset == 2 { connector["proyecto"].clone() } else { Value::Null }]) } else { Value::Null }]).to_string();
                 if self.choices[index].key == key { continue; }
                 self.choices[index].key = key.clone();
                 self.choices[index].state = Some(Load::Loading);
@@ -147,7 +149,16 @@ impl ConnectorsEditor {
                     this.update(cx, |this, cx| {
                         if this.choices[index].key != key { return; }
                         this.choices[index].state = Some(match result {
-                            Ok(v) if v["ok"] == true => Load::Ready(v["items"].as_array().cloned().unwrap_or_default().into_iter().map(|item| if resource == "repositories" { json!({"value": item["repo"], "label": item["repo"]}) } else { json!({"value": s(&item, "number"), "label": format!("#{} {}", s(&item, "number"), s(&item, "title"))}) }).collect()),
+                            Ok(v) if v["ok"] == true => {
+                                if resource == "statuses" && this.val("ext.github.status", cx).is_empty() {
+                                    let legacy = this.val("ext.github.filter", cx);
+                                    if let Some(option) = v["items"].as_array().and_then(|items| items.iter().find(|item| s(item, "value").eq_ignore_ascii_case(&legacy))) {
+                                        this.set_input("ext.github.status", s(option, "value"), cx);
+                                        this.set_input("ext.github.filter", "is:open".into(), cx);
+                                    }
+                                }
+                                Load::Ready(v["items"].as_array().cloned().unwrap_or_default().into_iter().map(|item| if resource == "statuses" { item } else if resource == "repositories" { json!({"value": item["repo"], "label": item["repo"]}) } else { json!({"value": s(&item, "number"), "label": format!("#{} {}", s(&item, "number"), s(&item, "title"))}) }).collect())
+                            },
                             Ok(v) => Load::Failed(s(&v, "detail")),
                             Err(e) => Load::Failed(e.to_string()),
                         });
@@ -170,6 +181,7 @@ impl ConnectorsEditor {
         let y = &draft["conectores"][if role == Role::Ext { "externo" } else { "interno" }];
         let selected = if project { s(y, "proyecto") } else { s(y, "repo") };
         if value == selected { return; }
+        if role == Role::Ext { self.set_input("ext.github.status", String::new(), cx); }
         if project { self.set_input(&format!("{r}.{kind}.project"), value, cx); }
         else {
             self.set_input(&format!("{r}.github.repo"), value.clone(), cx);
@@ -242,7 +254,7 @@ impl ConnectorsEditor {
                     let id = |f: &str| -> &'static str { FIELDS.iter().find(|x| x.0 == format!("{r}.github.{f}")).map(|x| x.0).unwrap_or("") };
                     set.push((id("repo"), s(y, "repo")));
                     set.push((id("project"), s(y, "proyecto")));
-                    if role == Role::Ext { set.push(("ext.github.filter", s(y, "filtro"))); } else { set.push(("int.github.labels", s(y, "etiquetas"))); }
+                    if role == Role::Ext { set.push(("ext.github.status", s(y, "estado"))); set.push(("ext.github.filter", s(y, "filtro"))); } else { set.push(("int.github.labels", s(y, "etiquetas"))); }
                     if let Some(m) = secret(format!("{p}_TOKEN")).or_else(|| secret("GH_TOKEN".into())) { hints.push((id("token"), saved_hint(m))); }
                 }
                 "asana" => {
@@ -291,8 +303,10 @@ impl ConnectorsEditor {
             "github" => {
                 ext.insert("repo".into(), json!(v("ext.github.repo")));
                 num(&mut ext, "proyecto", v("ext.github.project"));
+                let status = v("ext.github.status");
+                opt(&mut ext, "estado", status.clone());
                 let f = v("ext.github.filter");
-                ext.insert("filtro".into(), json!(if f.is_empty() { "is:open label:orqen".to_string() } else { f }));
+                ext.insert("filtro".into(), json!(if f.is_empty() { if status.is_empty() { "is:open label:orqen".to_string() } else { "is:open".to_string() } } else { f }));
                 put(format!("{ep}_TOKEN"), v("ext.github.token"));
             }
             _ => {
@@ -455,6 +469,36 @@ impl ConnectorsEditor {
         })).into_any_element()
     }
 
+    fn status_field(&self, cx: &mut Context<Self>) -> AnyElement {
+        let mut body: Vec<AnyElement> = vec![];
+        if !self.val("ext.github.project", cx).is_empty() {
+            body.extend(self.field("ext.github.status"));
+            match &self.choices[4].state {
+                Some(Load::Loading) => body.push(ui::busy("statuses-loading", t(self.es, "Cargando estados...", "Loading statuses...")).into_any_element()),
+                Some(Load::Failed(error)) => {
+                    body.push(div().text_size(px(12.)).text_color(c(RED)).child(error.clone()).into_any_element());
+                    body.push(button("statuses-retry", t(self.es, "Reintentar", "Retry"), Kind::Ghost, cx.listener(|this, _, _, cx| { this.choices[4].key.clear(); this.refresh_choices(cx); cx.notify(); })).into_any_element());
+                }
+                Some(Load::Ready(options)) => {
+                    let current = self.val("ext.github.status", cx);
+                    body.push(div().flex().flex_wrap().gap(px(6.)).children(options.iter().enumerate().map(|(i, option)| {
+                        let value = s(option, "value");
+                        let on = value.eq_ignore_ascii_case(&current);
+                        button(("pending-status", i), value.clone(), if on { Kind::Accent } else { Kind::Ghost }, cx.listener(move |this, _, _, cx| {
+                            let previous = this.val("ext.github.filter", cx);
+                            this.set_input("ext.github.status", value.clone(), cx);
+                            if previous == "is:open label:orqen" || (!previous.contains(':') && previous.eq_ignore_ascii_case(&value)) { this.set_input("ext.github.filter", "is:open".into(), cx); }
+                            this.results = None;
+                            cx.notify();
+                        }))
+                    })).into_any_element());
+                }
+                None => {}
+            }
+        }
+        div().flex().flex_col().gap(px(8.)).children(body).into_any_element()
+    }
+
     fn kinds(&self, role: Role, cx: &mut Context<Self>) -> impl IntoElement {
         let es = self.es;
         let current = if role == Role::Ext { self.ext } else { self.int };
@@ -524,7 +568,7 @@ impl ConnectorsEditor {
                 body.push(self.row(&["ext.jira.project"]));
                 body.push(self.row(&["ext.jira.filter"]));
             }
-            (Role::Ext, "github") => { body.push(self.row(&["ext.github.token"])); body.push(self.github_fields(role, cx)); body.push(self.row(&["ext.github.filter"])); }
+            (Role::Ext, "github") => { body.push(self.row(&["ext.github.token"])); body.push(self.github_fields(role, cx)); body.push(self.status_field(cx)); body.push(self.row(&["ext.github.filter"])); }
             (Role::Ext, _) => { body.push(self.row(&["ext.asana.project", "ext.asana.tag"])); body.push(self.row(&["ext.asana.token"])); }
             (Role::Int, "jira") => {
                 if self.ext == "jira" {
@@ -597,8 +641,8 @@ impl Render for ConnectorsEditor {
                 let legacy = v["legacy"].as_array().map(|a| !a.is_empty()).unwrap_or(false);
                 div().flex().flex_col().gap(px(16.))
                     .child(div().max_w(px(720.)).text_size(px(12.5)).text_color(c(TEXT_2)).child(t(es,
-                        "Dónde viven los requerimientos y tickets, y con qué cuenta entra orqen. Los tokens se guardan en orqen/.env (Git lo ignora) y nunca se muestran completos. «Probar» verifica la conexión sin guardar.",
-                        "Where the tickets live and which account orqen uses. Tokens go to orqen/.env (ignored by Git) and are never shown in full. «Test» checks the connection without saving.")))
+                        "Dónde viven los requerimientos y tickets, y con qué cuenta entra orqen. Las cuentas y tokens se guardan en la configuración de tu usuario y se reutilizan en todos los repositorios. «Probar» verifica la conexión sin guardar.",
+                        "Where the tickets live and which account orqen uses. Provider accounts and tokens are saved in your user settings and reused across repositories. «Test» checks the connection without saving.")))
                     .when(legacy, |d| d.child(div().max_w(px(720.)).p(px(12.)).rounded(px(10.)).bg(c(0x1D1810)).border_1().border_color(c(0x4A3A1C)).text_size(px(12.)).text_color(c(0xF5C77A))
                         .child(t(es, "Tenés una configuración anterior. Al guardar se actualizará automáticamente.", "You have an older configuration. Saving updates it automatically."))))
                     .children(self.error.clone().map(|e| div().max_w(px(720.)).flex().items_start().gap(px(8.)).p(px(10.)).rounded(px(9.)).bg(c(0x1F0F14))

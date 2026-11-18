@@ -6,6 +6,7 @@ import { TEMPLATES_DIR } from "../lib/template-assets.ts";
 import { existeConfig, leerConfig, type Config as ProjectConfig } from "../lib/config.ts";
 import { type ConnectorsSettings, connectorSettings } from "../connectors/config.ts";
 import { envWithLegacy, legacyConnectors, LEGACY_VARS } from "../connectors/legacy.ts";
+import { providerEnv } from "../lib/provider-credentials.ts";
 
 export const CLI_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 
@@ -52,10 +53,11 @@ export function loadConfig(over: Partial<Config> = {}): Config {
   const localOpenSpec = join(repoPath, "node_modules", ".bin", process.platform === "win32" ? "openspec.cmd" : "openspec");
   const localState = join(repoPath, "cli", ".state");
   const baseBranch = env("BASE_BRANCH", project?.proyecto.rama_base ?? "main");
+  const credentials = providerEnv(repoPath);
   return {
     connectors: project?.conectores
-      ? { external: connectorSettings(project.conectores.externo, process.env, project.general?.prefijos.requerimientos), internal: project.conectores.interno ? connectorSettings(project.conectores.interno, process.env, project.general?.prefijos.tickets) : undefined }
-      : legacyConnectors(process.env),
+      ? { external: connectorSettings(project.conectores.externo, credentials, project.general?.prefijos.requerimientos), internal: project.conectores.interno ? connectorSettings(project.conectores.interno, credentials, project.general?.prefijos.tickets) : undefined }
+      : legacyConnectors(credentials),
     supportStage: ["on", "true", "1", "yes"].includes(env("SUPPORT_STAGE").toLowerCase()),
     approvers: {
       analysis: split(env("APPROVERS_ANALYSIS")),

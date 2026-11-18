@@ -6,10 +6,24 @@
   Issues that require intervention → BLOCKED
 ```
 
+The 9 steps, one command each (the person runs it; you follow it):
+
+| # | Role | Command | What it does |
+|---|------|---------|--------------|
+| 1 | everyone | `/orqen:list requests` (`orqen list requests`) | Advances what is already decided and lists the work by role. Takes nothing. |
+| 2 | support (L1) | `/orqen:support <KEY>` | Answers the client or escalates to the analyst. |
+| 3 | analyst (L2) | `/orqen:analyze <KEY>` | Interview, acceptance criteria, lane, spec; creates the internal ticket. |
+| 4 | development | `/orqen:list issues` | Issues in development; the ones that came back with changes are marked. |
+| 5 | development | `/orqen:implement <KEY>` | Implements after the plan is approved; passes to testing. |
+| 6 | development | `/orqen:pr <KEY>` | Explains the changes and opens the PR (full lane → QA; direct/light → senior). |
+| 7 | QA (full lane) | `/orqen:review <KEY>` | Checks the e2e tests on screen; `orqen qa` approves or sends it back. |
+| 8 | senior | `/orqen:list prs` | PRs waiting for review and whether the review is on the last commit. |
+| 9 | senior | `/orqen:approve <KEY>` | Approves the PR or requests changes (`orqen approve`); then delivery to the client. |
+
 ### Working with the person
 
 orqen works alongside the person; it does not replace them. While someone is on the other side (they invoked
-`/orqen:support`, `/orqen:analyze`, `/orqen:implement`, `/orqen:pr`, a review command, or asked you directly; `human_present: true` in the context):
+`/orqen:support`, `/orqen:analyze`, `/orqen:implement`, `/orqen:pr`, `/orqen:review`, `/orqen:approve`, a review command, or asked you directly; `human_present: true` in the context):
 
 - **Talk to them in their system language**: `language` in the stage context, or `orqen lang` (`es` = Spanish, `en` = English). Use it for every message, question, and option you show them. Keep commands, state names, and paths as they are. This is only the conversation; artifacts follow the rules below.
 - **Say what you are about to do before doing it**, in one or two lines, and **wait for their OK** before each important step:
@@ -79,7 +93,9 @@ Propose the steps, rollback, and read-only verification. A person authorized by 
 ### Integration PR and code review
 
 - `TESTING` opens no PR. The only PR is the integration PR to `DEVEL_BRANCH`, opened with `/orqen:pr` (`orqen pr <KEY> <explanation.md>`) from the request branch. orqen commits pending changes, pushes, and opens or updates it.
-- The senior reviews that PR in `CODE_REVIEW`, supported by `/orqen:code-review <KEY>`: review the PR diff read-only against the analysis, spec or plan, and acceptance criteria, and give a verdict plus each finding with its severity, `file:line`, impact, and possible solutions. When the senior accepts the report, record it with `orqen review <KEY> <report.md> --verdict <approve|minor|reject>`. It does not change the stage. With the default `CODE_REVIEW_GATE=github`, the senior decides with a review on the PR in GitHub (limited to `GITHUB_REVIEWERS` when set): orqen reads it, moves to `DELIVERY` on approval, and returns to `DEVELOPMENT` on "changes requested" (the review text becomes feedback for the agent). Only reviews on the PR's current head count, so a later push needs a new review. With `CODE_REVIEW_GATE=ticket`, the senior comments `/approve` or `/reject <reason>` on the ticket instead.
+- **Full lane: QA first.** In `CODE_REVIEW`, QA runs `/orqen:review <KEY>`: the e2e tests of the branch are matched to the scenarios and run on screen. QA's verdict is recorded with `orqen qa <KEY> <report.md> --verdict <approve|reject>`; a rejection returns the request to `DEVELOPMENT` with the report as feedback. The senior's approval does not count until QA approves. Direct and light lanes go straight to the senior.
+- The senior decides with `/orqen:approve <KEY>`. Optionally first a report (`/orqen:code-review <KEY>` describes it): review the PR diff read-only against the analysis, spec or plan, and acceptance criteria, and give a verdict plus each finding with its severity, `file:line`, impact, and possible solutions; record it with `orqen review <KEY> <report.md> --verdict <approve|minor|reject>` (it does not change the stage). The decision is recorded with `orqen approve <KEY>` or `orqen approve <KEY> --changes <comment.md>`: with the default `CODE_REVIEW_GATE=github` orqen posts it as a review on the PR with the senior's `gh` session (limited to `GITHUB_REVIEWERS` when set), moves to `DELIVERY` on approval, and returns to `DEVELOPMENT` on "changes requested" (the text becomes feedback for the agent). Reviews made directly on GitHub count too. Only reviews on the PR's current head count, so a later push needs a new review. With `CODE_REVIEW_GATE=ticket`, the decision is recorded on the tickets (or the senior comments `/approve` or `/reject <reason>` there).
+- In `DELIVERY`, `/orqen:approve` continues with the delivery: `orqen take` archives the spec and the agent writes the client how to validate; the client confirms with `/approve`.
 
 ### Rules
 

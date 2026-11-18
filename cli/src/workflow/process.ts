@@ -22,6 +22,7 @@ import { canLinkNatively, type Comment, type Connectors, isBotComment, type Trac
 import { type Scenario, type OpenSpecApi, type Task, hoursOf } from "./openspec.ts";
 import { reviewSql } from "./sql.ts";
 import { type WorkItem, Store, newWorkItem } from "./store.ts";
+import { needsQa, nextSteps, qaApproved, returned, roleOf, workKey, type NextStep, type Role } from "./board.ts";
 import { branchFor, type EnvironmentResult, type PrReview, type Workspace } from "./workspace.ts";
 
 const CMD = /^\s*\/(approve|reject)\b\s*([\s\S]*)/i;
@@ -31,6 +32,13 @@ const COMMENT_MAX = 30_000;   // Jira rejects comments over 32767 characters (Gi
 
 /** `for` says who has to act: support (SUPPORT, or NEW with SUPPORT_STAGE=on), the analyst (NEW/ANALYSIS) or an unattended agent. */
 export interface Pending { key: string; state: AgentState | "NEW"; for: "support" | "analyst" | "agent"; takenBy?: string }
+/** One row of `orqen list`: who acts on the request and which command comes next. */
+export interface BoardItem {
+  key: string; internal?: string; work: string; state: State; lane?: string; route?: string; role: Role;
+  takenBy?: string; since?: string; returned?: string; estimated_hours?: number; pr?: string;
+  qa?: "pending" | "approved"; next: NextStep[]; updated?: string;
+  review?: { status: "none" | "current" | "stale" | "unknown"; detail?: string };
+}
 export type CompleteResult = { ok: true; next: State } | { ok: false; errors: string[] };
 
 export class Process {
@@ -66,6 +74,119 @@ export class Process {
       }
     }
     return pending;
+  }
+
+  // ================================================================ board (`orqen list`)
+  /**
+   * Step 1 of the flow: advances what already has a decision (review()) and lists every open request with who has to act
+   * (role) and the next command. It does not take anything. `closed` also includes the closed ones.
+   */
+  async board(closed = false): Promise<BoardItem[]> {
+    const pend = await this.review();
+    const keys = new Set([...pend.map((p) => p.key), ...this.store.all().map((r) => r.key)]);
+    const out: BoardItem[] = [];
+    for (const key of keys) {
+      const item = this.store.get(key) ?? newWorkItem(key);
+      if (item.state === "CLOSED" && !closed) continue;
+      out.push(this.boardItem(item));
+    }
+    return out;
+  }
+
+  boardItem(item: WorkItem): BoardItem {
+    const lock = this.activeLock(item);
+    return {
+      key: item.key, internal: item.internal, work: workKey(item), state: item.state, lane: item.lane, route: item.route,
+      role: roleOf(item, this.cfg), takenBy: lock?.agent, since: lock?.since, returned: returned(item),
+      estimated_hours: item.artifacts.estimated_hours, pr: item.artifacts.devel_pr,
+      qa: needsQa(item) && item.state === "CODE_REVIEW" ? (qaApproved(item) ? "approved" : "pending") : undefined,
+      next: nextSteps(item, this.cfg), updated: this.store.events(item.key).at(-1)?.ts,
+    };
+  }
+
+  /** Step 8: requests waiting for code review, with whether the senior's review on the PR is on the last commit. */
+  async prQueue(): Promise<BoardItem[]> {
+    const items = (await this.board()).filter((b) => b.state === "CODE_REVIEW" && b.pr);
+    for (const b of items) {
+      if (this.cfg.codeReviewGate !== "github" || !this.ws.prReviews) { b.review = { status: "none" }; continue; }
+      try {
+        const snap = this.ws.prReviews(b.pr!);
+        const decisive = snap.reviews.filter((r) => ["APPROVED", "CHANGES_REQUESTED"].includes(r.state));
+        const current = decisive.filter((r) => r.commit === snap.head);
+        b.review = current.length ? { status: "current", detail: current.map((r) => `${r.author}: ${r.state.toLowerCase()}`).join(", ") }
+          : decisive.length ? { status: "stale", detail: "a push after the last review: it has to be reviewed again" }
+          : { status: "none" };
+      } catch (e) { b.review = { status: "unknown", detail: (e as Error).message }; }
+    }
+    return items;
+  }
+
+  // ================================================================ QA (full lane)
+  /**
+   * Step 7: QA's verdict on the e2e tests of a full-lane request (CODE_REVIEW, PR already open). Saves the report in
+   * round-N/qa-<n>.md and comments it. approve → the senior can review; reject → back to development with the reason.
+   */
+  async qaReview(key: string, body: string, verdict: string, person = "qa", agent = "agent") {
+    const item = this.store.get(key);
+    if (!item) throw new Error(`${key} is unknown to orqen.`);
+    if (item.state !== "CODE_REVIEW") throw new Error(`${key} is in ${item.state}: QA reviews in CODE_REVIEW, once the PR is open.`);
+    if (!needsQa(item)) throw new Error(`${key} is on the ${item.lane ?? "?"} lane: only the full lane goes through QA; it goes straight to the senior (/orqen:approve).`);
+    if (!item.artifacts.devel_pr) throw new Error(`${key} has no PR yet: open it first with /orqen:pr ${workKey(item)}.`);
+    if (verdict !== "approve" && verdict !== "reject") throw new Error(`Invalid verdict "${verdict}". Options: approve, reject`);
+    if (body.trim().length < 40) throw new Error("The QA report is too short: list the scenarios, their tests and the result of the run.");
+    const qas: unknown[] = (item.artifacts.qa_reviews ??= []);
+    const n = qas.length + 1;
+    const file = `qa-${n}.md`;
+    this.fac.write(item, file, body.trim() + "\n");
+    const path = `orqen/work/${key}/round-${item.round}/${file}`;
+    qas.push({ round: item.round, n, verdict, by: person, file: path, ts: new Date().toISOString() });
+    if (verdict === "approve") {
+      item.artifacts.qa = { verdict, by: person, file: path, ts: new Date().toISOString() };
+      this.store.save(item);
+      await this.commentBoth(item, `*QA* (${person}) approved the e2e tests of the PR: ${item.artifacts.devel_pr}\n\n${body.trim().slice(0, COMMENT_MAX - 500)}\n\nNext: code review by the senior.`);
+      this.store.log(key, { ts: new Date().toISOString(), from: item.state, to: item.state, detail: `QA approved (${person})`, agent });
+      return { verdict, path, next: item.state };
+    }
+    item.feedback.push({ from: `${person} (QA)`, rejection: body.trim().slice(0, 4000) });
+    item.testingAttempts = 0;
+    await this.commentBoth(item, `*QA* (${person}) rejected the e2e tests: ${item.artifacts.devel_pr}\n\n${body.trim().slice(0, COMMENT_MAX - 500)}\n\nReturning to development.`);
+    await this.move(item, "DEVELOPMENT", `QA rejected (${person})`, agent);
+    return { verdict, path, next: item.state };
+  }
+
+  // ================================================================ senior's decision
+  /**
+   * Step 9: the senior approves the PR or requests changes. With CODE_REVIEW_GATE=github the review goes on the PR with their
+   * gh session and the gate reads it (it only counts on the last commit); with the ticket gate orqen records it directly.
+   * approve → DELIVERY; changes → back to development with the comment as an indication.
+   */
+  async decide(key: string, action: "approve" | "changes", body: string, person = "senior", agent = "agent") {
+    const item = this.store.get(key);
+    if (!item) throw new Error(`${key} is unknown to orqen.`);
+    if (item.state !== "CODE_REVIEW") throw new Error(`${key} is in ${item.state}: the senior decides in CODE_REVIEW.`);
+    const url = item.artifacts.devel_pr as string | undefined;
+    if (!url) throw new Error(`${key} has no PR yet: it is opened with /orqen:pr ${workKey(item)}.`);
+    if (needsQa(item) && !qaApproved(item)) throw new Error(`${key} is on the full lane and QA has not approved it yet (/orqen:review ${workKey(item)}).`);
+    if (action === "changes" && body.trim().length < 10) throw new Error("Say which changes are needed: the comment goes back to development as the indication.");
+    if (this.cfg.codeReviewGate === "github") {
+      if (!this.ws.reviewPr) throw new Error("This workspace cannot review PRs; use CODE_REVIEW_GATE=ticket.");
+      this.ws.reviewPr(url, action === "approve" ? "approve" : "request-changes", body.trim() || `Approved by ${person} with orqen.`);
+      await this.reviewCodeOnPr(item);
+      const after = this.store.get(key)!;
+      if (after.state === "CODE_REVIEW")
+        throw new Error(`The review was posted on ${url} but did not count${this.cfg.githubReviewers.length ? ` (GITHUB_REVIEWERS: ${this.cfg.githubReviewers.join(", ")})` : ""}. Check it on GitHub.`);
+      return { state: after.state, url };
+    }
+    if (action === "approve") {
+      await this.commentBoth(item, `Code review: PR approved by ${person}: ${url}${body.trim() ? `\n\n${body.trim()}` : ""}\nMoving to delivery.`);
+      await this.move(item, "DELIVERY", `PR approved by ${person}`, agent);
+    } else {
+      item.feedback.push({ from: person, rejection: body.trim() });
+      item.testingAttempts = 0;
+      await this.commentBoth(item, `Code review: changes requested by ${person} on ${url}\n\n${body.trim()}\n\nReturning to development.`);
+      await this.move(item, "DEVELOPMENT", `changes requested by ${person}`, agent);
+    }
+    return { state: item.state, url };
   }
 
   // ================================================================ support
@@ -526,6 +647,7 @@ export class Process {
     const approved = decisive.filter((r) => r.state === "APPROVED");
     if (!rejected.length && !approved.length) return this.store.save(item);
 
+    if (!rejected.length && needsQa(item) && !qaApproved(item)) return this.store.save(item);   // full lane: QA first (the approval keeps waiting)
     const used = rejected.length ? rejected : approved;
     item.artifacts.handled_reviews = [...handled, ...used.map((r) => r.id)];
     if (rejected.length) {
@@ -558,6 +680,10 @@ export class Process {
         continue;
       }
       const action = m[1].toLowerCase() as "approve" | "reject", reason = m[2].trim();
+      if (item.state === "CODE_REVIEW" && action === "approve" && needsQa(item) && !qaApproved(item)) {
+        await this.ext.comment(item.key, `${c.authorName}: QA has not approved the e2e tests yet (full lane). Approve again after QA.`);
+        continue;
+      }
       if (action === "reject") item.feedback.push({ from: c.authorName, rejection: reason });
       if (action === "approve" && reason && item.state === "APPLICATION")
         item.feedback.push({ from: c.authorName, text: reason });  // result of the application
@@ -679,6 +805,7 @@ export class Process {
     if (to === "BLOCKED" && from !== "BLOCKED") item.stateBeforeBlock = from;
     item.state = to;
     delete item.lock;
+    if (to === "DEVELOPMENT") delete item.artifacts.qa;   // a new implementation needs a new QA review
     if (isGate(to) || to === "BLOCKED") {  // when entering a gate, ignore earlier comments
       const cs = await this.ext.comments(item.key);
       item.lastSeenComment = cs.at(-1)?.id ?? "";

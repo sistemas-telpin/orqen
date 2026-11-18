@@ -8,6 +8,7 @@ use gpui::{relative,
 };
 use serde_json::Value;
 
+use crate::agent::{AgentChat, ChatEvent, Suggestion};
 use crate::cli::{self, Cli};
 use crate::theme::*;
 use crate::ui::{self, Kind, appear, button, card, chip, dot, icon, icon_button, live_dot, mono, progress_slice, skeleton, skeleton_text};
@@ -72,6 +73,8 @@ pub struct ProjectView {
     pub toast: Option<(String, Instant)>,
     branch: Option<String>,
     init: Option<Entity<crate::init::InitWizard>>,
+    /// The terminal (chat with the agent) of each request opened in this tab; it keeps running when another one is picked.
+    chats: std::collections::HashMap<String, Entity<AgentChat>>,
 }
 
 fn t(es: bool, a: &'static str, b: &'static str) -> &'static str { if es { a } else { b } }
@@ -86,6 +89,7 @@ impl ProjectView {
             env: Load::Idle, env_busy: None, env_output: None, log_of: None, log_lines: vec![],
             connectors: Load::Idle, topics: Load::Idle, step: Load::Idle, step_n: 1, demo: Load::Idle, tut_app: true,
             swarm: None, toast: None, branch: None, init: None, connectors_checking: false, conn_editor: None, general: None,
+            chats: Default::default(),
         };
         // The visible tab loads right away; the others wait until the opening animation is over, so a window with
         // several tabs doesn't start a dozen CLI processes at once while the splash is playing.
@@ -154,16 +158,64 @@ impl ProjectView {
     pub fn load_pending(&mut self, cx: &mut Context<Self>) {
         if !self.cli.has_orqen() { return; }
         if !matches!(self.pending, Load::Ready(_)) { self.pending = Load::Loading; }
-        self.bg(cx, |cli| cli.json(&["pending", "--json"]), |this, r, _cx| {
-            this.pending = match r { Ok(Value::Array(a)) => Load::Ready(a), Ok(_) => Load::Ready(vec![]), Err(e) => Load::Failed(e.to_string()) };
+        // step 1 of the flow (`orqen list requests`): who acts on each request and the next command; older CLIs only have `pending`
+        self.bg(cx, |cli| cli.json(&["list", "requests", "--json"]).map(|v| (v, true)).or_else(|_| cli.json(&["pending", "--json"]).map(|v| (v, false))), |this, r, cx| {
+            this.pending = match r {
+                Ok((Value::Array(a), board)) => Load::Ready(a.into_iter().map(|mut x| {
+                    if board {
+                        let role = s(&x, "role");
+                        x["for"] = Value::from(match role.as_str() { "client" | "gate" | "blocked" | "done" => "wait".to_string(), _ => role });
+                    }
+                    x
+                }).collect()),
+                Ok(_) => Load::Ready(vec![]),
+                Err(e) => Load::Failed(e.to_string()),
+            };
+            this.push_chat_context(cx);
         });
     }
 
     fn load_detail(&mut self, key: String, show_loading: bool, cx: &mut Context<Self>) {
         if show_loading { self.detail = Load::Loading; }
-        self.bg(cx, move |cli| cli.json(&["status", &key, "--json"]), |this, r, _cx| {
+        self.ensure_chat(&key, cx);
+        self.push_chat_context(cx);
+        self.bg(cx, move |cli| cli.json(&["status", &key, "--json"]), |this, r, cx| {
             this.detail = match r { Ok(v) if !v.is_null() => Load::Ready(v), Ok(_) => Load::Failed("unknown".into()), Err(e) => Load::Failed(e.to_string()) };
+            this.push_chat_context(cx);
         });
+    }
+
+    /// The terminal of a request (created the first time it is picked).
+    fn ensure_chat(&mut self, key: &str, cx: &mut Context<Self>) -> Entity<AgentChat> {
+        if let Some(c) = self.chats.get(key) { return c.clone(); }
+        let (k, repo, es) = (key.to_string(), self.cli.repo.clone(), self.es);
+        let chat = cx.new(|cx| AgentChat::new(k, repo, es, cx));
+        cx.subscribe(&chat, |this, _, ev: &ChatEvent, cx| {
+            // a finished run usually moved the request: read the state again (and the queue, which talks to the connectors)
+            if *ev == ChatEvent::Finished { this.refresh(cx); this.load_pending(cx); }
+            cx.notify();
+        }).detach();
+        self.chats.insert(key.to_string(), chat.clone());
+        chat
+    }
+
+    /// Tells the selected request's terminal its state, key to work with, next commands and history.
+    fn push_chat_context(&mut self, cx: &mut Context<Self>) {
+        let Some(key) = self.selected.clone() else { return };
+        let chat = self.ensure_chat(&key, cx);
+        let d = self.detail.ready().filter(|v| s(v, "key") == key).cloned();
+        let entry = self.pending.ready().and_then(|p| p.iter().find(|x| s(x, "key") == key).cloned());
+        let pick = |k: &str| d.as_ref().map(|v| s(v, k)).filter(|x| !x.is_empty()).or_else(|| entry.as_ref().map(|v| s(v, k)).filter(|x| !x.is_empty()));
+        let state = pick("state").unwrap_or_else(|| "NEW".into());
+        let work = pick("internal").unwrap_or_else(|| key.clone());
+        let next_json = d.as_ref().and_then(|v| v["next"].as_array().cloned()).or_else(|| entry.as_ref().and_then(|v| v["next"].as_array().cloned()));
+        let next: Vec<Suggestion> = match next_json {
+            Some(a) => a.iter().map(|n| Suggestion { step: n["step"].as_u64().unwrap_or(0) as u8, command: s(n, "command"), what: s(n, "what") }).collect(),
+            None => crate::agent::fallback_next(&state, &key, &work).into_iter().map(|(step, command, what)| Suggestion { step, command, what }).collect(),
+        };
+        let events = d.as_ref().and_then(|v| v["events"].as_array().cloned()).unwrap_or_default();
+        let es = self.es;
+        chat.update(cx, |c, cx| c.set_context(state, work, next, events, es, cx));
     }
 
     pub fn load_connectors(&mut self, cx: &mut Context<Self>) {
@@ -286,7 +338,7 @@ impl ProjectView {
     fn sidebar(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let es = self.es;
         let items = self.items.ready().cloned().unwrap_or_default();
-        let waiting = self.pending.ready().map(|p| p.iter().filter(|x| s(x, "for") != "agent").count()).unwrap_or(0);
+        let waiting = self.pending.ready().map(|p| p.iter().filter(|x| !matches!(s(x, "for").as_str(), "agent" | "wait")).count()).unwrap_or(0);
         let running = self.env.ready().and_then(|v| v["processes"].as_array()).map(|a| a.iter().filter(|p| p["corriendo"].as_bool() == Some(true)).count()).unwrap_or(0);
         let total = self.env.ready().and_then(|v| v["processes"].as_array()).map(|a| a.len()).unwrap_or(0);
         let nav = Screen::NAV.iter().enumerate().map(|(i, &sc)| {
@@ -342,10 +394,14 @@ impl ProjectView {
             _ => return self.pending_skeleton(),
         };
         let who: std::collections::HashMap<String, String> = self.pending.ready().map(|p| p.iter().map(|x| (s(x, "key"), s(x, "for"))).collect()).unwrap_or_default();
+        let entries: std::collections::HashMap<String, Value> = self.pending.ready().map(|p| p.iter().map(|x| (s(x, "key"), x.clone())).collect()).unwrap_or_default();
         let order = ["BLOCKED", "NEW", "SUPPORT", "ANALYSIS", "WAITING_CLIENT", "DEVELOPMENT", "TESTING", "CODE_REVIEW", "EXECUTION", "EXECUTION_APPROVAL", "APPLICATION", "VERIFICATION", "DELIVERY", "ACCEPTANCE", "CLOSED"];
         // tickets the connector returns that orqen has not seen yet are NEW
         let mut all = items.clone();
-        for (k, f) in &who { if !all.iter().any(|i| &s(i, "key") == k) { all.push(serde_json::json!({ "key": k, "state": "NEW", "for": f })); } }
+        for (k, f) in &who { if !all.iter().any(|i| &s(i, "key") == k) {
+            let st = entries.get(k).map(|e| s(e, "state")).filter(|x| !x.is_empty()).unwrap_or_else(|| "NEW".into());
+            all.push(serde_json::json!({ "key": k, "state": st, "for": f }));
+        } }
         let mut row = 0usize;
         let groups = order.iter().filter_map(|st| {
             let list: Vec<&Value> = all.iter().filter(|i| s(i, "state") == *st).collect();
@@ -360,9 +416,19 @@ impl ProjectView {
                 let f = who.get(&key).cloned().unwrap_or_default();
                 let lock = it["lock"]["agent"].as_str().map(str::to_string);
                 let state = s(it, "state");
+                let chat_busy = self.chats.get(&key).map(|c| c.read(cx).busy()).unwrap_or(false);
+                let back = entries.get(&key).map(|e| !s(e, "returned").is_empty()).unwrap_or(false);
                 let sub = if state == "BLOCKED" { t(es, "Bloqueado: espera a una persona", "Blocked: waiting for a person").to_string() }
+                    else if chat_busy { t(es, "El agente está trabajando", "The agent is working").to_string() }
                     else if let Some(a) = &lock { format!("{} {a}", t(es, "Trabajando:", "Working:")) }
-                    else { match f.as_str() { "support" => t(es, "Espera a soporte", "Waiting for support"), "analyst" => t(es, "Espera al analista", "Waiting for the analyst"), "agent" => t(es, "Listo para un agente", "Ready for an agent"), _ => t(es, "Espera en el ticket", "Waiting on the ticket") }.to_string() };
+                    else if back { t(es, "Volvió con cambios para desarrollo", "Back to development with changes").to_string() }
+                    else { match f.as_str() {
+                        "support" => t(es, "Espera a soporte", "Waiting for support"), "analyst" => t(es, "Espera al analista", "Waiting for the analyst"),
+                        "developer" => t(es, "Para desarrollo", "For development"), "qa" => t(es, "Espera a QA", "Waiting for QA"),
+                        "senior" => if state == "DELIVERY" { t(es, "Lista para entregar", "Ready to deliver") } else { t(es, "Espera al senior", "Waiting for the senior") },
+                        "agent" => t(es, "Listo para un agente", "Ready for an agent"),
+                        _ => match state.as_str() { "WAITING_CLIENT" | "ACCEPTANCE" => t(es, "Espera al cliente", "Waiting for the client"), _ => t(es, "Espera en el ticket", "Waiting on the ticket") },
+                    }.to_string() };
                 let k2 = key.clone();
                 appear(("row", row), (row as u64).min(12) * 35, div().id(SharedString::from(format!("item-{key}"))).flex().flex_col().gap(px(5.)).p(px(10.)).mb(px(2.)).rounded(px(9.)).cursor_pointer().border_1()
                     .when(on, |d| d.bg(c(SURFACE_2)).border_color(c(0x23345F)))
@@ -372,7 +438,7 @@ impl ProjectView {
                         .children(it["internal"].as_str().map(|k| chip(k.to_string(), 0x4A1E3D, 0xFFB3D9)))
                         .children(it["lane"].as_str().map(|l| chip(l.to_string(), BORDER_2, MUTED)))
                         .child(div().flex_1())
-                        .children(lock.as_ref().map(|_| live_dot(SharedString::from(format!("rs-{key}")), BLUE_TEXT))))
+                        .children((lock.is_some() || chat_busy).then(|| live_dot(SharedString::from(format!("rs-{key}")), if chat_busy { MAGENTA_TEXT } else { BLUE_TEXT }))))
                     .child(div().flex().items_center().gap(px(6.)).text_size(px(12.)).text_color(c(if state == "BLOCKED" { AMBER } else { MUTED }))
                         .child(sub))
                     .on_click(cx.listener(move |this, _, _, cx| { this.selected = Some(k2.clone()); this.load_detail(k2.clone(), true, cx); cx.notify(); })))
@@ -381,7 +447,7 @@ impl ProjectView {
         }).collect::<Vec<_>>();
         let closed = all.iter().filter(|i| s(i, "state") == "CLOSED").count();
         let list = div().w(px(360.)).flex_none().h_full().flex().flex_col().border_r_1().border_color(c(BORDER))
-            .child(div().p(px(16.)).pb(px(8.)).flex().items_baseline().gap(px(8.)).child(ui::h1(t(es, "Pendientes", "Pending"))).child(mono("orqen pending").text_size(px(11.)).text_color(c(DIM)))
+            .child(div().p(px(16.)).pb(px(8.)).flex().items_baseline().gap(px(8.)).child(ui::h1(t(es, "Pendientes", "Pending"))).child(mono("orqen list requests").text_size(px(11.)).text_color(c(DIM)))
                 .child(div().flex_1()).children(self.pending.loading().then(|| progress_slice("pend-load", 48.))))
             .children(match &self.pending { Load::Failed(e) => Some(div().mx(px(16.)).mb(px(6.)).p(px(8.)).rounded(px(8.)).bg(c(0x1D1810)).text_size(px(11.5)).text_color(c(AMBER)).child(format!("{} {}", t(es, "No se pudieron consultar los requerimientos:", "Could not query requirements:"), e))), _ => None })
             .child(div().id("list").flex_1().overflow_y_scroll().px(px(8.)).pb(px(14.)).children(groups)
@@ -402,11 +468,14 @@ impl ProjectView {
         };
         let state = s(&d, "state");
         let internal = d["internal"].as_str().map(str::to_string);
-        let ik = internal.clone().unwrap_or_else(|| key.clone());
-        let flow = ["ANALYSIS", "DEVELOPMENT", "TESTING", "CODE_REVIEW", "DELIVERY", "ACCEPTANCE", "CLOSED"];
-        let idx = flow.iter().position(|x| *x == state);
+        let flow = ["SUPPORT", "ANALYSIS", "DEVELOPMENT", "TESTING", "CODE_REVIEW", "DELIVERY", "ACCEPTANCE", "CLOSED"];
+        let at = match state.as_str() { "WAITING_CLIENT" => "ANALYSIS", "EXECUTION" | "EXECUTION_APPROVAL" | "APPLICATION" | "VERIFICATION" => "DEVELOPMENT", x => x };
+        let idx = flow.iter().position(|x| *x == at);
+        // support is optional: a request that never went through it does not show it as done
+        let skipped_support = d["supporter"].as_str().is_none();
         let pipeline = flow.iter().enumerate().map(|(i, st)| {
-            let (done, cur) = match idx { Some(n) => (i < n, i == n), None => (false, false) };
+            let (mut done, cur) = match idx { Some(n) => (i < n, i == n), None => (false, false) };
+            if i == 0 && skipped_support { done = false; }
             div().flex().items_center().gap(px(5.)).h(px(24.)).px(px(9.)).rounded_full().text_size(px(11.))
                 .when(cur, |d| d.bg(c(SURFACE_2)).border_1().border_color(c(BLUE)).text_color(c(TEXT)).font_weight(FontWeight::SEMIBOLD))
                 .when(done, |d| d.border_1().border_color(c(0x1E2638)).bg(c(SURFACE)).text_color(c(TEXT_2)))
@@ -414,41 +483,6 @@ impl ProjectView {
                 .children(done.then(|| icon("check", 10., GREEN)))
                 .children(cur.then(|| live_dot(("pipe", i), BLUE_TEXT)))
                 .child(stage_name(st, es))
-        }).collect::<Vec<_>>();
-        // what to run next, by stage
-        let next: Vec<(&str, String)> = match state.as_str() {
-            "NEW" => vec![(t(es, "Analizar (analista, en Claude Code)", "Analyze (analyst, in Claude Code)"), format!("/orqen:analyze {key}")), (t(es, "O pasarlo por soporte", "Or send it to support"), format!("/orqen:support {key}"))],
-            "SUPPORT" => vec![(t(es, "Seguir con soporte", "Continue support"), format!("/orqen:support {key}"))],
-            "ANALYSIS" => vec![(t(es, "Seguir el análisis", "Continue the analysis"), format!("/orqen:analyze {key}"))],
-            "DEVELOPMENT" => vec![(t(es, "Implementar", "Implement"), format!("/orqen:implement {ik}"))],
-            "TESTING" => vec![(t(es, "Correr testing", "Run testing"), format!("orqen take {ik}")), (t(es, "Revisión de e2e", "e2e review"), format!("/orqen:e2e-review {ik}"))],
-            "CODE_REVIEW" => vec![(t(es, "Abrir el PR", "Open the PR"), format!("/orqen:pr {ik}")), (t(es, "Code review (senior)", "Code review (senior)"), format!("/orqen:code-review {ik}"))],
-            "BLOCKED" => vec![(t(es, "Destrabar: comentar en el ticket", "Unblock: comment on the ticket"), "/approve <qué hacer>".into())],
-            "WAITING_CLIENT" | "ACCEPTANCE" => vec![(t(es, "Espera al cliente en el requerimiento", "Waiting for the client on the requirement"), format!("orqen status {key}"))],
-            _ => vec![(t(es, "Ver el detalle", "See the detail"), format!("orqen status {key}"))],
-        };
-        let actions = next.into_iter().enumerate().map(|(i, (what, cmd))| {
-            let c2 = cmd.clone();
-            div().id(("next", i)).flex().items_center().gap(px(10.)).p(px(10.)).rounded(px(10.)).border_1().border_color(c(0x1E2638)).bg(c(SURFACE)).cursor_pointer()
-                .hover(|h| h.border_color(c(0x2E3A55)).bg(c(0x111A2E)))
-                .child(div().flex_1().flex().flex_col().gap(px(3.)).child(div().text_size(px(12.)).text_color(c(MUTED)).child(what))
-                    .child(mono(cmd).text_size(px(12.5)).text_color(c(TEXT))))
-                .child(icon("copy", 14., MUTED))
-                .on_click(cx.listener(move |this, _, _, cx| this.copy(c2.clone(), cx)))
-        }).collect::<Vec<_>>();
-        let events = d["events"].as_array().cloned().unwrap_or_default();
-        let feed = events.iter().rev().take(40).enumerate().map(|(i, ev)| {
-            let ts = s(ev, "ts");
-            let when = ts.get(5..16).unwrap_or(&ts).replace('T', " ");
-            appear(("ev", i), (i as u64).min(10) * 30, div().flex().gap(px(10.)).py(px(6.))
-                .child(div().w(px(84.)).flex_none().child(mono(when).text_size(px(11.)).text_color(c(DIM))))
-                .child(div().flex_1().flex().flex_col().gap(px(2.))
-                    .child(div().flex().items_center().gap(px(6.)).text_size(px(12.5))
-                        .child(div().text_color(c(stage_color(&s(ev, "from")))).child(stage_name(&s(ev, "from"), es)))
-                        .child(icon("arrow", 11., DIM))
-                        .child(div().text_color(c(stage_color(&s(ev, "to")))).child(stage_name(&s(ev, "to"), es)))
-                        .children(ev["agent"].as_str().map(|a| mono(format!("({a})")).text_size(px(11.)).text_color(c(DIM)))))
-                    .child(div().text_size(px(12.)).text_color(c(TEXT_2)).child(s(ev, "detail")))))
         }).collect::<Vec<_>>();
         let k_ext = key.clone();
         div().flex_1().min_w(px(0.)).h_full().flex().flex_col()
@@ -461,11 +495,9 @@ impl ProjectView {
                     .child(div().flex_1())
                     .child(button("copy-key", t(es, "Copiar clave", "Copy key"), Kind::Ghost, cx.listener(move |this, _, _, cx| this.copy(k_ext.clone(), cx)))))
                 .child(div().flex().flex_wrap().gap(px(4.)).children(pipeline)))
-            .child(div().id("detail-scroll").flex_1().overflow_y_scroll().p(px(18.)).flex().flex_col().gap(px(18.))
-                .child(div().flex().flex_col().gap(px(8.)).child(ui::label(t(es, "QUÉ SIGUE", "WHAT'S NEXT"))).children(actions))
-                .children(self.implementation(&key, d["internal"].as_str()))
-                .child(div().flex().flex_col().child(ui::label(t(es, "RECORRIDO", "HISTORY"))).child(div().mt(px(6.)).children(feed))
-                    .when(events.is_empty(), |d| d.child(div().mt(px(6.)).text_size(px(12.)).text_color(c(MUTED)).child(t(es, "Todavía nadie lo tomó.", "Nobody has taken it yet."))))))
+            .children(self.implementation(&key, d["internal"].as_str()).map(|el| div().flex_none().px(px(18.)).pt(px(12.)).child(el)))
+            // the request's terminal: chat with the agent, with the next commands of the flow suggested
+            .child(div().flex_1().min_h(px(0.)).children(self.chats.get(&key).cloned()))
             .into_any_element()
     }
 
@@ -824,23 +856,22 @@ impl ProjectView {
 }
 
 fn detail_skeleton() -> AnyElement {
-    let pills = [78., 96., 66., 100., 70., 92., 62.];
-    let card = |i: usize, w1: f32, w2: f32| div().flex().items_center().gap(px(10.)).p(px(10.)).rounded(px(10.)).border_1().border_color(c(0x1E2638)).bg(c(SURFACE))
-        .child(div().flex_1().flex().flex_col().gap(px(3.)).child(skeleton_text(("dc-a", i), relative(w1), 12.)).child(skeleton_text(("dc-b", i), relative(w2), 12.5)))
-        .child(skeleton(("dc-i", i), px(14.), 14.));
-    let event = |i: usize, w1: f32, w2: f32| div().flex().gap(px(10.)).py(px(6.))
-        .child(div().w(px(84.)).flex_none().child(skeleton_text(("de-t", i), px(66.), 11.)))
-        .child(div().flex_1().flex().flex_col().gap(px(2.)).child(skeleton_text(("de-a", i), relative(w1), 12.5)).child(skeleton_text(("de-b", i), relative(w2), 12.)));
+    let pills = [62., 78., 96., 66., 100., 70., 92., 62.];
+    // same shape as the request's terminal: history lines, then suggestions and the prompt
+    let line = |i: usize, w: f32| div().h(px(19.)).flex().items_center().child(skeleton_text(("dt", i), relative(w), 12.5));
     div().flex_1().min_w(px(0.)).h_full().flex().flex_col()
         .child(div().p(px(18.)).pb(px(14.)).border_b_1().border_color(c(BORDER)).flex().flex_col().gap(px(12.))
             .child(div().h(px(28.)).flex().items_center().gap(px(10.))
                 .child(skeleton("dh-k", px(92.), 13.)).child(skeleton("dh-c", px(86.), 19.)).child(skeleton("dh-l", px(70.), 19.))
                 .child(div().flex_1()).child(skeleton("dh-b", px(98.), 28.)))
             .child(div().flex().flex_wrap().gap(px(4.)).children(pills.iter().enumerate().map(|(i, w)| skeleton(("dp", i), px(*w), 24.).rounded_full()))))
-        .child(div().flex_1().overflow_hidden().p(px(18.)).flex().flex_col().gap(px(18.))
-            .child(div().flex().flex_col().gap(px(8.)).child(skeleton_text("dl-1", px(62.), 11.)).child(card(0, 0.38, 0.5)).child(card(1, 0.3, 0.42)))
-            .child(div().flex().flex_col().child(skeleton_text("dl-2", px(70.), 11.))
-                .child(div().mt(px(6.)).child(event(0, 0.34, 0.52)).child(event(1, 0.4, 0.6)).child(event(2, 0.3, 0.45)))))
+        .child(div().flex_1().min_h(px(0.)).flex().flex_col().bg(c(0x080B12))
+            .child(div().flex_1().overflow_hidden().px(px(16.)).py(px(12.)).flex().flex_col().gap(px(1.))
+                .child(line(0, 0.22)).child(line(1, 0.5)).child(line(2, 0.44)).child(line(3, 0.56)))
+            .child(div().flex_none().border_t_1().border_color(c(BORDER)).bg(c(PANEL)).px(px(14.)).pt(px(10.)).pb(px(12.)).flex().flex_col().gap(px(6.))
+                .child(skeleton_text("ds-l", px(74.), 10.5))
+                .child(div().flex().gap(px(6.)).child(skeleton("ds-0", px(300.), 28.)).child(skeleton("ds-1", px(250.), 28.)))
+                .child(div().mt(px(2.)).flex().gap(px(8.)).child(skeleton("ds-p", relative(1.), 36.)).child(skeleton("ds-s", px(36.), 36.).flex_none()))))
         .into_any_element()
 }
 

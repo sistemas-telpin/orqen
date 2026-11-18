@@ -14,7 +14,7 @@ orqen init               # Run from the repository you want to initialize
 3. Uses an installed AI agent to review a short repository summary in the background. It validates the proposal with Zod. Use `--deep` to let the agent explore the repository or `--no-ai` to use automatic detection only.
 4. Lets you confirm or edit components, the command that starts each part, tests, migrations, and seed commands.
 5. Finds a compatible OpenSpec installation (version 2.x), installs it if needed, and runs `openspec init` for the selected tools with English artifact output.
-6. Asks where the tickets live (`conectores` in `orqen/config.yaml`: the external ticket the client sees and an optional internal one, each in Jira, GitHub or Asana) and the approvers; tokens go to the ignored `orqen/.env`. With `--yes`, it keeps what is already configured. `orqen connectors` checks them.
+6. Preserves existing connector selection and general settings. Provider accounts are configured afterwards in Settings > Connectors and stored in `~/.orqen/providers.env`, shared across repositories. Initialization never asks for tokens. `orqen connectors` checks the configured resources.
 7. Writes the environment configuration (no Docker in between), agent instructions, plugin, stage guides, and manifest. It merges the OpenSpec workflow rules with the repository's existing configuration.
 
 `init` configures an existing project without requesting, cloning or reading the external stack catalog. It reuses any database scripts already installed in the project; new service scripts come from `bootstrap`.

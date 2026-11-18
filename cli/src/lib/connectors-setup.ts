@@ -1,6 +1,6 @@
 /**
- * `orqen init` / `orqen connectors setup`: asks where the external ticket (what the client sees) and the optional
- * internal ticket (the team's) live. Returns the `conectores` block for config.yaml and the secrets for orqen/.env.
+ * `orqen connectors setup`: asks where the requirements and optional
+ * development tickets live. Returns resource configuration and shared provider credentials.
  */
 import { execFileSync } from "node:child_process";
 import type { ConectorYaml, ConectoresYaml } from "../connectors/config.ts";
@@ -23,7 +23,7 @@ function originRepo(repo: string): string {
   } catch { return ""; }
 }
 
-/** Secrets that each connector needs and are still missing in orqen/.env. */
+/** Provider credentials that are still missing from the effective user settings. */
 export function missingSecrets(c: ConectoresYaml | null | undefined, env: Record<string, string | undefined>): string[] {
   const out = new Set<string>();
   for (const x of [c?.externo, c?.interno]) {
@@ -35,7 +35,7 @@ export function missingSecrets(c: ConectoresYaml | null | undefined, env: Record
   return [...out];
 }
 
-export async function askConnectors(repo: string, prev: ConectoresYaml | null | undefined, env: Record<string, string>): Promise<ConnectorsAnswer> {
+export async function askConnectors(repo: string, prev: ConectoresYaml | null | undefined, env: Record<string, string | undefined>): Promise<ConnectorsAnswer> {
   const out: Record<string, string> = {};
   const previo = (k: string) => (env[k] && !/your-company|tu-empresa/.test(env[k]) ? env[k] : "");
 
@@ -79,7 +79,7 @@ export async function askConnectors(repo: string, prev: ConectoresYaml | null | 
       const token = await secreto(`GitHub token ${gris(previo("GITHUB_TOKEN") ? "(Enter to keep it)" : "(Enter to use your `gh` session)")}`);
       if (token) out.GITHUB_TOKEN = token;
       return {
-        tipo: "github", repo: repoGh, ...(proj ? { proyecto: Number(proj), campo: b?.campo ?? "Status" } : {}),
+        tipo: "github", repo: repoGh, ...(proj ? { proyecto: Number(proj), campo: b?.campo ?? "Status", ...(b?.estado ? { estado: b.estado } : {}) } : {}),
         ...(role === "externo" ? { filtro: b?.filtro ?? "is:open label:orqen" } : { etiquetas: b?.etiquetas ?? ["orqen"] }),
         ...(b?.transiciones ? { transiciones: b.transiciones } : {}),
       };

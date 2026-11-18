@@ -132,6 +132,15 @@ test("full request with real OpenSpec", { skip: !existsSync(OPENSPEC) && "opensp
   });
   assert.deepEqual(r, { ok: true, next: "CODE_REVIEW" });
 
+  // full lane: the senior's /approve waits for QA (step 7)
+  jira.human("REQ-7", "senior", "/approve");
+  await p.review();
+  assert.equal(state(), "CODE_REVIEW");
+  assert.match(jira.last("REQ-7"), /QA has not approved/);
+  const st = new Store(cfg.stateDir), it = st.get("REQ-7")!;
+  it.artifacts.devel_pr = "https://github.example.test/acme/repo/pull/7";
+  st.save(it);
+  await p.qaReview("REQ-7", "Facturas con encabezado → test.mjs: verifica el encabezado y una fila por factura. Corrida en verde.", "approve", "Quique");
   jira.human("REQ-7", "senior", "/approve");
   await p.review();
   assert.equal(state(), "DELIVERY");

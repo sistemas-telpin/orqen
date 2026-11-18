@@ -32,6 +32,8 @@ export interface Workspace {
   openPr(vars: Record<string, string>, command: string): string;
   /** Reviews of the PR and its head commit; the senior's decision when CODE_REVIEW_GATE=github. */
   prReviews?(url: string): { head: string; reviews: PrReview[] };
+  /** Posts the senior's review on the PR with their own GitHub session (gh). */
+  reviewPr?(url: string, action: "approve" | "request-changes", body: string): void;
 }
 
 /** Branch where a request is developed. */
@@ -143,6 +145,19 @@ export class GitWorkspace implements Workspace {
       head: j.headRefOid,
       reviews: (j.reviews ?? []).map((r) => ({ id: r.id, author: r.author?.login ?? "", state: r.state, commit: r.commit?.oid ?? "", body: r.body ?? "" })),
     };
+  }
+
+  reviewPr(url: string, action: "approve" | "request-changes", body: string) {
+    // execFile (no shell) and the body through stdin: nothing of it reaches a command line
+    const r = spawnSync("gh", ["pr", "review", url, `--${action}`, "--body-file", "-"], {
+      cwd: this.cfg.repoPath, encoding: "utf8", input: body, windowsHide: true,
+    });
+    if (r.error) throw new Error(`could not run gh (${r.error.message}): install the GitHub CLI and log in with \`gh auth login\``);
+    if (r.status !== 0) {
+      const out = (r.stderr || r.stdout || "").trim();
+      if (/own pull request/i.test(out)) throw new Error(`GitHub does not let the PR's author review it (${out}). Another person has to approve it, or use CODE_REVIEW_GATE=ticket.`);
+      throw new Error(`gh pr review failed: ${out || `exit code ${r.status}`}`);
+    }
   }
 
   openPr(vars: Record<string, string>, command: string) {

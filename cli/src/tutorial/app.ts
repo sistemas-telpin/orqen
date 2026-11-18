@@ -29,8 +29,8 @@ export function pasosApp(d: DatosTutorial, i: Idioma): Record<string, PasoApp> {
           tx("Abajo, el engranaje abre Configuración: Conectores y este Tutorial. A la derecha, las cuotas de IA de tu máquina.",
             "At the bottom, the gear opens Settings: Connectors and this Tutorial. On the right, the AI quotas of your machine."),
         ] },
-        { t: "tip", texto: tx("El trabajo del agente (los comandos /orqen:) se sigue haciendo en Claude Code. La app te dice qué comando sigue y lo copiás con un clic.",
-          "The agent's work (the /orqen: commands) still happens in Claude Code. The app tells you which command comes next and you copy it with one click.") },
+        { t: "tip", texto: tx("Al elegir un pedido se abre su terminal: chateás con el agente (Claude Code) ahí mismo, con el comando que sigue ya sugerido.",
+          "When you pick a request its terminal opens: you chat with the agent (Claude Code) right there, with the next command already suggested.") },
       ],
     },
     words: {
@@ -62,14 +62,15 @@ export function pasosApp(d: DatosTutorial, i: Idioma): Record<string, PasoApp> {
     next: {
       pantalla: "pending",
       bloques: [
-        { t: "p", texto: tx("En el detalle de cada pedido, QUÉ SIGUE te muestra el comando de la etapa en que está. No hace falta la tabla de memoria.",
-          "In the detail of each request, WHAT'S NEXT shows the command for the stage it is in. No need to remember the table.") },
+        { t: "p", texto: tx("Al elegir un pedido se abre su terminal: arriba de donde escribís, SUGERENCIAS te muestra el comando de la etapa en que está (con su número de paso, del 1 al 9). No hace falta la tabla de memoria.",
+          "When you pick a request its terminal opens: above where you type, SUGGESTIONS shows the command for the stage it is in (with its step number, 1 to 9). No need to remember the table.") },
         { t: "ol", items: [
           tx("Abrí Pendientes y elegí el pedido.", "Open Pending and pick the request."),
-          tx(`En QUÉ SIGUE, hacé clic en la tarjeta (por ejemplo "Analizar" → /orqen:analyze ${recNum}). El comando se copia.`,
-            `In WHAT'S NEXT, click the card (for example "Analyze" → /orqen:analyze ${recNum}). The command is copied.`),
-          tx("Pegalo en Claude Code. Si empieza con `orqen`, pegalo en la terminal.", "Paste it in Claude Code. If it starts with `orqen`, paste it in the terminal."),
-          tx("Cuando la etapa termina, el pedido cambia de grupo solo y QUÉ SIGUE muestra el comando nuevo.", "When the stage ends, the request moves to its new group by itself and WHAT'S NEXT shows the new command."),
+          tx(`Tocá la sugerencia (por ejemplo /orqen:analyze ${recNum}) o apretá Tab: queda escrita. Enter la manda al agente.`,
+            `Click the suggestion (for example /orqen:analyze ${recNum}) or press Tab: it is typed in. Enter sends it to the agent.`),
+          tx("Seguí la conversación ahí: el agente te pregunta y vos respondés en el mismo campo. Escribí / para ver los 9 comandos del flujo; Esc detiene al agente.",
+            "Follow the conversation there: the agent asks and you answer in the same field. Type / to see the 9 flow commands; Esc stops the agent."),
+          tx("Cuando la etapa termina, el pedido cambia de grupo solo y las sugerencias muestran el comando nuevo.", "When the stage ends, the request moves to its new group by itself and the suggestions show the new command."),
         ] },
         { t: "tip", texto: tx(`Las decisiones de las personas (/approve, /reject) se siguen tomando en ${H} o en el PR de GitHub. La app te muestra cuándo el pedido está esperando a alguien.`,
           `People's decisions (/approve, /reject) are still made in ${H} or on the GitHub PR. The app shows you when the request is waiting for someone.`) },
@@ -78,13 +79,13 @@ export function pasosApp(d: DatosTutorial, i: Idioma): Record<string, PasoApp> {
     pending: {
       pantalla: "pending",
       bloques: [
-        { t: "p", texto: tx("Pendientes es la primera pantalla de cada proyecto: `orqen pending` y `orqen status` juntos.",
-          "Pending is the first screen of every project: `orqen pending` and `orqen status` together.") },
+        { t: "p", texto: tx("Pendientes es la primera pantalla de cada proyecto: `orqen list requests` y `orqen status` juntos.",
+          "Pending is the first screen of every project: `orqen list requests` and `orqen status` together.") },
         { t: "ul", items: [
-          tx("Cada fila dice quién tiene que actuar: Espera al analista, Listo para un agente, Espera en el ticket…", "Each row says who has to act: Waiting for the analyst, Ready for an agent, Waiting on the ticket…"),
+          tx("Cada fila dice quién tiene que actuar: Espera al analista, Para desarrollo, Espera a QA, Espera al senior, Espera al cliente…", "Each row says who has to act: Waiting for the analyst, For development, Waiting for QA, Waiting for the senior, Waiting for the client…"),
           tx("El número al lado de Pendientes, en el menú de la izquierda, es cuántos pedidos esperan algo.", "The number next to Pending, in the left menu, is how many requests are waiting for something."),
-          tx(`Al elegir uno ves su etapa, QUÉ SIGUE y el RECORRIDO: todo lo que le pasó (lo mismo que orqen status ${recNum}).`,
-            `When you pick one you see its stage, WHAT'S NEXT and the HISTORY: everything that happened (the same as orqen status ${recNum}).`),
+          tx(`Al elegir uno ves su etapa y su terminal: arriba, lo último que le pasó (lo mismo que orqen status ${recNum}); abajo, las sugerencias y el campo para hablar con el agente.`,
+            `When you pick one you see its stage and its terminal: at the top, the latest of its history (the same as orqen status ${recNum}); at the bottom, the suggestions and the field to talk to the agent.`),
           tx("Copiar clave copia la clave del pedido. La lista se actualiza sola cada pocos segundos.", "Copy key copies the request key. The list refreshes by itself every few seconds."),
         ] },
         { t: "tip", texto: tx("Si la lista está vacía, todavía no entró ningún pedido en el ticket externo. Si dice que no pudo consultarlo, revisá los Conectores (engranaje, abajo).",
@@ -96,9 +97,9 @@ export function pasosApp(d: DatosTutorial, i: Idioma): Record<string, PasoApp> {
       bloques: [
         { t: "ol", items: [
           tx("En Pendientes, buscá el pedido: dice \"Espera al analista\".", "In Pending, find the request: it says \"Waiting for the analyst\"."),
-          tx(`Elegilo y en QUÉ SIGUE hacé clic en "Analizar (analista, en Claude Code)": se copia /orqen:analyze ${recNum}.`,
-            `Pick it and in WHAT'S NEXT click "Analyze (analyst, in Claude Code)": /orqen:analyze ${recNum} is copied.`),
-          tx("Pegalo en Claude Code y seguí la conversación con el agente. No hace falta tu nombre: orqen lo toma de tu Git.", "Paste it in Claude Code and follow the conversation with the agent. No need for your name: orqen takes it from your Git."),
+          tx(`Elegilo: en su terminal, la sugerencia 3 es /orqen:analyze ${recNum}. Tocala y Enter.`,
+            `Pick it: in its terminal, suggestion 3 is /orqen:analyze ${recNum}. Click it and press Enter.`),
+          tx("Seguí la conversación con el agente ahí mismo: te pregunta de a una cosa, con opciones. No hace falta tu nombre: orqen lo toma de tu Git.", "Follow the conversation with the agent right there: it asks one thing at a time, with options. No need for your name: orqen takes it from your Git."),
           HI ? tx(`Cuando cierra el análisis, en la app el pedido pasa solo a Desarrollo y aparece la etiqueta rosa del ticket interno (${sisNum}).`,
                   `When the analysis closes, the request moves to Development in the app by itself and the pink internal ticket tag (${sisNum}) shows up.`)
             : tx("Cuando cierra el análisis, en la app el pedido pasa solo a Desarrollo.", "When the analysis closes, the request moves to Development in the app by itself."),
@@ -109,9 +110,9 @@ export function pasosApp(d: DatosTutorial, i: Idioma): Record<string, PasoApp> {
       pantalla: "pending",
       bloques: [
         { t: "ol", items: [
-          tx("En Pendientes, el pedido está en Desarrollo con \"Listo para un agente\".", "In Pending, the request is in Development with \"Ready for an agent\"."),
-          tx(`QUÉ SIGUE → "Implementar" copia /orqen:implement ${sisNum}. Pegalo en Claude Code.`, `WHAT'S NEXT → "Implement" copies /orqen:implement ${sisNum}. Paste it in Claude Code.`),
-          tx("Mientras trabaja, la fila muestra \"Trabajando\" con el punto azul, y en Entornos ves lo que levantó.", "While it works, the row shows \"Working\" with the blue dot, and in Environments you see what it started."),
+          tx("En Pendientes, el pedido está en Desarrollo con \"Para desarrollo\" (o \"Volvió con cambios\").", "In Pending, the request is in Development with \"For development\" (or \"Back with changes\")."),
+          tx(`En su terminal, la sugerencia 5 es /orqen:implement ${sisNum}. Tocala, Enter, y aprobá el plan que te propone el agente.`, `In its terminal, suggestion 5 is /orqen:implement ${sisNum}. Click it, press Enter, and approve the plan the agent proposes.`),
+          tx("Mientras trabaja, la fila muestra \"El agente está trabajando\" con el punto que late, y en Entornos ves lo que levantó.", "While it works, the row shows \"The agent is working\" with the pulsing dot, and in Environments you see what it started."),
           tx("Si el agente parte el trabajo, en el detalle aparece IMPLEMENTACIÓN con cada parte y su estado: en cola, trabajando, integrada…",
             "If the agent splits the work, the detail shows IMPLEMENTATION with each part and its state: queued, working, integrated…"),
         ] },
@@ -121,10 +122,10 @@ export function pasosApp(d: DatosTutorial, i: Idioma): Record<string, PasoApp> {
       pantalla: "pending",
       bloques: [
         { t: "ul", items: [
-          tx("Testing: QUÉ SIGUE ofrece \"Correr testing\" y \"Revisión de e2e\". El RECORRIDO muestra si pasó o si volvió a Desarrollo.",
-            "Testing: WHAT'S NEXT offers \"Run testing\" and \"e2e review\". The HISTORY shows whether it passed or went back to Development."),
-          tx(`Code review: "Abrir el PR" copia /orqen:pr ${sisNum} y "Code review (senior)" copia /orqen:code-review ${sisNum}.`,
-            `Code review: "Open the PR" copies /orqen:pr ${sisNum} and "Code review (senior)" copies /orqen:code-review ${sisNum}.`),
+          tx("Testing: la sugerencia es \"Correr el testing automático\". El historial de arriba de la terminal muestra si pasó o si volvió a Desarrollo.",
+            "Testing: the suggestion is \"Run the automatic testing\". The history at the top of the terminal shows whether it passed or went back to Development."),
+          tx(`Code review: 6 · /orqen:pr ${sisNum} abre el PR; en el carril completo, 7 · /orqen:review ${sisNum} es de QA; después 9 · /orqen:approve ${sisNum} es del senior.`,
+            `Code review: 6 · /orqen:pr ${sisNum} opens the PR; on the full lane, 7 · /orqen:review ${sisNum} is QA's; then 9 · /orqen:approve ${sisNum} is the senior's.`),
           tx("Arriba del detalle ves la rama del pedido: para abrir el PR tenés que estar en esa rama.", "Above the detail you see the request branch: you must be on that branch to open the PR."),
           aprobar,
         ] },
@@ -160,8 +161,10 @@ export function pasosApp(d: DatosTutorial, i: Idioma): Record<string, PasoApp> {
     problems: {
       bloques: [
         { t: "ul", items: [
-          tx("Un pedido en BLOCKED aparece en amarillo. En su RECORRIDO está el motivo, y QUÉ SIGUE te dice cómo destrabarlo.",
-            "A BLOCKED request shows in yellow. Its HISTORY has the reason, and WHAT'S NEXT tells you how to unblock it."),
+          tx("Un pedido en BLOCKED aparece en amarillo. Arriba de su terminal está el motivo, y la sugerencia te dice cómo destrabarlo.",
+            "A BLOCKED request shows in yellow. The top of its terminal has the reason, and the suggestion tells you how to unblock it."),
+          tx("Si la terminal dice que no encontró Claude Code o que falló la autenticación: instalalo (npm i -g @anthropic-ai/claude-code) y corré `claude` una vez para iniciar sesión.",
+            "If the terminal says Claude Code was not found or authentication failed: install it (npm i -g @anthropic-ai/claude-code) and run `claude` once to log in."),
           tx("Pendientes dice que no pudo consultar el ticket externo → engranaje → Conectores → Probar conexión.",
             "Pending says it could not query the external ticket → gear → Connectors → Test connection."),
           tx("Algo del entorno no prende → Entornos → ver log de ese proceso.", "Part of the environment does not start → Environments → view log of that process."),
@@ -174,12 +177,13 @@ export function pasosApp(d: DatosTutorial, i: Idioma): Record<string, PasoApp> {
       bloques: [
         { t: "pre", lineas: [
           tx(" MIRAR (app)", " LOOK (app)"),
-          tx("   Pendientes            qué hay para hacer, etapa y recorrido de cada pedido", "   Pending               what needs doing, stage and history of each request"),
+          tx("   Pendientes            qué hay para hacer, etapa y terminal de cada pedido", "   Pending               what needs doing, stage and terminal of each request"),
           tx("   Entornos              qué está prendido, levantar / apagar, log en vivo", "   Environments          what is running, start / stop, live log"),
           tx("   Engranaje > Conectores  tickets y credenciales, probar la conexión", "   Gear > Connectors     tickets and credentials, test the connection"),
           "",
-          tx(" TRABAJAR (Claude Code)", " WORK (Claude Code)"),
-          tx("   QUÉ SIGUE             un clic copia el comando; pegalo en Claude Code", "   WHAT'S NEXT           one click copies the command; paste it in Claude Code"),
+          tx(" TRABAJAR (terminal del pedido)", " WORK (the request's terminal)"),
+          tx("   Sugerencias           clic o Tab lo escribe, Enter lo manda al agente", "   Suggestions           click or Tab types it, Enter sends it to the agent"),
+          tx("   /                     los 9 comandos del flujo · ↑ ↓ eligen · Esc detiene", "   /                     the 9 flow commands · ↑ ↓ pick · Esc stops"),
           "",
           tx(` DECIDIR (${H} / GitHub)`, ` DECIDE (${H} / GitHub)`),
           tx("   /approve   /reject motivo     comentario en el ticket externo", "   /approve   /reject reason     comment on the external ticket"),

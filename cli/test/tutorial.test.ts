@@ -57,8 +57,8 @@ test("steps use the repository's data: processes, URLs, keys, gate, platform", (
   const next = (d: DatosTutorial) => renderMarkdown(pasosTutorial(d, "en").find((p) => p.id === "next")!, "x");
   assert.match(next({ ...base, externo: "SOPL-123", interno: "DEV-456" }), /\/orqen:analyze SOPL-123[\s\S]*\/orqen:implement DEV-456/);
   assert.match(next(base), /Approve on GitHub/);
-  assert.match(next({ ...base, gate: "ticket" }), /then \/approve in Jira/);
-  assert.match(next({ ...base, gate: "ticket", herramienta: "GitHub" }), /then \/approve in GitHub/);
+  assert.match(next({ ...base, gate: "ticket" }), /or \/approve in Jira/);
+  assert.match(next({ ...base, gate: "ticket", herramienta: "GitHub" }), /or \/approve in GitHub/);
   assert.match(next({ ...base, herramientaInterna: undefined, interno: "SOP-123" }), /\/orqen:implement SOP-123/);
   assert.doesNotMatch(next(base), /SUPPORT/);
   assert.match(next({ ...base, soporte: true }), /SUPPORT\s+support\s+\/orqen:support/);

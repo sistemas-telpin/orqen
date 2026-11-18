@@ -1,6 +1,6 @@
 {
   "name": "orqen",
-  "version": "0.1.0",
-  "description": "Learn orqen with /orqen:tutorial, handle customer requests with /orqen:support, analyze them with /orqen:analyze and implement approved plans or OpenSpec changes with /orqen:implement.",
+  "version": "0.2.0",
+  "description": "The orqen flow in 9 steps: /orqen:list (requests, issues, prs), /orqen:support, /orqen:analyze, /orqen:implement, /orqen:pr, /orqen:review (QA), /orqen:approve (senior). Learn it with /orqen:tutorial.",
   "author": { "name": "Telpin" }
 }

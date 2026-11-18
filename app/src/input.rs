@@ -25,8 +25,18 @@ actions!(
         Paste,
         Cut,
         Copy,
+        Submit,
+        Complete,
+        HistoryUp,
+        HistoryDown,
+        Dismiss,
     ]
 );
+
+/// Keys the field passes on to its owner (the agent terminal): Enter, Tab, ↑/↓ and Esc.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum InputKey { Submit, Complete, Up, Down, Escape }
+impl gpui::EventEmitter<InputKey> for TextInput {}
 
 pub struct TextInput {
     masked: bool,
@@ -39,17 +49,28 @@ pub struct TextInput {
     last_layout: Option<ShapedLine>,
     last_bounds: Option<Bounds<Pixels>>,
     is_selecting: bool,
+    /// Terminal look: no box of its own, monospaced (the owner draws the frame).
+    bare: bool,
 }
 
 impl TextInput {
     pub fn new(cx: &mut Context<Self>, placeholder: impl Into<SharedString>, value: impl Into<SharedString>, masked: bool) -> Self {
         Self {
             masked, focus_handle: cx.focus_handle(), content: value.into(), placeholder: placeholder.into(), selected_range: 0..0,
-            selection_reversed: false, marked_range: None, last_layout: None, last_bounds: None, is_selecting: false,
+            selection_reversed: false, marked_range: None, last_layout: None, last_bounds: None, is_selecting: false, bare: false,
         }
     }
 
     pub fn text(&self) -> String { self.content.to_string() }
+
+    /// Terminal look (see `bare`).
+    pub fn bare(mut self) -> Self { self.bare = true; self }
+
+    fn submit(&mut self, _: &Submit, _: &mut Window, cx: &mut Context<Self>) { cx.emit(InputKey::Submit); }
+    fn complete(&mut self, _: &Complete, _: &mut Window, cx: &mut Context<Self>) { cx.emit(InputKey::Complete); }
+    fn history_up(&mut self, _: &HistoryUp, _: &mut Window, cx: &mut Context<Self>) { cx.emit(InputKey::Up); }
+    fn history_down(&mut self, _: &HistoryDown, _: &mut Window, cx: &mut Context<Self>) { cx.emit(InputKey::Down); }
+    fn dismiss(&mut self, _: &Dismiss, _: &mut Window, cx: &mut Context<Self>) { cx.emit(InputKey::Escape); }
 
     /// Replaces a value selected from a list, resetting the editing state.
     pub fn set_text(&mut self, value: impl Into<SharedString>, cx: &mut Context<Self>) {
@@ -609,6 +630,11 @@ impl Render for TextInput {
             .on_action(cx.listener(Self::paste))
             .on_action(cx.listener(Self::cut))
             .on_action(cx.listener(Self::copy))
+            .on_action(cx.listener(Self::submit))
+            .on_action(cx.listener(Self::complete))
+            .on_action(cx.listener(Self::history_up))
+            .on_action(cx.listener(Self::history_down))
+            .on_action(cx.listener(Self::dismiss))
             .on_mouse_down(MouseButton::Left, cx.listener(Self::on_mouse_down))
             .on_mouse_up(MouseButton::Left, cx.listener(Self::on_mouse_up))
             .on_mouse_up_out(MouseButton::Left, cx.listener(Self::on_mouse_up))
@@ -617,7 +643,9 @@ impl Render for TextInput {
             .line_height(px(20.))
             .text_size(px(12.5))
             .text_color(crate::theme::c(crate::theme::TEXT))
-            .child(
+            .when(self.bare, |d| d.font_family(crate::theme::MONO_FONT).text_size(px(13.))
+                .child(div().h(px(22.)).w_full().overflow_hidden().child(TextElement { input: cx.entity() })))
+            .when(!self.bare, |d| d.child(
                 div()
                     .h(px(34.))
                     .w_full()
@@ -629,7 +657,7 @@ impl Render for TextInput {
                     .bg(crate::theme::c(0x0A0E16))
                     .overflow_hidden()
                     .child(TextElement { input: cx.entity() }),
-            )
+            ))
     }
 }
 
@@ -656,5 +684,10 @@ pub fn bind_keys(cx: &mut App) {
         KeyBinding::new("home", Home, ctx),
         KeyBinding::new("end", End, ctx),
         KeyBinding::new("ctrl-cmd-space", ShowCharacterPalette, ctx),
+        KeyBinding::new("enter", Submit, ctx),
+        KeyBinding::new("tab", Complete, ctx),
+        KeyBinding::new("up", HistoryUp, ctx),
+        KeyBinding::new("down", HistoryDown, ctx),
+        KeyBinding::new("escape", Dismiss, ctx),
     ]);
 }

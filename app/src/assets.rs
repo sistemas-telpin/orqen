@@ -37,6 +37,7 @@ icons! {
     "icons/win-min.svg" => r#"<path d="M5 12h14"/>"#,
     "icons/win-max.svg" => r#"<rect x="5" y="5" width="14" height="14" rx="1"/>"#,
     "icons/win-restore.svg" => r#"<rect x="5" y="8" width="11" height="11" rx="1"/><path d="M8 8V5h11v11h-3"/>"#,
+    "icons/send.svg" => r#"<path d="M12 19V5M6 11l6-6 6 6"/>"#,
     "icons/dot.svg" => r#"<circle cx="12" cy="12" r="4" fill="black"/>"#,
 }
 

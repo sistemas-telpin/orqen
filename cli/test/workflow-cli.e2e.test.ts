@@ -141,6 +141,15 @@ for (const lane of ["light", "full"] as const) {
     await f.complete(f.record().internal!, development, 1); f.state("DEVELOPMENT");
     f.file(`${dir}/tasks.md`, readFileSync(join(f.repo, dir, "tasks.md"), "utf8").replaceAll("- [ ]", "- [x]"));
     await testAndReview(f);
+    if (lane === "full") {
+      // step 7: on the full lane the senior's approval waits for QA
+      const sis = f.record().internal ?? "REQ-7";
+      await f.human("senior", "/approve"); f.state("CODE_REVIEW");
+      const listed = JSON.parse(await f.command(["list", "prs", "--json"]));
+      assert.deepEqual([listed[0].qa, listed[0].role], ["pending", "qa"]);
+      await f.command(["qa", sis, "-", "--verdict", "approve", "--person", "Quique"], { input: "Invoice CSV → test.mjs checks the header and the invoice number. The run passed." });
+      assert.equal(f.record().artifacts.qa.verdict, "approve");
+    }
     await f.human("senior", "/approve");
     await finish(f);
     assert.ok(existsSync(join(f.repo, "openspec/specs/invoice-export/spec.md")));

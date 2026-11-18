@@ -1,0 +1,41 @@
+---
+description: The senior decides whether the PR is integrated - optional report first, then approve (on to delivery) or request changes (back to development); in DELIVERY, deliver to the client
+argument-hint: <KEY>
+allowed-tools: Bash(orqen:*), Bash(git fetch:*), Bash(git diff:*), Bash(git log:*), Bash(git show:*), Bash(git status:*), Bash(git branch:*), Bash(gh pr view:*), Bash(gh pr diff:*), Read, Grep, Glob, Write, AskUserQuestion
+---
+
+Help the senior who invoked this command decide on the integration PR of `$ARGUMENTS`, and record their decision with orqen. The senior decides; you inform and execute. Follow the workflow in `AGENTS.md`.
+
+## Rules
+
+- **Talk to the person in their system language.** Run `orqen lang` once at the start (`es` = Spanish, `en` = English; the stage context also has it as `language`) and use it for every message, question, and option. Keep commands, state names, and paths as they are. Files and texts posted on the tickets follow their own rules.
+- **Work with the person who invoked this command.** Before each important step, tell them what you are about to do and wait for their OK. When in doubt, ask them (with `AskUserQuestion` when available: concrete options plus your recommendation); never assume what you can ask. After each step, report what you did and what comes next.
+- Read-only on code. Do not edit code or tests: a problem goes in the report with its possible solutions, and back to development as a requested change.
+- The decision is recorded only with `orqen approve`, and only with the senior's explicit choice. Never use `gh pr review`, `gh pr comment`, or `gh pr merge` directly.
+- A decision is valid only on the last commit of the PR: if there is a push after it, the PR has to be reviewed again.
+
+## Steps
+
+1. Validate the key (external or internal ticket) and run `orqen status <KEY> --json`.
+   - `CODE_REVIEW` with `artifacts.devel_pr`: continue with step 2. If `lane` is `full` and `qa_status` is `pending`, say that QA has to approve first with `/orqen:review <KEY>` and stop.
+   - `CODE_REVIEW` without a PR: say that development opens it with `/orqen:pr <KEY>` and stop.
+   - `DELIVERY`: go to step 6.
+   - Another state: report it and its `next` command, and stop.
+2. Run `orqen pr <KEY>` (branch, base, lane, analysis, spec change, PR URL). Ask the senior whether they want a report before deciding (recommended when nobody reviewed the diff yet).
+3. If they want it, review the PR read-only exactly as `orqen/plugin/commands/code-review.md` describes (remote branch diff against the analysis, spec or plan, and repository conventions; each finding verified, with severity, `file:line`, the failing scenario, and possible solutions, the recommended one first). Give the verdict (`Approvable`, `Approvable with minor changes`, or `Reject`) and the findings. When the senior accepts the report, record it with `orqen review <KEY> <report.md> --verdict <approve|minor|reject> --agent code-review` (it does not change the stage).
+4. Ask the senior for the decision:
+   - **Approve**:
+     ```sh
+     orqen approve <KEY> --agent senior
+     ```
+   - **Request changes**: draft the indication for development (one line per blocking or important finding: number, `file:line`, problem, and recommended solution), adjust it until the senior approves the exact text, write it to a temporary file, and run:
+     ```sh
+     orqen approve <KEY> --changes <comment.md> --agent senior
+     ```
+   With `CODE_REVIEW_GATE=github` (the default), orqen posts the review on the PR with the senior's `gh` session and reads it back; with `CODE_REVIEW_GATE=ticket` it records the decision on the tickets. orqen records the senior by their Git name (`--person "<name>"` overrides it). If it fails (for example, GitHub does not let the PR's author approve their own PR, or `gh` is not logged in), explain the reason and stop.
+5. Report the result: changes requested → the request is back in development with the senior's comment (`/orqen:implement <KEY>`); approved → it is in `DELIVERY`. Ask the senior whether to deliver now (step 6).
+6. **Delivery to the client.** Claim the stage, which archives the OpenSpec change (when there is one) and prints the instructions, context, and output schema:
+   ```sh
+   orqen take <KEY> --agent delivery
+   ```
+   Write the message to the client (what changed and how to validate it, step by step, without internal jargon), show it to the senior, and adjust it until they approve the exact text. Write the JSON output and submit it with `orqen complete <KEY> <output.json> --agent delivery`; correct validation errors and retry. orqen posts it on the request: the client confirms with `/approve` (or reports a problem with `/reject <reason>`). Report that the request now waits for the client and stop.

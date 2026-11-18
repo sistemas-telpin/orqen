@@ -8,6 +8,8 @@ Su arquitectura permite que múltiples agentes colaboren de manera coordinada en
 
 Uno de sus pilares es el aprendizaje continuo a partir de la experiencia: aprovechar los resultados de desarrollos anteriores para enriquecer una base de conocimiento reutilizable y mejorar progresivamente los procesos de trabajo.
 
+El flujo completo son **9 pasos**, uno por comando: `list requests` · `support` · `analyze` · `list issues` · `implement` · `pr` · `review` (QA, solo carril completo) · `list prs` · `approve` (senior). En la app de escritorio, al elegir un pedido se abre una terminal para chatear con el agente con el comando que sigue ya sugerido.
+
 Opcionalmente, una persona de **soporte** atiende primero el reclamo con el agente (`/orqen:support SOP-1234`) e intenta responderle al cliente. Si no alcanza, lo escala al analista. El análisis lo conduce un **analista** con el agente (`/orqen:analyze SOP-1234`); el resto lo lleva el agente con aprobaciones humanas.
 
 | Quién              | Qué corre                                                                                                        |
@@ -16,8 +18,9 @@ Opcionalmente, una persona de **soporte** atiende primero el reclamo con el agen
 | Soporte (opcional) | `/orqen:support SOP-1234`: busca la respuesta, la redacta para el cliente y, si no se puede resolver, escala al analista con un resumen |
 | Analista           | `/orqen:analyze SOP-1234`: analiza el pedido, elige el carril, escribe la spec si hace falta y crea el ticket interno (si hay)|
 | Agente             | `/orqen:implement DEV-442`: implementa la spec o el plan aprobado · `/orqen:pr DEV-442`: abre el PR a desarrollo |
-| Diseñador de e2e   | `/orqen:e2e-review DEV-442`: valida visualmente los tests e2e                                                     |
-| Senior             | `/orqen:code-review DEV-442`: revisa el PR con el agente y después aprueba o pide cambios en GitHub               |
+| Todos              | `/orqen:list requests` (`orqen list requests`): la lista de trabajo por rol, sin tomar nada · desarrollo: `/orqen:list issues` · senior: `/orqen:list prs` |
+| QA (carril completo) | `/orqen:review DEV-442`: valida los e2e en pantalla y aprueba (`orqen qa … --verdict approve`) o rechaza (vuelve a desarrollo) |
+| Senior             | `/orqen:approve DEV-442`: informe opcional del PR (`/orqen:code-review`), después aprueba o pide cambios (`orqen approve`, queda el review en el PR) y entrega al cliente |
 | Modo desatendido   | `orqen cycle --loop`: avanza los gates y lanza las etapas de agente pendientes                                   |
 | Aprobadores        | `/approve` o `/reject <motivo>` en el issue (conformidad del cliente, carril operativo, destrabar un BLOCKED)    |
 
@@ -26,7 +29,7 @@ Opcionalmente, una persona de **soporte** atiende primero el reclamo con el agen
 - **CLI `orqen`** (paquete npm, Node ≥ 20.12): maneja la máquina de estados, los tickets (conectores), git, los PRs, los entornos de prueba y OpenSpec.
   Es determinística: el agente produce contenido y `orqen` decide el flujo.
 - **`AGENTS.md` / `CLAUDE.md`**: lo que lee el agente. Explican el proceso y las reglas, y le indican que use la CLI.
-- **Plugin de Claude Code** (`orqen/plugin/`): los comandos `/orqen:tutorial`, `/orqen:support`, `/orqen:analyze`, `/orqen:implement`, `/orqen:e2e-review`, `/orqen:pr` y `/orqen:code-review`, y el skill `orqen:grilling`.
+- **Plugin de Claude Code** (`orqen/plugin/`): los comandos `/orqen:tutorial`, `/orqen:support`, `/orqen:analyze`, `/orqen:list`, `/orqen:implement`, `/orqen:pr`, `/orqen:review`, `/orqen:approve` y `/orqen:code-review` (`/orqen:e2e-review` queda como alias de `/orqen:review`), y el skill `orqen:grilling`.
 - **`orqen/stages/`**: las guías de cada etapa (soporte, análisis, especificación, desarrollo, testing, entrega, ejecución y verificación). Se pueden editar.
 - **`orqen/work/<KEY>/`**: registro y estado de cada pedido dentro del repo (lo escribe `orqen`).
 - **`openspec/config.yaml`**: reglas del proceso de pedidos aplicadas a los artefactos de OpenSpec.
@@ -379,7 +382,7 @@ orqen init
    si hay un agente de IA instalado, le pide que revise un resumen del repo (`--deep` para que lo explore entero, `--no-ai` para solo detección automática).
 3. Te deja confirmar o editar componentes, el comando que levanta cada parte (`npm run dev`, `npm start`…), tests, migraciones y seeds.
 4. Instala OpenSpec (2.x) si hace falta y corre `openspec init` para las herramientas elegidas.
-5. Pregunta dónde viven los tickets (**conectores**: externo e interno, ver más abajo) y los aprobadores. Lo que es configuración va a `conectores` en `orqen/config.yaml`; los tokens, a `orqen/.env` (ignorado por git).
+5. Conserva la configuración existente. Las cuentas de proveedores se administran después en **Configuración → Conectores** y se comparten entre repositorios; la inicialización no pide tokens.
 6. Escribe la configuración del entorno (sin Docker de por medio), `AGENTS.md` / `CLAUDE.md`, el plugin, las guías de etapa y el manifiesto,
    y fusiona las reglas del proceso con el `openspec/config.yaml` existente.
 
@@ -403,7 +406,8 @@ actualizan solos; para los editados elegís conservar, reemplazar o dejar una co
 | Ruta                             | Para qué                                                                                       |
 | -------------------------------- | ---------------------------------------------------------------------------------------------- |
 | `orqen/config.yaml`              | Stack, cómo se levanta cada parte, migraciones, tests, rama base, agente y **conectores**       |
-| `orqen/.env`                     | Tokens de los conectores y aprobadores (local, ignorado por git)                               |
+| `orqen/.env`                     | Variables del proyecto y aprobadores (local, ignorado por git)                                |
+| `~/.orqen/providers.env`          | Cuentas y tokens de proveedores, compartidos por el usuario entre repositorios                 |
 | `orqen/stages/`                  | Guías de cada etapa (editables)                                                                |
 | `orqen/plugin/`                  | Comandos de Claude Code y el skill de grilling                                                 |
 | `orqen/work/<KEY>/`              | Registro versionado de cada pedido                                                                |
@@ -412,7 +416,9 @@ actualizan solos; para los editados elegís conservar, reemplazar o dejar una co
 | `AGENTS.md` y `CLAUDE.md`        | Instrucciones del proceso para los agentes                                                     |
 | `openspec/`                      | Specs y configuración de OpenSpec                                                              |
 
-### Variables principales de `orqen/.env`
+### Variables principales
+
+Las credenciales de proveedores van en `~/.orqen/providers.env`; las opciones de ejecución y aprobadores, en `orqen/.env`.
 
 | Variable                                                     | Para qué                                                                                   |
 | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------ |
@@ -444,6 +450,8 @@ general:
 
 Los proveedores se eligen en **Configuración → Conectores**. Sus etiquetas y filtros no son prefijos. Los proyectos existentes conservan sus claves hasta guardar explícitamente General; si ya hay historial, cambiar los prefijos requiere migrar las claves registradas. En Jira hay que seleccionar un proyecto por conector: ORQEN traduce el prefijo general a la clave nativa para las consultas y los enlaces.
 
+Para GitHub Projects, **Estado del tablero para Pendientes** elige la columna de entrada, por ejemplo `Backlog`. El filtro adicional admite búsquedas de issues como `is:open label:orqen`; una columna no es un filtro de texto. Las configuraciones anteriores que guardaron `Backlog` como filtro se reconocen por el nombre del estado del Project. Se muestran issues abiertos del repositorio elegido; no se incluyen borradores, pull requests ni elementos archivados.
+
 
 orqen trabaja con dos tickets por pedido:
 
@@ -474,7 +482,7 @@ conectores:
 | Claves | las de Jira (`SOP-123`) | `GH-42` (`prefijo` configurable) | `AS-<id>` |
 | Extras | `credenciales`, `tipo_ticket`, `tipo_operativo`, `vinculo` | `repo`, `duenio_proyecto`, `campo`, `etiquetas` | `prefijo` |
 
-Los tokens van en `orqen/.env` (`JIRA_*`, `GITHUB_TOKEN`, `ASANA_TOKEN`). `orqen connectors` muestra los dos conectores y prueba las credenciales;
+Las cuentas y tokens se guardan en `~/.orqen/providers.env` (`JIRA_*`, `GITHUB_TOKEN`, `ASANA_TOKEN`) y se reutilizan entre repositorios. Las copias anteriores en `orqen/.env` se siguen leyendo como compatibilidad; al guardar el conector, sus credenciales se trasladan a la configuración del usuario. `orqen connectors` muestra los dos conectores y prueba las credenciales;
 `orqen connectors setup` los configura con preguntas. Los comandos aceptan la clave del externo o la del interno.
 
 **Si venías de una versión anterior** (`REC_JQL`, `SIS_PROJECT`, `SIS_*` en `orqen/.env`): siguen funcionando como Jira externo + Jira interno, con un aviso.

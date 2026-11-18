@@ -7,7 +7,7 @@ A person from support leads this stage (first line). The goal is to answer the c
 ### 1. Read the context
 
 - Read the issue and the full conversation. Comments with `is_agent: true` come from earlier stages. Look in `human_feedback` for customer answers.
-- Look for the answer before asking the person: similar requests (`orqen search '<JQL>'` or Jira MCP, read-only), the knowledge base if the project has one, `openspec/specs/` for the documented behavior, and the code when the behavior is unclear. Record each source in `checked`.
+- Look for the answer before asking the person: similar requests (`orqen search '<query>'` or an MCP for the ticket tool, read-only), the knowledge base if the project has one, `openspec/specs/` for the documented behavior, and the code when the behavior is unclear. Record each source in `checked`.
 
 ### 2. Decide with the person
 
@@ -31,4 +31,4 @@ A person from support leads this stage (first line). The goal is to answer the c
 
 Show the person the outcome and the exact text that will reach the customer, and ask for their explicit approval. Only then set `support_ok: true`. Include `summary`, `checked`, `outcome`, `client_response`, and `escalation_summary` as required by the JSON schema.
 
-`orqen complete` validates the JSON, comments on the request, records `support.md` under `orqen/work/<KEY>/`, and advances it: `resolved` waits for the customer's `/approve` or `/reject <reason>`, and `escalate` moves to the analyst. A resolved request creates no SIS. Leave `orqen/state/` and Git operations to orqen.
+`orqen complete` validates the JSON, comments on the request, records `support.md` under `orqen/work/<KEY>/`, and advances it: `resolved` waits for the customer's `/approve` or `/reject <reason>`, and `escalate` moves to the analyst. A resolved request creates no internal ticket. Leave `orqen/state/` and Git operations to orqen.

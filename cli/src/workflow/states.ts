@@ -1,14 +1,14 @@
 /**
- * REC state machine. This code decides the FLOW; the agent (any one:
+ * State machine of a request (the external ticket). This code decides the FLOW; the agent (any one:
  * Claude Code, Codex, Cursor, Copilot...) only produces content at each stage.
  *
  * SUPPORT (optional: `SUPPORT_STAGE=on` routes new requests to it, `orqen support` always works) and ANALYSIS are the stretches driven by a person (support via `/orqen:support`,
- * the analyst via `/orqen:analyze`). Once ANALYSIS closes with the analyst's OK, the lane, the spec (if any) and the SIS are decided.
+ * the analyst via `/orqen:analyze`). Once ANALYSIS closes with the analyst's OK, the lane, the spec (if any) and the internal ticket are decided.
  */
 export const State = {
   NEW: "NEW",
   SUPPORT: "SUPPORT",                 // support person + agent: tries to answer the client; resolves (→ ACCEPTANCE) or escalates (→ ANALYSIS)
-  ANALYSIS: "ANALYSIS",               // analyst + agent (grilling): understand, pick lane, spec if needed, create the SIS
+  ANALYSIS: "ANALYSIS",               // analyst + agent (grilling): understand, pick lane, spec if needed, create the internal ticket
   WAITING_CLIENT: "WAITING_CLIENT",   // gate: the client answers questions
   DEVELOPMENT: "DEVELOPMENT",         // agent: implements (openspec apply, or the plan of the direct lane)
   TESTING: "TESTING",                 // script runs tests; agent verifies scenarios/criteria
@@ -29,12 +29,12 @@ export type State = (typeof State)[keyof typeof State];
 export type AgentState = "SUPPORT" | "ANALYSIS" | "DEVELOPMENT" | "TESTING" | "DELIVERY" | "EXECUTION" | "VERIFICATION";
 export const AGENT_STATES: readonly State[] = ["SUPPORT", "ANALYSIS", "DEVELOPMENT", "TESTING", "DELIVERY", "EXECUTION", "VERIFICATION"];
 
-/** How a REC is resolved: development (code) or operational (fast lane: SQL, restarts...). */
+/** How a request is resolved: development (code) or operational (fast lane: SQL, restarts...). */
 export type Route = "development" | "operational";
 
 /**
- * How much specification a development REC carries (proposed by the agent, confirmed by the analyst):
- *  - direct: no OpenSpec. The plan and acceptance criteria live in the analysis and in the SIS.
+ * How much specification a development request carries (proposed by the agent, confirmed by the analyst):
+ *  - direct: no OpenSpec. The plan and acceptance criteria live in the analysis and in the internal ticket.
  *  - light:  compact OpenSpec change (proposal + deltas + tasks; minimal design).
  *  - full:   full OpenSpec change (proposal + specs + design + tasks).
  */
@@ -65,7 +65,7 @@ export function nextStateAfterStage(
 ): State {
   switch (state) {
     case "SUPPORT":
-      // resolved: the client confirms in ACCEPTANCE (no SIS is created); escalated: the analyst continues with what support found
+      // resolved: the client confirms in ACCEPTANCE (no internal ticket is created); escalated: the analyst continues with what support found
       return output.outcome === "resolved" ? "ACCEPTANCE" : "ANALYSIS";
     case "ANALYSIS":
       if (output.open_questions?.length && !output.ready)

@@ -19,14 +19,14 @@ function setup() {
   git(repo, "config", "user.name", "orqen-test");
   git(repo, "config", "user.email", "test@example.com");
   git(repo, "add", "."); git(repo, "commit", "-qm", "Initial");
-  git(repo, "checkout", "-qb", "rec/rec-32");
+  git(repo, "checkout", "-qb", "orqen/req-32");
   return repo;
 }
 function run(repo: string, apply: boolean, success = true) {
   const tools = repoTemporal({}, false);
   const worker = join(tools, "worker.mjs"), plan = join(tools, "plan.json");
   writeFileSync(worker, `import { readFileSync, writeFileSync } from "node:fs"; readFileSync(0, "utf8"); writeFileSync("result.txt", ${JSON.stringify(success ? "done" : "wrong")});`);
-  writeFileSync(plan, JSON.stringify({ summary: "Implement SIS-32", subtasks: [{ id: "result", title: "Result", description: "Write result.txt", files: ["result.txt"], test: "node check.mjs" }] }));
+  writeFileSync(plan, JSON.stringify({ summary: "Implement DEV-32", subtasks: [{ id: "result", title: "Result", description: "Write result.txt", files: ["result.txt"], test: "node check.mjs" }] }));
   return spawnSync(process.execPath, [TSX, CLI, "swarm", "--dir", repo, "--plan", plan, "--small", `node "${worker}"`, "--large", `node "${worker}"`, "--small-attempts", "1", "--large-attempts", "1", "--no-setup", "--yes", "--json", ...(apply ? ["--apply"] : [])], { encoding: "utf8", env: { ...process.env, NO_COLOR: "1" } });
 }
 
@@ -37,7 +37,7 @@ test("--apply integrates a verified result into the starting request branch", ()
   const report = JSON.parse(result.stdout);
   assert.equal(report.ok, true);
   assert.equal(report.applied, true);
-  assert.equal(git(repo, "branch", "--show-current"), "rec/rec-32");
+  assert.equal(git(repo, "branch", "--show-current"), "orqen/req-32");
   assert.equal(readFileSync(join(repo, "result.txt"), "utf8"), "done");
   assert.equal(git(repo, "rev-parse", "HEAD"), git(repo, "rev-parse", report.branch));
   assert.equal(git(repo, "worktree", "list", "--porcelain").split(/\r?\n/).filter((line) => line.startsWith("worktree ")).length, 1);
@@ -78,7 +78,7 @@ test("apply refuses branch or commit changes made during execution", () => {
   const runner = new SwarmGit(repo, "guard", join(repoTemporal({}, false), "worktrees"));
   git(repo, "checkout", "-qb", "other");
   assert.throws(() => runner.apply("other"), /checkout changed/);
-  git(repo, "checkout", "-q", "rec/rec-32");
+  git(repo, "checkout", "-q", "orqen/req-32");
   git(repo, "commit", "--allow-empty", "-qm", "Intervening commit");
   assert.throws(() => runner.apply("other"), /checkout changed/);
 });
@@ -87,6 +87,6 @@ test("apply preserves edits made while workers were running", () => {
   const repo = setup();
   const runner = new SwarmGit(repo, "guard", join(repoTemporal({}, false), "worktrees"));
   writeFileSync(join(repo, "README.md"), "Personal work\n");
-  assert.throws(() => runner.apply("rec/rec-32"), /uncommitted changes/);
+  assert.throws(() => runner.apply("orqen/req-32"), /uncommitted changes/);
   assert.equal(readFileSync(join(repo, "README.md"), "utf8"), "Personal work\n");
 });

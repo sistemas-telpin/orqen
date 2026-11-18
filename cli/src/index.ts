@@ -10,12 +10,19 @@ import { SWARM_HELP, swarm } from "./commands/swarm.ts";
 import { lang, tutorial } from "./commands/tutorial.ts";
 import { VERSION_CLI } from "./lib/system.ts";
 import { mostrarLogo } from "./ui/logo.ts";
+import { openApp } from "./lib/app.ts";
+import { ensureApp } from "./lib/app-install.ts";
+import { usageCommand } from "./lib/usage.ts";
+import { p } from "./ui/console.ts";
+import { buscarRepo } from "./commands/tutorial.ts";
 
 
 const AYUDA = `
 Usage: orqen <command> [options]
+       orqen                   Open the ORQEN app on this repository (orqen --help for this help)
 
 Commands:
+  app [dir]               Open the ORQEN desktop app (downloads it the first time) · app install: download it again
   init [dir]              Initialize ORQEN in a repository (default: current directory)
       --yes, -y           Use defaults and write conflicts alongside the originals
       --no-ai             Use automatic detection only
@@ -29,12 +36,15 @@ Commands:
       --list              List the stacks from your catalog
       --stack <id>        Stack from your private catalog (orqen bootstrap --list lists them)
       --dir <folder>      Where to create it (default: ./<name>)
+      --params '<json>'   Parameter values, e.g. '{"PORT":"8081"}' (the rest use their defaults)
+      --list --json · --describe <stack> --json   Catalog, parameters and requirements as JSON (the app)
   update [dir]            Update the CLI, OpenSpec, and kit
       --yes, -y  --no-cli  --no-openspec  --no-kit
   env <cmd>               setup | up [--all] | test [type...] | status | down
   tutorial [step]         Step-by-step tour for newcomers, in your system language (es/en)
       --step <n|id>       Print one step and exit (--json for agents) · --list · --lang es|en
   lang                    Print the detected system language (es | en); ORQEN_LANG overrides it
+  usage [--json]          AI agents installed on this machine and their quota used
 ${SWARM_HELP}
   --version, -v           Show version
   --help, -h              Show this help
@@ -49,6 +59,7 @@ async function main() {
   if (crudos[0] === "swarm") return swarm(crudos.slice(1));
   if (crudos[0] === "tutorial") return tutorial(crudos.slice(1));
   if (crudos[0] === "lang") return lang(crudos.slice(1));
+  if (crudos[0] === "usage") return usageCommand(crudos.slice(1));
   // `orqen env test e2e -- <args>`: everything after `--` goes to the test command untouched
   const sep = crudos.indexOf("--");
   const extra = sep >= 0 ? crudos.slice(sep + 1) : [];
@@ -73,13 +84,39 @@ async function main() {
       dir: { type: "string" },
       stack: { type: "string" },
       list: { type: "boolean" },
+      json: { type: "boolean" },
+      describe: { type: "string" },
+      params: { type: "string" },
     },
   });
   const [cmd, ...resto] = positionals;
   if (v.version) return console.log(VERSION_CLI);
-  if (!cmd || v.help) {
+  if (v.help) {
+    await mostrarLogo({ animar: false });
+    console.log(AYUDA);
+    return;
+  }
+  // `orqen` alone (or `orqen app`): the desktop app, which plays the logo animation itself.
+  if (!cmd || cmd === "app") {
+    const dir = (v.dir as string) ?? (cmd === "app" && resto[0] !== "install" ? resto[0] : undefined) ?? process.cwd();
+    const repo = buscarRepo(dir) ?? dir;
+    // first time (or a new CLI version): download the app built by CI, nothing to compile
+    const s = process.stdout.isTTY ? p.spinner() : undefined;
+    let started = false;
+    let app: string | undefined;
+    try {
+      app = await ensureApp(VERSION_CLI, (msg, pct) => {
+        if (!s) { if (msg) console.log(msg); return; }
+        if (!started) { s.start(msg); started = true; } else s.message(pct !== undefined ? `Downloading the ORQEN app… ${pct}%` : msg);
+      }, cmd === "app" && resto[0] === "install");
+      if (started) s?.stop(app ? "ORQEN app ready" : "");
+    } catch (e) {
+      if (started) s?.error((e as Error).message); else console.error(`✘ ${(e as Error).message}`);
+    }
+    if (app && openApp(repo, app)) return console.log(`Opening ORQEN on ${repo}…`);
     await mostrarLogo({ animar: !v["no-animation"] && !v.yes });
     console.log(AYUDA);
+    console.log("The ORQEN desktop app could not be opened (see above). Everything above also works from the terminal; set ORQEN_APP to use a local build.");
     return;
   }
 
@@ -97,12 +134,14 @@ async function main() {
         nombre: resto.join(" ") || undefined, listar: !!v.list, stack: v.stack as string | undefined, dir: v.dir as string | undefined,
         yes: !!v.yes, sinAnimacion: !!v["no-animation"], sinOpenspec: !!v["no-openspec"],
         toolsRepo: v["tools-repo"] as string | undefined,
+        json: !!v.json, describir: v.describe as string | undefined,
+        parametros: typeof v.params === "string" ? JSON.parse(v.params) : undefined,
         herramientas: typeof v.tools === "string" ? v.tools.split(",").map((x) => x.trim()).filter(Boolean) : undefined,
       });
     case "update":
       return update({ dir: (v.dir as string) ?? resto[0], yes: !!v.yes, sinCli: !!v["no-cli"], sinOpenspec: !!v["no-openspec"], sinKit: !!v["no-kit"], sinAnimacion: !!v["no-animation"] });
     case "env":
-      return entorno(resto[0], resto.slice(1), { dir: v.dir as string | undefined, todos: !!v.all, extra });
+      return entorno(resto[0], resto.slice(1), { dir: v.dir as string | undefined, todos: !!v.all, json: !!v.json, extra });
     default:
       console.error(`Unknown command: ${cmd}\n${AYUDA}`);
       process.exitCode = 1;

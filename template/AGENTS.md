@@ -1,4 +1,4 @@
-## Customer request workflow (REC)
+## Customer request workflow
 
 ```text
 [SUPPORT] → ANALYSIS ⇄ WAITING_CLIENT → DEVELOPMENT ⇄ TESTING
@@ -20,19 +20,19 @@ orqen works alongside the person; it does not replace them. While someone is on 
   recommendation (use your tool's question picker if it has one, such as `AskUserQuestion` in Claude Code).
 - **After each step, report in a few lines what you did and what comes next.**
 - When nobody can answer (`human_present: false`, unattended `orqen cycle`): do not guess. If the doubt changes the outcome,
-  run `orqen block <KEY> "<specific question>"`; orqen posts it to Jira and a person answers with `/approve <answer>`.
+  run `orqen block <KEY> "<specific question>"`; orqen posts it on the ticket and a person answers with `/approve <answer>`.
 
 ### Support (optional)
 
 With `SUPPORT_STAGE=on`, `orqen pending` sends a new request to a support person before the analyst. `orqen support` also works with it off, to pass a particular request through support.
 
-1. Start with `/orqen:support REC-1234` or `orqen support REC-1234 --person "<name>"`. A person from support leads this stage.
+1. Start with `/orqen:support <KEY>` or `orqen support <KEY>`. A person from support leads this stage; orqen records them by their Git name (`--person "<name>"` overrides it).
 2. Read the issue, comments, similar requests, and the documented behavior. Look for the answer before asking the person, and ask them only what you cannot find.
 3. Agree the outcome with the person and obtain their explicit approval of the exact reply to the customer:
 
    | Outcome | When | Next |
    | --- | --- | --- |
-   | `resolved` | The answer needs no change in code, data, or configuration | `ACCEPTANCE`: orqen comments the reply and the customer confirms with `/approve` or `/reject <reason>`. No SIS is created |
+   | `resolved` | The answer needs no change in code, data, or configuration | `ACCEPTANCE`: orqen comments the reply and the customer confirms with `/approve` or `/reject <reason>`. No internal ticket is created |
    | `escalate` | A new feature, a defect, a data or configuration change, or anything you cannot answer with confidence | `ANALYSIS`: the analyst starts from `previous_stages.SUPPORT` instead of from zero |
 
 4. Run `orqen complete <KEY> <output.json>`. Never promise dates, scope, or changes to the customer. When unsure, escalate.
@@ -41,8 +41,8 @@ The analyst can still take a `NEW` request directly with `orqen analyze`, and ca
 
 ### Analysis
 
-1. Start with `/orqen:analyze REC-1234` or `orqen analyze REC-1234 --analyst "<name>"`. A human analyst leads the analysis.
-2. Read the issue, comments, and repository, then interview the analyst using the `orqen:grilling` skill. Use Jira MCP for read-only access or `orqen search`. Record questions only the customer can answer and wait for their response.
+1. Start with `/orqen:analyze <KEY>` or `orqen analyze <KEY>`. A human analyst leads the analysis; orqen records them by their Git name (`--analyst "<name>"` overrides it).
+2. Read the issue, comments, and repository, then interview the analyst using the `orqen:grilling` skill. Read the ticket read-only (an MCP for the ticket tool, or `orqen search`). Record questions only the customer can answer and wait for their response.
 3. Summarize the scope, acceptance criteria, and risks. Obtain the analyst's explicit approval and ask them to confirm the lane.
 
    | Lane | When | Output |
@@ -52,7 +52,7 @@ The analyst can still take a `NEW` request directly with `orqen analyze`, and ca
    | `full` | Broader changes involving architecture, data, integrations, security, or billing | Full OpenSpec proposal, specs, design, and tasks |
 
    With `light` or `full`, `orqen lane <KEY> <lane>` prepares a branch and change. Write the spec with the analyst under `openspec/changes/`.
-4. Run `orqen complete <KEY> <output.json>`. Once validation passes, orqen creates the SIS in `SIS_PROJECT`, links it to the REC, and writes the record under `orqen/work/<KEY>/`. The REC tracks the customer conversation and the SIS tracks implementation through `SIS_TRANSITIONS`. Rejected customer acceptance starts a new analysis round and a new SIS.
+4. Run `orqen complete <KEY> <output.json>`. Once validation passes, orqen creates the internal ticket (when `conectores.interno` is configured), links it to the external one, and writes the record under `orqen/work/<KEY>/`. The external ticket is the conversation with the customer; the internal one tracks implementation (`conectores.interno.transiciones`). Rejected customer acceptance starts a new analysis round and a new internal ticket.
 
 ### Operational work
 
@@ -62,30 +62,30 @@ For a data correction, restart, configuration change, or other work without code
 ANALYSIS → EXECUTION → EXECUTION_APPROVAL → APPLICATION → VERIFICATION → ACCEPTANCE → CLOSED
 ```
 
-Propose the steps, rollback, and read-only verification. A person authorized by `APPROVERS_EXECUTION` approves and applies the change. Never execute SQL that modifies data or change services yourself. If verification identifies a code defect, the REC returns to analysis. Operational work still creates a SIS; it skips the spec, branch, tests, and PR.
+Propose the steps, rollback, and read-only verification. A person authorized by `APPROVERS_EXECUTION` approves and applies the change. Never execute SQL that modifies data or change services yourself. If verification identifies a code defect, the request returns to analysis. Operational work still creates an internal ticket (when configured); it skips the spec, branch, tests, and PR.
 
 ### Work on a stage
 
 - `orqen pending` lists work for support, analysts, and agents.
 - `orqen take <KEY>` claims an agent stage and prints its instructions, issue context, feedback, and JSON output schema. Use `orqen support` for support and `orqen analyze` for analysis.
 - Run `orqen complete <KEY> <output.json>` when the output is ready. Correct validation errors and retry until the command reports success. Stop after completing the stage.
-- If you cannot proceed, run `orqen block <KEY> "<specific reason>"`. Human reviewers use `/approve` or `/reject <reason>` in Jira.
+- If you cannot proceed, run `orqen block <KEY> "<specific reason>"`. Human reviewers use `/approve` or `/reject <reason>` on the ticket.
 - orqen writes `state.json`, `log.md`, and `round-N/analysis.md` and `.json` under `orqen/work/<KEY>/`. Operational rounds also record execution details under `execution/`. The authoritative workflow state is stored under `orqen/state/` or `cli/.state/`, depending on how the project is configured.
 
 ### Implementation execution
 
-`/orqen:implement <SIS>` runs `orqen swarm --file <task> --yes --json --apply` internally after the person approves the implementation plan. Supply the approved analysis, scope, criteria, spec or direct plan, and feedback as task context. ORQEN integrates a verified result into the request branch. Do not ask the person to run the engine or show its worker logs; report scope, progress, decisions and results. A failed run or integration must not advance the stage. Keep the existing approval before `orqen complete`.
+`/orqen:implement <KEY>` runs `orqen swarm --file <task> --yes --json --apply` internally after the person approves the implementation plan. Supply the approved analysis, scope, criteria, spec or direct plan, and feedback as task context. ORQEN integrates a verified result into the request branch. Do not ask the person to run the engine or show its worker logs; report scope, progress, decisions and results. A failed run or integration must not advance the stage. Keep the existing approval before `orqen complete`.
 
 ### Integration PR, QA, and code review
 
 - `TESTING` opens no PR. The only PR is the integration PR to `DEVEL_BRANCH`, opened with `/orqen:pr` (`orqen pr <KEY> <explanation.md>`) from the request branch. orqen commits pending changes, pushes, and opens or updates it.
-- Only the **full lane** goes through `QA_REVIEW` after `TESTING`; the direct and light lanes go straight to `CODE_REVIEW`. QA runs `/orqen:review <KEY>`: it checks on screen the e2e of the change (`TESTING` already ran the whole regression) and records the decision with `orqen review <KEY> approve|reject [--reason "<what to fix>"] [--report <report.md>]`. Approval moves to `CODE_REVIEW`; rejection returns to `DEVELOPMENT` with the reason as feedback. QA can also comment `/approve` or `/reject <reason>` (limited to `APPROVERS_QA`).
-- The senior reviews that PR in `CODE_REVIEW`, supported by `/orqen:code-review <KEY>`: review the PR diff read-only against the analysis, spec or plan, and acceptance criteria, and give a verdict plus each finding with its severity, `file:line`, impact, and possible solutions. When the senior accepts the report, record it with `orqen code-review <KEY> <report.md> --verdict <approve|minor|reject>`. It does not change the stage. With the default `CODE_REVIEW_GATE=github`, the senior decides with a review on the PR in GitHub (limited to `GITHUB_REVIEWERS` when set): orqen reads it, moves to `DELIVERY` on approval, and returns to `DEVELOPMENT` on "changes requested" (the review text becomes feedback for the agent). Only reviews on the PR's current head count, so a later push needs a new review. With `CODE_REVIEW_GATE=jira`, the senior comments `/approve` or `/reject <reason>` in Jira instead.
+- Only the **full lane** goes through `QA_REVIEW` after `TESTING`; the direct and light lanes go straight to `CODE_REVIEW`. QA runs `/orqen:review <KEY>`: it checks on screen the e2e of the change (`TESTING` already ran the whole regression) and records the decision with `orqen review <KEY> approve|reject [--reason "<what to fix>"] [--report <report.md>]`. Approval moves to `CODE_REVIEW`; rejection returns to `DEVELOPMENT` with the reason as feedback. QA can also comment `/approve` or `/reject <reason>` on the ticket (limited to `APPROVERS_QA`).
+- The senior reviews that PR in `CODE_REVIEW`, supported by `/orqen:code-review <KEY>`: review the PR diff read-only against the analysis, spec or plan, and acceptance criteria, and give a verdict plus each finding with its severity, `file:line`, impact, and possible solutions. When the senior accepts the report, record it with `orqen code-review <KEY> <report.md> --verdict <approve|minor|reject>`. It does not change the stage. With the default `CODE_REVIEW_GATE=github`, the senior decides with a review on the PR in GitHub (limited to `GITHUB_REVIEWERS` when set): orqen reads it, moves to `DELIVERY` on approval, and returns to `DEVELOPMENT` on "changes requested" (the review text becomes feedback for the agent). Only reviews on the PR's current head count, so a later push needs a new review. With `CODE_REVIEW_GATE=ticket`, the senior comments `/approve` or `/reject <reason>` on the ticket instead.
 
 ### Rules
 
-- Use Jira for read-only access. orqen handles issue writes, Git commits, branch changes, pushes, and OpenSpec archiving. Do not run `git commit/push/checkout/reset/rebase` or `openspec archive`.
-- Do not edit `orqen/state/`, `orqen/work/`, or orqen configuration as part of a REC.
+- Read the tickets read-only. orqen handles ticket writes, Git commits, branch changes, pushes, and OpenSpec archiving. Do not run `git commit/push/checkout/reset/rebase` or `openspec archive`.
+- Do not edit `orqen/state/`, `orqen/work/`, or orqen configuration as part of a request.
 - Obtain explicit analyst approval before closing analysis, including approval of the selected lane.
 - Record unanswered questions and label assumptions. Read `openspec/specs/` for current behavior before proposing changes.
 - Write in clear, professional English (this is for artifacts; talk to the person in their system language). Follow OpenSpec's structural headings and use SHALL/MUST where required.

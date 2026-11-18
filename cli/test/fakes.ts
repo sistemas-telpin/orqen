@@ -1,16 +1,23 @@
-import type { Comment, Issue, JiraApi } from "../src/workflow/jira.ts";
-import { BOT_MARK } from "../src/workflow/jira.ts";
+import type { ConnectorsSettings, JiraSettings } from "../src/connectors/config.ts";
+import { BOT_MARK, type Comment, type Connectors, type NewTicket, type Ticket, type Tracker } from "../src/connectors/types.ts";
 
 let id = 0;
 
-export class FakeJira implements JiraApi {
+/** In-memory connector. One instance can play both roles (external and internal), like a single Jira. */
+export class FakeTracker implements Tracker {
+  readonly kind = "jira" as const;
+  readonly label = "fake";
   coms: Record<string, Comment[]> = {};
   labels: Record<string, string> = {};
-  constructor(public issues: Record<string, Partial<Issue>>) {
+  transitions: Record<string, string[]> = {};
+  created: Array<{ key: string } & NewTicket> = [];
+  links: Array<[string, string]> = [];
+  constructor(public issues: Record<string, Partial<Ticket>>, private prefix = "DEV") {
     for (const k of Object.keys(issues)) this.coms[k] = [];
   }
-  async searchKeys() { return Object.keys(this.issues); }
-  async issue(key: string): Promise<Issue> {
+  async pending() { return Object.keys(this.issues).filter((k) => !this.created.some((c) => c.key === k)); }
+  async search() { return Object.keys(this.issues); }
+  async ticket(key: string): Promise<Ticket> {
     return { key, title: "", description: "", labels: [], components: [], attachments: [], ...this.issues[key] };
   }
   async comments(key: string) { return [...this.coms[key]]; }
@@ -18,17 +25,26 @@ export class FakeJira implements JiraApi {
   human(key: string, author: string, text: string) { this.add(key, author, text); }
   async setStateLabel(key: string, s: string) { this.labels[key] = s; }
   async transition(key: string, n: string) { (this.transitions[key] ??= []).push(n); return true; }
-  transitions: Record<string, string[]> = {};
-  created: Array<{ key: string; project: string; type: string; title: string; description: string }> = [];
-  links: Array<[string, string, string]> = [];
-  async createIssue(i: { project: string; type: string; title: string; description: string }) {
-    const key = `${i.project}-${this.created.length + 1}`;
-    this.created.push({ key, ...i }); this.coms[key] = []; this.issues[key] = { title: i.title };
+  async create(t: NewTicket) {
+    const key = `${this.prefix}-${this.created.length + 1}`;
+    this.created.push({ key, ...t }); this.coms[key] = []; this.issues[key] = { title: t.title };
     return key;
   }
-  async link(a: string, b: string, t: string) { this.links.push([a, b, t]); }
+  async link(a: string, b: string) { this.links.push([a, b]); }
+  url(key: string) { return `https://tickets.example.test/${key}`; }
+  async check() { return { ok: true, detail: "fake" }; }
   last(key: string) { return this.coms[key].at(-1)!.body; }
   private add(key: string, author: string, body: string) {
     this.coms[key].push({ id: String(++id), author, authorName: author, body, created: "" });
   }
 }
+
+/** The same fake as external and internal connector (or only external with internal=false). */
+export const both = (t: FakeTracker, internal = true): Connectors => ({ external: t, internal: internal ? t : undefined });
+
+const jira = (over: Partial<JiraSettings> = {}): JiraSettings => ({
+  kind: "jira", url: "", user: "", token: "", deployment: "cloud", query: "x", project: "DEV",
+  issueType: "Task", operationalType: "Task", linkType: "Relates", transitions: {}, ...over,
+});
+/** Connector settings for loadConfig in the tests. */
+export const testConnectors = (internal = true): ConnectorsSettings => ({ external: jira({ project: "" }), internal: internal ? jira() : undefined });

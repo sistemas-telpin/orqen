@@ -14,10 +14,11 @@ orqen init               # Run from the repository you want to initialize
 3. Uses an installed AI agent to review a short repository summary in the background. It validates the proposal with Zod. Use `--deep` to let the agent explore the repository or `--no-ai` to use automatic detection only.
 4. Lets you confirm or edit components, the command that starts each part, tests, migrations, and seed commands.
 5. Finds a compatible OpenSpec installation (version 2.x), installs it if needed, and runs `openspec init` for the selected tools with English artifact output.
-6. Collects Jira connection settings, REC and SIS projects, and approvers in the ignored `orqen/.env`. With `--yes`, it uses example values for a new file.
+6. Asks where the tickets live (`conectores` in `orqen/config.yaml`: the external ticket the client sees and an optional internal one, each in Jira, GitHub or Asana) and the approvers; tokens go to the ignored `orqen/.env`. With `--yes`, it keeps what is already configured. `orqen connectors` checks them.
 7. Writes the environment configuration (no Docker in between), agent instructions, plugin, stage guides, and manifest. It merges the OpenSpec workflow rules with the repository's existing configuration.
 
 `init` configures an existing project without requesting, cloning or reading the external stack catalog. It reuses any database scripts already installed in the project; new service scripts come from `bootstrap`.
+
 
 Other options include `--agent "<command>"`, `--tools claude,codex`, and `--no-openspec`. Non-interactive runs use the defaults. If a managed file conflicts, `--yes` writes the proposed version alongside the original.
 
@@ -69,10 +70,10 @@ A planner model (default Opus) splits the task into a dependency graph of small 
 
 ```sh
 orqen pending
-orqen analyze REC-1234
-orqen status SIS-442
-orqen take SIS-442
-orqen complete SIS-442 output.json
+orqen analyze SOP-1234
+orqen status DEV-442
+orqen take DEV-442
+orqen complete DEV-442 output.json
 orqen cycle --loop
 ```
 
@@ -80,7 +81,7 @@ orqen cycle --loop
 
 In `TESTING`, taking the stage starts the full environment, runs the configured suite, and shuts everything down. `orqen cycle --loop` dispatches eligible requests using `AGENT_CMD`. Analysis always requires an analyst.
 
-In the full lane, QA runs `/orqen:review <KEY>` in `QA_REVIEW` and records the decision with `orqen review <KEY> approve|reject`; the direct and light lanes skip QA. Run `orqen pr <KEY>` to inspect the integration target or add an explanation file to open the PR to `DEVEL_BRANCH`; testing opens no PR, so this is the PR the senior reviews. In `CODE_REVIEW`, the senior runs `/orqen:code-review <KEY>`, and `orqen code-review <KEY> <report.md> --verdict <approve|minor|reject>` records the report under `orqen/work/<KEY>/round-N/` and comments it on the SIS without changing the stage.
+In the full lane, QA runs `/orqen:review <KEY>` in `QA_REVIEW` and records the decision with `orqen review <KEY> approve|reject`; the direct and light lanes skip QA. Run `orqen pr <KEY>` to inspect the integration target or add an explanation file to open the PR to `DEVEL_BRANCH`; testing opens no PR, so this is the PR the senior reviews. In `CODE_REVIEW`, the senior runs `/orqen:code-review <KEY>`, and `orqen code-review <KEY> <report.md> --verdict <approve|minor|reject>` records the report under `orqen/work/<KEY>/round-N/` and comments it on the internal ticket (or the external one) without changing the stage.
 
 For an existing checkout, the CLI also reads `cli/.env` and its local state under `cli/.state/`. Use `template/env.example` as the starting point for that configuration.
 

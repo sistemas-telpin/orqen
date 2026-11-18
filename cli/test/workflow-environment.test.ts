@@ -10,7 +10,7 @@ import type { OpenSpecApi } from "../src/workflow/openspec.ts";
 import { Process } from "../src/workflow/process.ts";
 import { Store } from "../src/workflow/store.ts";
 import { GitWorkspace, type Workspace } from "../src/workflow/workspace.ts";
-import { FakeJira } from "./fakes.ts";
+import { both, FakeTracker, testConnectors } from "./fakes.ts";
 
 const fakeOs: OpenSpecApi = {
   newChange: (id) => id, exists: () => true, dir: (id) => id,
@@ -21,30 +21,30 @@ const fakeOs: OpenSpecApi = {
 test("development manages its environment and testing starts apps, runs the suite, and tears down", async () => {
   const pasos: string[] = [];
   const ws: Workspace = {
-    prepareBranch: () => "rec/rec-1", currentBranch: () => "rec/rec-1", commit: () => true, push: () => {}, openPr: () => "",
+    prepareBranch: () => "orqen/req-1", currentBranch: () => "orqen/req-1", commit: () => true, push: () => {}, openPr: () => "",
     startEnvironment: async (all) => { pasos.push(`start(${all ? "all" : "always"})`); return { ok: true, detail: "Entorno ready.", variables: { DATABASE_URL: "x" }, commands: { unitarios: "orqen env test unitarios" } }; },
     stopEnvironment: () => { pasos.push("stop"); },
     runTests: () => { pasos.push("tests"); return { ok: true, output: "" }; },
   };
   const dir = mkdtempSync(join(tmpdir(), "orqen-ent-"));
-  const cfg = loadConfig({ repoPath: dir, stateDir: join(dir, "estado"), factoryDir: join(dir, "factory"), jql: "x", jiraTransitions: {}, approvers: { analysis: [], code: [], client: [] } });
-  const p = new Process(cfg, new FakeJira({ "REC-1": { title: "Ajuste" } }), new Store(cfg.stateDir), ws, fakeOs);
+  const cfg = loadConfig({ repoPath: dir, stateDir: join(dir, "estado"), factoryDir: join(dir, "factory"), connectors: testConnectors(), approvers: { analysis: [], code: [], client: [] } });
+  const p = new Process(cfg, both(new FakeTracker({ "REQ-1": { title: "Ajuste" } })), new Store(cfg.stateDir), ws, fakeOs);
   await p.review();
-  await p.analyze("REC-1", "a", "Ana");
-  await p.complete("REC-1", {
+  await p.analyze("REQ-1", "a", "Ana");
+  await p.complete("REQ-1", {
     summary: "Adjust rounding for the invoice total.", type: "bug", acceptance_criteria: ["c"], affected_capabilities: [], open_questions: [],
     risks: [], ready: true, analyst_ok: true, route: "development", lane: "direct", lane_rationale: "Un solo componente, bajo riesgo.", plan: ["Ajustar (1h)"], estimated_hours: 1,
   }, "a");
   assert.deepEqual(pasos, [], "analysis starts no services");
 
-  const dev = await p.take("REC-1", "impl");
+  const dev = await p.take("REQ-1", "impl");
   assert.deepEqual(pasos, ["start(always)"]);
   assert.equal((dev.context as any).environment.ok, true);
   assert.equal((dev.context as any).environment.commands.unitarios, "orqen env test unitarios");
-  assert.deepEqual(await p.complete("REC-1", { completed: true, changes_summary: "x", modified_files: [], added_tests: [] }, "impl"), { ok: true, next: "TESTING" });
+  assert.deepEqual(await p.complete("REQ-1", { completed: true, changes_summary: "x", modified_files: [], added_tests: [] }, "impl"), { ok: true, next: "TESTING" });
   assert.deepEqual(pasos, ["start(always)", "stop"]);
 
-  await p.take("REC-1", "qa");
+  await p.take("REQ-1", "qa");
   assert.deepEqual(pasos, ["start(always)", "stop", "start(all)", "tests", "stop"]);
 });
 

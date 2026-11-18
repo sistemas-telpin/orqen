@@ -1,7 +1,10 @@
 /** Update the CLI, compatible OpenSpec installation, and managed kit files. */
 import { resolve } from "node:path";
 import semver from "semver";
-import { actualizarVersiones, leerConfig } from "../lib/config.ts";
+import { actualizarVersiones, escribirConfig, leerConfig } from "../lib/config.ts";
+import { leerEnv } from "../lib/env.ts";
+import { legacyToYaml, legacyVarsIn } from "../connectors/legacy.ts";
+import type { ConectoresYaml } from "../connectors/config.ts";
 import { aplicar, leerManifest, planificar } from "../lib/kit.ts";
 import {
   actualizarArchivosOpenSpec, estadoOpenSpec, instalarOpenSpec, RANGO_OPENSPEC, ultimaVersionOpenSpec,
@@ -93,6 +96,19 @@ export async function update(o: OpcionesUpdate) {
         p.log.success(`Kit v${VERSION_CLI}: ${n("crear")} created, ${n("actualizar")} updated, ${n("mantenido")} kept, ${n("guardado-al-lado")} to merge manually`);
         for (const r of res.filter((r) => r.accion === "guardado-al-lado")) p.log.warn(`${r.ruta} → see ${r.detalle}`);
       }
+    }
+  }
+  // 4. Connectors: move the variables of earlier versions (REC_JQL, SIS_PROJECT…) to `conectores` in config.yaml
+  const env = leerEnv(repo) ?? {};
+  const viejas = legacyVarsIn(env);
+  if (!config.conectores && viejas.length) {
+    const bloque = legacyToYaml(env) as ConectoresYaml;
+    p.log.info(`orqen/.env uses variables of an earlier version: ${viejas.join(", ")}`);
+    if (await confirmar("Move where the tickets live to orqen/config.yaml (conectores)? orqen/.env is not modified", true, yes)) {
+      const actual = leerConfig(repo);
+      actual.conectores = bloque;
+      escribirConfig(repo, actual);
+      p.log.success(`conectores written in orqen/config.yaml ${gris("(you can delete REC_JQL and SIS_* from orqen/.env)")}`);
     }
   }
   actualizarVersiones(repo, { cli: VERSION_CLI });

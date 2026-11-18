@@ -5,7 +5,7 @@ import { test } from "node:test";
 import { aplicar, extraerBloque, leerManifest, planificar, type Decision } from "../src/lib/kit.ts";
 import { fusionarConfigOpenSpec } from "../src/lib/openspec.ts";
 import { stageGuideFile } from "../src/lib/stage-guides.ts";
-import { completarEnv, jqlDeProyecto, parsearEnv, proyectoDeJql } from "../src/lib/env.ts";
+import { completarEnv, parsearEnv } from "../src/lib/env.ts";
 import { repoTemporal } from "./helpers.ts";
 
 const vars = { RESUMEN_STACK: "Test stack.", BASE_BRANCH: "main", AGENT_CMD: "claude -p" };
@@ -122,22 +122,23 @@ test("fills .env from the example, preserves comments, and reads it back", () =>
     "JIRA_URL=https://tu-empresa.atlassian.net",
     "JIRA_DEPLOYMENT=cloud            # cloud | server",
     "JIRA_TOKEN=",
-    "REC_JQL=project = REC AND labels = rec-agente AND statusCategory != Done",
+    "APPROVERS_CODE=                  # senior reviewers",
     "# standalone comment",
-    "SIS_PROJECT=SIS",
+    "GITHUB_TOKEN=",
     "",
   ].join("\n");
-  const r = completarEnv(plantilla, { JIRA_URL: "https://acme.atlassian.net", JIRA_DEPLOYMENT: "server", JIRA_TOKEN: "abc#123", REC_JQL: jqlDeProyecto("PAG"), OTRA: "x" });
+  const r = completarEnv(plantilla, { JIRA_URL: "https://acme.atlassian.net", JIRA_DEPLOYMENT: "server", JIRA_TOKEN: "abc#123", APPROVERS_CODE: "ana,beto", OTRA: "x" });
   assert.match(r, /^JIRA_URL=https:\/\/acme\.atlassian\.net$/m);
   assert.match(r, /^JIRA_DEPLOYMENT=server            # cloud \| server$/m);
   assert.match(r, /^JIRA_TOKEN='abc#123'$/m);
   assert.match(r, /# standalone comment/);
-  assert.match(r, /^SIS_PROJECT=SIS$/m, "values not supplied stay as shown in the template");
+  assert.match(r, /^GITHUB_TOKEN=$/m, "values not supplied stay as shown in the template");
+  assert.match(r, /^APPROVERS_CODE=ana,beto                  # senior reviewers$/m);
   assert.match(r, /^OTRA=x$/m);
   const leido = parsearEnv(r);
   assert.equal(leido.JIRA_TOKEN, "abc#123");
   assert.equal(leido.JIRA_DEPLOYMENT, "server");
-  assert.equal(proyectoDeJql(leido.REC_JQL), "PAG");
+  assert.equal(leido.APPROVERS_CODE, "ana,beto");
   // Node parses the same values.
   const repo = repoTemporal();
   writeFileSync(join(repo, "x.env"), r);

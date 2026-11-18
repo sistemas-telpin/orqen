@@ -9,6 +9,6 @@
    [light] - **Lightweight**: Keep the proposal, deltas, and task list focused. Include a short design with Context, Decisions, and Risks.
    [full] - **Full**: Document design decisions and alternatives, migrations, risks, and rollout. Include one spec delta per affected capability.
 3. Cover every acceptance criterion with at least one `#### Scenario:` using WHEN and THEN. For existing capabilities, use their exact path from `openspec list --specs` and the `## MODIFIED Requirements` heading.
-4. End each task with its estimate in hours, for example `- [ ] 1.1 Add an export endpoint (4h)`. Include testing and documentation tasks. Reference the REC key in the proposal's Why section.
+4. End each task with its estimate in hours, for example `- [ ] 1.1 Add an export endpoint (4h)`. Include testing and documentation tasks. Reference the request key in the proposal's Why section.
 5. Run `openspec validate <change> --strict` and fix validation errors. If `human_feedback[].rejection` or an earlier round contains feedback, update the existing artifacts.
 6. Leave implementation for development. orqen commits the spec when analysis closes.

@@ -1,6 +1,6 @@
 ---
 name: grilling
-description: Interview an analyst to reach a shared, testable understanding of a request. Read the repository and Jira first. Use during /orqen:analyze or before specifying a plan or design.
+description: Interview an analyst to reach a shared, testable understanding of a request. Read the repository and the ticket first. Use during /orqen:analyze or before specifying a plan or design.
 ---
 
 # Interview the analyst
@@ -22,7 +22,7 @@ The analyst makes the decisions. Ask questions that uncover ambiguities affectin
    - Whether an operational change can resolve the issue, plus risks and rollback.
 5. Record up to five design-blocking questions only the customer can answer. Do not invent answers.
 6. Record decisions as question-and-answer pairs in `decisions` for `orqen/work/<KEY>/`.
-7. Summarize the scope, exclusions, risks, assumptions, and Given/When/Then acceptance criteria. Ask for explicit approval before proposing a lane or creating a SIS.
+7. Summarize the scope, exclusions, risks, assumptions, and Given/When/Then acceptance criteria. Ask for explicit approval before proposing a lane or creating the internal ticket.
 
 Use clear, direct English and closed questions where possible. If the analyst delegates a decision, record the recommended answer as an assumption. Resolve open design decisions before proposing the lane.
 

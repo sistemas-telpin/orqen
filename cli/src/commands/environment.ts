@@ -32,7 +32,7 @@ async function correr(repo: string, cfg: Config, lineas: string[], etiqueta: str
 /** Quotes an argument for the shell line only when it needs it. */
 const citar = (a: string) => /^[\w@%+=:,./-]+$/.test(a) ? a : `"${a.replace(/(["\\$`])/g, "\\$1")}"`;
 
-export async function entorno(sub: string | undefined, resto: string[], o: { dir?: string; todos?: boolean; extra?: string[] }) {
+export async function entorno(sub: string | undefined, resto: string[], o: { dir?: string; todos?: boolean; json?: boolean; extra?: string[] }) {
   const repo = resolve(o.dir ?? process.cwd());
   const cfg = leerConfig(repo);
   const e = cfg.entornos;
@@ -80,6 +80,7 @@ export async function entorno(sub: string | undefined, resto: string[], o: { dir
     }
     case "status": {
       const st = await estadoProcesos(repo, e.procesos);
+      if (o.json) { console.log(JSON.stringify({ processes: st, variables: e.variables, tests: e.tests }, null, 2)); break; }
       if (!st.length) console.log(pc.dim("No processes configured in orqen/config.yaml (entornos.procesos)."));
       for (const x of st)
         console.log(`${x.corriendo ? pc.green("●") : pc.dim("○")} ${x.nombre.padEnd(16)} ${pc.dim(x.comando)}${x.puerto ? pc.dim(` :${x.puerto}`) : ""}${x.cuando === "e2e" ? pc.dim("  (e2e only)") : ""}${x.log ? pc.dim(`\n    log: ${x.log}`) : ""}`);

@@ -7,8 +7,8 @@ A human analyst leads this stage. Use the `orqen:grilling` skill when available,
 ### 1. Read the context
 
 - Read the issue and the full conversation. Comments with `is_agent: true` come from previous rounds. If `previous_stages.SUPPORT` exists, support already looked at this request: start from its `escalation_summary` and `checked` instead of repeating the work. Look in `human_feedback` for customer answers or the rejection that started this round.
-- Use Jira MCP only to read issues, comments, links, and similar requests. If it is unavailable, use `orqen search '<JQL>'`. orqen handles Jira writes.
-- Read the current specs using `openspec list --specs` and `openspec show <capability>`. Read the implementation where necessary. Ask the analyst only about information you cannot obtain from the repository or Jira.
+- Read tickets, comments, links, and similar requests read-only (an MCP for the ticket tool, or `orqen search '<query>'`). orqen handles ticket writes.
+- Read the current specs using `openspec list --specs` and `openspec show <capability>`. Read the implementation where necessary. Ask the analyst only about information you cannot obtain from the repository or the ticket.
 
 ### 2. Interview the analyst
 
@@ -38,4 +38,4 @@ When unsure, recommend the more rigorous lane and explain why. Once the analyst 
 - Set `ready: true` and `analyst_ok: true` and provide `route`, `lane`, and `lane_rationale` once confirmed. For operational work, use `lane: "direct"`.
 - For direct development, include the ordered `plan` and `estimated_hours`. For a spec change, include `spec` with its assigned `change`, `summary`, and `assumptions`.
 
-`orqen complete` validates the JSON and any spec and task estimates, then creates and links the SIS, records the analysis in `orqen/work/<KEY>/`, and advances the request. Leave `orqen/state/` and Git operations to orqen.
+`orqen complete` validates the JSON and any spec and task estimates, then creates and links the internal ticket (if configured), records the analysis in `orqen/work/<KEY>/`, and advances the request. Leave `orqen/state/` and Git operations to orqen.

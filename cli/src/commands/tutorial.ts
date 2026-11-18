@@ -10,11 +10,15 @@ import { existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { ARCHIVO_CONFIG, leerConfig } from "../lib/config.ts";
-import { leerEnv, proyectoDeJql } from "../lib/env.ts";
+import { leerEnv } from "../lib/env.ts";
+import { connectorSettings } from "../connectors/config.ts";
+import { legacyConnectors } from "../connectors/legacy.ts";
+import { ejemploClave, nombreHerramienta } from "../connectors/describe.ts";
 import { detectarIdioma, normalizarIdioma, type Idioma } from "../lib/lang.ts";
 import { ejecutarLinea } from "../lib/proc.ts";
 import { pasosTutorial, TEMAS, textosUi, type DatosTutorial, type Paso } from "../tutorial/content.ts";
 import { renderMarkdown, renderTerminal } from "../tutorial/render.ts";
+import { pasosApp } from "../tutorial/app.ts";
 import { interactivo, p, pc } from "../ui/console.ts";
 
 /** Closest folder (this one or a parent) with orqen/config.yaml. */
@@ -33,20 +37,24 @@ export function datosDelRepo(repo: string, plataforma: NodeJS.Platform = process
   try { cfg = leerConfig(repo); } catch { /* invalid config: generic examples */ }
   const env = leerEnv(repo) ?? {};
   const real = (v?: string) => (v && !/your-company|tu-empresa/.test(v) ? v : undefined);
-  const recProyecto = proyectoDeJql(env.REC_JQL) ?? "REC";
-  const sisProyecto = (env.SIS_PROJECT || "SIS").trim();
+  const c = cfg?.conectores
+    ? { external: connectorSettings(cfg.conectores.externo, env, cfg.general?.prefijos.requerimientos), internal: cfg.conectores.interno ? connectorSettings(cfg.conectores.interno, env, cfg.general?.prefijos.tickets) : undefined }
+    : legacyConnectors(env);
+  const externo = ejemploClave(c.external, 123);
   return {
     proyecto: cfg?.proyecto.nombre ?? repo.split(/[\\/]/).pop() ?? "",
     procesos: (cfg?.entornos.procesos ?? []).map((x) => ({ nombre: x.nombre, comando: x.comando, puerto: x.puerto, url: x.url, cuando: x.cuando })),
     tests: Object.entries(cfg?.entornos.tests ?? {}).filter(([, v]) => !!v).map(([k]) => k),
-    rec: `${recProyecto}-123`,
-    sis: `${sisProyecto}-456`,
+    externo,
+    interno: c.internal ? ejemploClave(c.internal, 456) : externo,
+    herramienta: nombreHerramienta(c.external.kind),
+    herramientaInterna: c.internal ? nombreHerramienta(c.internal.kind) : undefined,
     soporte: (env.SUPPORT_STAGE ?? "").toLowerCase() === "on",
-    gate: (env.CODE_REVIEW_GATE ?? "").toLowerCase() === "jira" ? "jira" : "github",
+    gate: ["jira", "ticket"].includes((env.CODE_REVIEW_GATE ?? "").toLowerCase()) ? "ticket" : "github",
     ramaDevel: env.DEVEL_BRANCH || "desarrollo",
     windows: plataforma === "win32",
     db: existsSync(join(repo, "orqen", "tools", "db.mjs")),
-    jira: !!(real(env.JIRA_URL) && real(env.JIRA_TOKEN)),
+    conectado: c.external.kind === "jira" ? !!(real(c.external.url) && real(c.external.token)) : c.external.kind === "github" ? !!c.external.repo : !!(c.external.project && c.external.token),
   };
 }
 
@@ -75,7 +83,8 @@ export async function tutorial(args: string[]) {
     process.exitCode = 1;
     return;
   }
-  const pasos = pasosTutorial(datosDelRepo(repo), idioma);
+  const datos = datosDelRepo(repo);
+  const pasos = pasosTutorial(datos, idioma);
   const temas = pasos.map((x, i) => ({ n: i + 1, id: x.id, title: x.titulo }));
 
   if (v.list) {
@@ -93,6 +102,9 @@ export async function tutorial(args: string[]) {
     return;
   }
 
+  const enApp = pasosApp(datos, idioma);
+  const appDe = (x: Paso) => enApp[x.id];
+
   // One step (what the /orqen:tutorial command uses), or a terminal without a keyboard.
   if (v.json || v.step || !interactivo()) {
     const paso = pasos[i];
@@ -102,6 +114,11 @@ export async function tutorial(args: string[]) {
       lang: idioma, step: i + 1, total: pasos.length, id: paso.id, title: paso.titulo,
       next: pasos[i + 1]?.id ?? null, previous: pasos[i - 1]?.id ?? null,
       markdown: renderMarkdown(paso, enc), demo: paso.demo ?? [],
+      // the same step done from the desktop app (the app shows both ways)
+      app: appDe(paso) ? renderMarkdown({ ...paso, bloques: appDe(paso)!.bloques }, enc) : null,
+      screen: appDe(paso)?.pantalla ?? null,
+      // this project's data for the app illustrations (keys, tools, processes)
+      sample: { external: datos.externo, internal: datos.herramientaInterna ? datos.interno : null, tool: datos.herramienta, processes: datos.procesos.map((x) => x.nombre) },
       labels: { next: ui.siguiente, previous: ui.anterior, try: ui.probar, menu: ui.menu, exit: ui.salir, question: ui.queHacer, pickTopic: ui.elegirTema, finished: ui.fin },
       topics: temas,
     }, null, 2));

@@ -1,18 +1,21 @@
 /** Workflow commands shared by the repository wrapper and the installed CLI. */
 import { ejecutar, partirComando } from "../lib/proc.ts";
 import { stageGuideFile } from "../lib/stage-guides.ts";
+import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
+import { userInfo } from "node:os";
 import { join } from "node:path";
-import { loadConfig } from "../workflow/config.ts";
+import { loadConfig, warnLegacy } from "../workflow/config.ts";
 import { jsonSchema } from "../workflow/schemas.ts";
 import { LANES, AGENT_STATES, type AgentState } from "../workflow/states.ts";
-import { JiraClient } from "../workflow/jira.ts";
+import { buildConnectors } from "../connectors/index.ts";
+import { envWithLegacy } from "../connectors/legacy.ts";
 import { OpenSpecCli } from "../workflow/openspec.ts";
 import { Process } from "../workflow/process.ts";
 import { Store } from "../workflow/store.ts";
 import { GitWorkspace } from "../workflow/workspace.ts";
 
-export const WORKFLOW_COMMANDS = ["pending", "support", "analyze", "lane", "take", "complete", "pr", "review", "code-review", "schema", "block", "release", "search", "status", "cycle"];
+export const WORKFLOW_COMMANDS = ["pending", "support", "analyze", "lane", "take", "complete", "pr", "review", "code-review", "schema", "block", "release", "search", "status", "cycle", "connectors"];
 
 export const WORKFLOW_HELP = `Customer request workflow:
   pending [--json]                      List pending analyst and agent work
@@ -24,30 +27,41 @@ export const WORKFLOW_HELP = `Customer request workflow:
   pr <KEY> [<explanation.md>]          Inspect or open the integration PR
   review <KEY> approve|reject [--reason TEXT] [--report FILE]  QA decision (QA_REVIEW, full lane only)
   code-review <KEY> <report.md|-> --verdict <approve|minor|reject>   Record the senior's code review report (CODE_REVIEW)
-  schema <STAGE> · block <KEY> <reason> · release <KEY> · search <JQL>
-  status [KEY] · cycle [--loop]`;
+  schema <STAGE> · block <KEY> <reason> · release <KEY> · search <query>
+  status [KEY] [--json] · cycle [--loop]
+  connectors [setup|get|check <json>|set <json>] [--json] Show/check the connectors, or set them up (get/check/set: used by the app)
+  connectors github-choices <json|-> <external|internal> <repositories|projects> List GitHub choices for a draft`;
+
+/** The person at this machine: Git's user.name for this repository, otherwise the system user. */
+export function quienSoy(repo: string): string | undefined {
+  try {
+    const n = execFileSync("git", ["config", "user.name"], { cwd: repo, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], windowsHide: true }).trim();
+    if (n) return n;
+  } catch { /* no git or no name configured */ }
+  try { return userInfo().username || undefined; } catch { return undefined; }
+}
 
 export async function runWorkflow(cmd: string, rest: string[]) {
   const cfg = loadConfig();
   const store = new Store(cfg.stateDir);
-  const jira = new JiraClient(cfg);
-  const flow = new Process(cfg, jira, store, new GitWorkspace(cfg), new OpenSpecCli(cfg.openspecCmd, cfg.repoPath));
+  warnLegacy(cfg);
+  const connectors = buildConnectors(cfg.connectors);
+  const flow = new Process(cfg, connectors, store, new GitWorkspace(cfg), new OpenSpecCli(cfg.openspecCmd, cfg.repoPath));
 
   const flag = (n: string) => { const i = rest.indexOf(`--${n}`); return i >= 0 ? (rest.splice(i, 2)[1] ?? "") : undefined; };
   const has = (n: string) => { const i = rest.indexOf(`--${n}`); if (i >= 0) rest.splice(i, 1); return i >= 0; };
-  const agent = flag("agent") ?? process.env.REC_AGENT ?? "agent";
-  const analyst = flag("analyst") ?? process.env.REC_ANALYST ?? "";
-  const person = flag("person") ?? process.env.REC_SUPPORT ?? "";
+  const agent = flag("agent") ?? (envWithLegacy(process.env, "ORQEN_AGENT", "REC_AGENT") || "agent");
+  // Who is at this machine (analyst / support person): nobody has to type it. The connector account is usually a
+  // shared bot that writes on the tickets; this name says which person did the work ("Mateo started analyzing…").
+  const analyst = flag("analyst") || envWithLegacy(process.env, "ORQEN_ANALYST", "REC_ANALYST") || quienSoy(cfg.repoPath);
+  const person = flag("person") || envWithLegacy(process.env, "ORQEN_SUPPORT", "REC_SUPPORT") || quienSoy(cfg.repoPath);
 
-  /** Accepts the REC key or its SIS key (the REC's current SIS) and always returns the REC key. */
-  function toRec(key?: string): string {
+  /** Accepts the external key or the current internal key of a known request, and always returns the external key. */
+  function toKey(key?: string): string {
     if (!key || store.get(key)) return key as string;
-    const rec = store.all().find((r) => r.key.toUpperCase() === key.toUpperCase() || r.sis?.toUpperCase() === key.toUpperCase());
-    if (!rec) {
-      if (/^REC-\d+$/i.test(key)) return key;
-      throw new Error(`${key} is neither a REC nor the current SIS of any known REC (if it belongs to a previous round, use the REC key).`);
-    }
-    return rec.key;
+    const item = store.all().find((r) => r.key.toUpperCase() === key.toUpperCase() || r.internal?.toUpperCase() === key.toUpperCase());
+    // unknown key: it is taken as a new external ticket (the connector says whether it exists)
+    return item?.key ?? key;
   }
 
   /** Guide to write the spec by lane (stages/specification.md; lines prefixed with [light] / [full] are filtered). */
@@ -73,14 +87,14 @@ export async function runWorkflow(cmd: string, rest: string[]) {
       : [];
     const withHuman = ctx.human_present !== false;
     return [
-      `# REC ${key} — stage ${s}`,
+      `# ${key} — stage ${s}`,
       "",
       withHuman
         ? "> **You are working with a person.** Before each important step, tell them what you are about to do and wait for their OK. " +
           "When in doubt, ask them (concrete options plus your recommendation) instead of assuming. See \"Working with the person\" in AGENTS.md. " +
           `Talk to them in ${ctx.language === "es" ? "Spanish" : "English"} (their system language).`
         : "> **Unattended mode: nobody can answer you.** Do not assume. If a doubt changes the outcome, run " +
-          `\`orqen block ${key} "<specific question>"\`; a person answers it in Jira.`,
+          `\`orqen block ${key} "<specific question>"\`; a person answers it on the ticket.`,
       "",
       guide(s),
       "",
@@ -103,16 +117,16 @@ export async function runWorkflow(cmd: string, rest: string[]) {
   async function cycle() {
     const pending = (await flow.review()).filter((p) => p.for === "agent" && !p.takenBy);
     for (const p of pending) {
-      const prompt = `Process ${p.key} using the customer request workflow in AGENTS.md. Start with: orqen take ${p.key} --agent cycle`;
+      const prompt = `Process ${p.key} using the request workflow in AGENTS.md. Start with: orqen take ${p.key} --agent cycle`;
       const [bin, ...args] = partirComando(cfg.agentCmd);
       const usesPlaceholder = args.some((arg) => arg.includes("{prompt}"));
       console.log(`→ ${p.key} (${p.state}): ${cfg.agentCmd}`);
       const r = ejecutar(bin, usesPlaceholder ? args.map((arg) => arg.replace("{prompt}", prompt)) : args, {
         cwd: cfg.repoPath, heredar: true, entrada: usesPlaceholder ? undefined : prompt,
-        env: { ...process.env, REC_AGENT: "cycle" },
+        env: { ...process.env, ORQEN_AGENT: "cycle" },
       });
-      const rec = store.get(p.key);
-      if (rec?.state === p.state && rec.lock?.agent === "cycle") {
+      const item = store.get(p.key);
+      if (item?.state === p.state && item.lock?.agent === "cycle") {
         await flow.block(p.key, `The agent finished (code ${r.codigo}) without completing stage ${p.state}.`, "cycle");
       }
     }
@@ -123,7 +137,7 @@ export async function runWorkflow(cmd: string, rest: string[]) {
       case "pending": {
         const p = await flow.review();
         if (has("json")) return console.log(JSON.stringify(p, null, 2));
-        if (!p.length) return console.log("No RECs with pending work.");
+        if (!p.length) return console.log("No requests with pending work.");
         for (const who of ["support", "analyst", "agent"] as const) {
           const xs = p.filter((x) => x.for === who);
           if (!xs.length) continue;
@@ -174,7 +188,7 @@ export async function runWorkflow(cmd: string, rest: string[]) {
       }
       case "take": {
         try {
-          const key = toRec(rest[0]);
+          const key = toKey(rest[0]);
           const { context } = await flow.take(key, agent);
           console.log(renderTake(key, context));
         } catch (e) {
@@ -186,7 +200,7 @@ export async function runWorkflow(cmd: string, rest: string[]) {
       case "complete": {
         const [rawKey, file] = rest;
         let key: string;
-        try { key = toRec(rawKey); } catch (e) { console.error(`✘ ${(e as Error).message}`); process.exitCode = 1; return; }
+        try { key = toKey(rawKey); } catch (e) { console.error(`✘ ${(e as Error).message}`); process.exitCode = 1; return; }
         const text = !file || file === "-" ? readFileSync(0, "utf8") : readFileSync(file, "utf8");
         let data: unknown;
         try { data = JSON.parse(text); } catch (e) { console.error(`✘ Invalid JSON: ${(e as Error).message}`); process.exitCode = 1; return; }
@@ -197,7 +211,7 @@ export async function runWorkflow(cmd: string, rest: string[]) {
       }
       case "pr": {
         try {
-          const key = toRec(rest[0]);
+          const key = toKey(rest[0]);
           if (!rest[1]) return console.log(JSON.stringify(flow.prInfo(key), null, 2));
           const body = rest[1] === "-" ? readFileSync(0, "utf8") : readFileSync(rest[1], "utf8");
           const r = await flow.pr(key, body, flag("title"), agent);
@@ -218,7 +232,7 @@ export async function runWorkflow(cmd: string, rest: string[]) {
         try {
           const reason = flag("reason") ?? "";
           const reportFile = flag("report");
-          const key = toRec(rest[0]);
+          const key = toKey(rest[0]);
           const decision = rest[1] ?? "";
           if (!key || !decision) throw new Error('Usage: orqen review <KEY> approve|reject [--reason "<what to fix>"] [--report <report.md|->]');
           const report = reportFile === undefined ? "" : reportFile === "-" ? readFileSync(0, "utf8") : readFileSync(reportFile, "utf8");
@@ -233,11 +247,11 @@ export async function runWorkflow(cmd: string, rest: string[]) {
       case "code-review": {
         try {
           const verdict = flag("verdict") ?? "";
-          const key = toRec(rest[0]);
+          const key = toKey(rest[0]);
           if (!rest[1]) throw new Error("Usage: orqen code-review <KEY> <report.md|-> --verdict <approve|minor|reject>");
           const body = rest[1] === "-" ? readFileSync(0, "utf8") : readFileSync(rest[1], "utf8");
           const r = await flow.codeReview(key, body, verdict, agent);
-          console.log(`✔ code review #${r.n} (${r.verdict}) → ${r.path}${r.committed ? " (committed)" : " (not committed: not on the REC branch; it goes with the next commit of the branch)"}; ${r.commentedOn ? `commented on ${r.commentedOn}` : "NOT commented on Jira (see the warning): paste it by hand"}`);
+          console.log(`✔ code review #${r.n} (${r.verdict}) → ${r.path}${r.committed ? " (committed)" : " (not committed: not on the request branch; it goes with the next commit of the branch)"}; ${r.commentedOn ? `commented on ${r.commentedOn}` : "NOT commented on the ticket (see the warning): paste it by hand"}`);
         } catch (e) {
           console.error(`✘ ${(e as Error).message}`);
           process.exitCode = 1;
@@ -249,23 +263,117 @@ export async function runWorkflow(cmd: string, rest: string[]) {
         if (!AGENT_STATES.includes(s)) throw new Error(`Invalid stage. Options: ${AGENT_STATES.join(", ")}`);
         return console.log(JSON.stringify(jsonSchema(s), null, 2));
       }
-      case "block": await flow.block(toRec(rest[0]), rest.slice(1).join(" "), agent); return console.log("✔ blocked");
-      case "release": flow.release(toRec(rest[0])); return console.log("✔ released");
+      case "block": await flow.block(toKey(rest[0]), rest.slice(1).join(" "), agent); return console.log("✔ blocked");
+      case "release": flow.release(toKey(rest[0])); return console.log("✔ released");
       case "search": {
-        const keys = (await jira.searchKeys(rest.join(" "))).slice(0, 20);
+        const keys = (await connectors.external.search(rest.join(" "))).slice(0, 20);
         const out = await Promise.all(keys.map(async (k: string) => {
-          const i = await jira.issue(k);
-          return { key: k, title: i.title, status: i.jiraStatus, description: i.description.slice(0, 500) };
+          const i = await connectors.external.ticket(k);
+          return { key: k, title: i.title, status: i.status, url: i.url, description: i.description.slice(0, 500) };
         }));
         return console.log(JSON.stringify(out, null, 2));
       }
       case "status": {
+        if (has("json")) {
+          if (rest[0]) {
+            const item = store.get(toKey(rest[0]));
+            return console.log(JSON.stringify(item ? { ...item, events: store.events(item.key) } : null, null, 2));
+          }
+          return console.log(JSON.stringify(store.all().map((r) => ({
+            key: r.key, state: r.state, internal: r.internal, lane: r.lane, route: r.route, round: r.round, branch: r.branch || undefined,
+            change: r.change || undefined, analyst: r.analyst, supporter: r.supporter, lock: r.lock, devel_pr: r.artifacts.devel_pr,
+            updated: store.events(r.key).at(-1)?.ts,
+          })), null, 2));
+        }
         if (rest[0]) {
-          const key = toRec(rest[0]);
-          const rec = store.get(key);
-          console.log(rec ? JSON.stringify({ ...rec, artifacts: Object.keys(rec.artifacts) }, null, 2) : "unknown");
+          const key = toKey(rest[0]);
+          const item = store.get(key);
+          console.log(item ? JSON.stringify({ ...item, artifacts: Object.keys(item.artifacts) }, null, 2) : "unknown");
           for (const ev of store.events(key)) console.log(`  ${ev.ts}  ${ev.from} → ${ev.to}  ${ev.detail}`);
-        } else for (const r of store.all()) console.log(`${r.key.padEnd(12)} ${r.state.padEnd(15)} ${(r.sis ?? "").padEnd(12)} ${r.change ?? ""}`);
+        } else for (const r of store.all()) console.log(`${r.key.padEnd(12)} ${r.state.padEnd(15)} ${(r.internal ?? "").padEnd(12)} ${r.change ?? ""}`);
+        return;
+      }
+      case "connectors": {
+        // used by the desktop app: {"conectores": {...}, "env": {"JIRA_TOKEN": "..."}} on stdin or in a file
+        const draftInput = () => JSON.parse(!rest[1] || rest[1] === "-" ? readFileSync(0, "utf8") : readFileSync(rest[1], "utf8"));
+        if (rest[0] === "general-get" || rest[0] === "general-set") {
+          const { leerConfig, escribirConfig } = await import("../lib/config.ts");
+          const { generalSettings, updateGeneral } = await import("../lib/general-settings.ts");
+          const config = leerConfig(cfg.repoPath);
+          const hasHistory = store.all().length > 0;
+          if (rest[0] === "general-get") return console.log(JSON.stringify({ general: generalSettings(config), hasHistory }));
+          const updated = updateGeneral(config, draftInput(), hasHistory);
+          escribirConfig(cfg.repoPath, updated);
+          return console.log(JSON.stringify({ general: updated.general, hasHistory }));
+        }
+        // the app's editor: current values (tokens masked) and a check of a draft before saving it
+        if (rest[0] === "get") {
+          const { connectorsView } = await import("../lib/connectors-edit.ts");
+          const { existeConfig, leerConfig } = await import("../lib/config.ts");
+          const { leerEnv } = await import("../lib/env.ts");
+          const conectores = existeConfig(cfg.repoPath) ? leerConfig(cfg.repoPath).conectores : undefined;
+          return console.log(JSON.stringify({ ...connectorsView(conectores, leerEnv(cfg.repoPath) ?? {}), legacy: cfg.connectors.legacy ?? [] }, null, 2));
+        }
+        if (rest[0] === "github-choices") {
+          const { githubChoices, parseDraft } = await import("../lib/connectors-edit.ts");
+          const { leerEnv } = await import("../lib/env.ts");
+          return console.log(JSON.stringify(await githubChoices(parseDraft(draftInput()), { ...process.env, ...(leerEnv(cfg.repoPath) ?? {}) }, rest[2], rest[3]), null, 2));
+        }
+        if (rest[0] === "check") {
+          const { checkDraft, parseDraft } = await import("../lib/connectors-edit.ts");
+          const { leerEnv } = await import("../lib/env.ts");
+          const result = await checkDraft(parseDraft(draftInput()), { ...process.env, ...(leerEnv(cfg.repoPath) ?? {}) });
+          return console.log(JSON.stringify({ connectors: result }, null, 2));
+        }
+        if (rest[0] === "set") {
+          const { parseDraft } = await import("../lib/connectors-edit.ts");
+          const { leerConfig, escribirConfig } = await import("../lib/config.ts");
+          const { leerEnv, escribirEnv, RUTA_ENV } = await import("../lib/env.ts");
+          const { existsSync } = await import("node:fs");
+          const draft = parseDraft(draftInput());
+          const config = leerConfig(cfg.repoPath);
+          config.conectores = draft.conectores;
+          if (config.general) {
+            const { updateGeneral } = await import("../lib/general-settings.ts");
+            config.conectores = updateGeneral(config, config.general, false).conectores;
+          }
+          escribirConfig(cfg.repoPath, config);
+          const env = draft.env;
+          if (Object.keys(env).length) {
+            const plantilla = join(cfg.repoPath, "orqen", ".env.example");
+            escribirEnv(cfg.repoPath, existsSync(plantilla) ? readFileSync(plantilla, "utf8") : "", { ...(leerEnv(cfg.repoPath) ?? {}), ...env });
+          }
+          return console.log(`✔ Connectors saved in orqen/config.yaml${Object.keys(env).length ? ` and ${RUTA_ENV}` : ""}`);
+        }
+        if (rest[0] === "setup") {
+          const { askConnectors } = await import("../lib/connectors-setup.ts");
+          const { leerConfig, escribirConfig } = await import("../lib/config.ts");
+          const { leerEnv, escribirEnv, RUTA_ENV } = await import("../lib/env.ts");
+          const { existsSync } = await import("node:fs");
+          const config = leerConfig(cfg.repoPath);
+          const env = leerEnv(cfg.repoPath) ?? {};
+          const r = await askConnectors(cfg.repoPath, config.conectores, env);
+          config.conectores = r.conectores;
+          escribirConfig(cfg.repoPath, config);
+          const plantilla = join(cfg.repoPath, "orqen", ".env.example");
+          escribirEnv(cfg.repoPath, existsSync(plantilla) ? readFileSync(plantilla, "utf8") : "", { ...env, ...r.env });
+          console.log(`✔ Saved in orqen/config.yaml (conectores) and ${RUTA_ENV}. Check them with: orqen connectors`);
+          return;
+        }
+        const show = async (role: "external" | "internal") => {
+          const t = connectors[role];
+          if (!t) return { role, configured: false };
+          const s = cfg.connectors[role]!;
+          return { role, configured: true, kind: t.kind, label: t.label, transitions: s.transitions, ...(await t.check()) };
+        };
+        const out = [await show("external"), await show("internal")];
+        if (has("json")) return console.log(JSON.stringify({ connectors: out, legacy: cfg.connectors.legacy ?? [] }, null, 2));
+        for (const c of out) {
+          const name = c.role === "external" ? "Requirements (what the client sees)" : "Tickets (development work)";
+          if (!c.configured) { console.log(`${name}: not configured — the team works only on the external ticket.`); continue; }
+          console.log(`${name}: ${"label" in c ? c.label : ""}\n  ${"ok" in c && c.ok ? "✔" : "✘"} ${"detail" in c ? c.detail : ""}`);
+        }
+        if (out.some((c) => "ok" in c && !c.ok)) process.exitCode = 1;
         return;
       }
       case "cycle":

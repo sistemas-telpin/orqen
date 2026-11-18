@@ -27,14 +27,16 @@ export interface DatosTutorial {
   proyecto: string;
   procesos: ProcesoTutorial[];
   tests: string[];
-  rec: string;            // example REC key, e.g. REC-123
-  sis: string;            // example SIS key, e.g. SIS-456
+  externo: string;        // example key of an external ticket (what the client sees), e.g. SOP-123
+  interno: string;        // example key of an internal ticket; without internal connector, the external key
+  herramienta: string;    // where the external ticket lives: Jira, GitHub, Asana
+  herramientaInterna?: string; // where the internal ticket lives (absent: no internal ticket)
   soporte: boolean;       // SUPPORT_STAGE=on
-  gate: "github" | "jira";
+  gate: "github" | "ticket";
   ramaDevel: string;
   windows: boolean;
   db: boolean;            // orqen/tools/db.mjs exists
-  jira: boolean;          // Jira connection configured
+  conectado: boolean;     // external connector configured
 }
 
 export const TEMAS = ["welcome", "words", "map", "next", "pending", "analysis", "implement", "review", "watch", "env", "problems", "cheatsheet"] as const;
@@ -71,7 +73,7 @@ export function pasosTutorial(d: DatosTutorial, i: Idioma): Paso[] {
   const seguirLog = d.windows
     ? `Get-Content orqen\\state\\logs\\${unLog}.log -Wait -Tail 50`
     : `tail -f orqen/state/logs/${unLog}.log`;
-  const recNum = d.rec, sisNum = d.sis;
+  const recNum = d.externo, sisNum = d.interno, H = d.herramienta, HI = d.herramientaInterna;
 
   const pasos: Paso[] = [
     {
@@ -82,8 +84,8 @@ export function pasosTutorial(d: DatosTutorial, i: Idioma): Paso[] {
           `Este tutorial te muestra, paso a paso, cómo se trabaja con orqen en este proyecto (${d.proyecto}). Son ${TEMAS.length} pasos cortos.`,
           `This tutorial shows you, step by step, how to work with orqen in this project (${d.proyecto}). It has ${TEMAS.length} short steps.`) },
         { t: "p", texto: tx(
-          "orqen lleva un pedido del cliente desde que entra en Jira hasta que se entrega. Vos tomás las decisiones. Un agente de IA (Claude) hace el trabajo pesado: lee, escribe código y corre los tests.",
-          "orqen takes a customer request from the moment it arrives in Jira until it is delivered. You make the decisions. An AI agent (Claude) does the heavy lifting: it reads, writes code, and runs the tests.") },
+          `orqen lleva un pedido del cliente desde que entra en ${H} hasta que se entrega. Vos tomás las decisiones. Un agente de IA (Claude) hace el trabajo pesado: lee, escribe código y corre los tests.`,
+          `orqen takes a customer request from the moment it arrives in ${H} until it is delivered. You make the decisions. An AI agent (Claude) does the heavy lifting: it reads, writes code, and runs the tests.`) },
         { t: "h", texto: tx("Vas a usar dos lugares", "You will use two places") },
         { t: "ul", items: [
           tx("La terminal: ahí escribís comandos que empiezan con `orqen` (por ejemplo `orqen status`). Sirven para mirar cómo están las cosas.",
@@ -99,10 +101,10 @@ export function pasosTutorial(d: DatosTutorial, i: Idioma): Paso[] {
       titulo: tx("5 palabras que vas a escuchar", "5 words you will hear"),
       bloques: [
         { t: "ul", items: [
-          tx(`REC: el pedido del cliente en Jira (por ejemplo ${recNum}). Es la conversación con el cliente.`,
-            `REC: the customer request in Jira (for example ${recNum}). It is the conversation with the customer.`),
-          tx(`SIS: la tarea de desarrollo que nace cuando se analiza el REC (por ejemplo ${sisNum}). Ahí se sigue el trabajo técnico.`,
-            `SIS: the development task created when the REC is analyzed (for example ${sisNum}). It tracks the technical work.`),
+          tx(`Ticket externo: el pedido del cliente en ${H} (por ejemplo ${recNum}). Es lo que ve el cliente y donde se habla con él.`,
+            `External ticket: the customer request in ${H} (for example ${recNum}). It is what the customer sees and where you talk to them.`),
+          ...(HI ? [tx(`Ticket interno: la tarea del equipo que nace cuando se analiza el pedido (por ejemplo ${sisNum}, en ${HI}). Ahí se sigue el trabajo técnico; el cliente no la ve.`,
+            `Internal ticket: the team's task created when the request is analyzed (for example ${sisNum}, in ${HI}). It tracks the technical work; the customer does not see it.`)] : []),
           tx("Etapa: dónde está el pedido ahora (análisis, desarrollo, testing…). Un pedido está en una sola etapa por vez.",
             "Stage: where the request is right now (analysis, development, testing…). A request is in one stage at a time."),
           tx("Agente: Claude trabajando en este repo. Propone, te pregunta y espera tu OK antes de cada paso importante.",
@@ -110,8 +112,8 @@ export function pasosTutorial(d: DatosTutorial, i: Idioma): Paso[] {
           tx("Carril: qué tan grande es el cambio. direct = chico, light = mediano, full = grande. Lo elige el analista.",
             "Lane: how big the change is. direct = small, light = medium, full = large. The analyst picks it."),
         ] },
-        { t: "tip", texto: tx("Casi todos los comandos aceptan la clave del REC o la del SIS: usá la que tengas a mano.",
-          "Almost every command accepts either the REC key or the SIS key: use whichever you have.") },
+        ...(HI ? [{ t: "tip" as const, texto: tx("Casi todos los comandos aceptan la clave del ticket externo o la del interno: usá la que tengas a mano.",
+          "Almost every command accepts either the external or the internal ticket key: use whichever you have.") }] : []),
       ],
     },
     {
@@ -153,8 +155,8 @@ export function pasosTutorial(d: DatosTutorial, i: Idioma): Paso[] {
         { t: "ol", items: [
           tx("Termina una etapa del agente: con tu OK, el agente corre `orqen complete`. orqen revisa que esté todo bien y lo pasa a la etapa siguiente.",
             "An agent stage ends: with your OK, the agent runs `orqen complete`. orqen checks that everything is right and moves it to the next stage."),
-          tx("Una persona decide: aprueba o rechaza en Jira (comentando `/approve` o `/reject motivo`) o en el PR de GitHub.",
-            "A person decides: approves or rejects in Jira (commenting `/approve` or `/reject reason`) or on the GitHub PR."),
+          tx(`Una persona decide: aprueba o rechaza en ${H} (comentando \`/approve\` o \`/reject motivo\`) o en el PR de GitHub.`,
+            `A person decides: approves or rejects in ${H} (commenting \`/approve\` or \`/reject reason\`) or on the GitHub PR.`),
         ] },
         { t: "h", texto: tx("Qué hacer en cada etapa", "What to do in each stage") },
         { t: "pre", lineas: [
@@ -167,10 +169,10 @@ export function pasosTutorial(d: DatosTutorial, i: Idioma): Paso[] {
           tx(` CODE_REVIEW   desarrollo   /orqen:pr ${sisNum}  (abre el PR)`, ` CODE_REVIEW   developer    /orqen:pr ${sisNum}  (opens the PR)`),
           d.gate === "github"
             ? tx(`               senior       /orqen:code-review ${sisNum}, después Approve en GitHub`, `               senior       /orqen:code-review ${sisNum}, then Approve on GitHub`)
-            : tx(`               senior       /orqen:code-review ${sisNum}, después /approve en Jira`, `               senior       /orqen:code-review ${sisNum}, then /approve in Jira`),
+            : tx(`               senior       /orqen:code-review ${sisNum}, después /approve en ${H}`, `               senior       /orqen:code-review ${sisNum}, then /approve in ${H}`),
           tx(" DELIVERY      nadie        automático", " DELIVERY      nobody       automatic"),
-          tx(" ACCEPTANCE    cliente      /approve o /reject en Jira", " ACCEPTANCE    customer     /approve or /reject in Jira"),
-          tx(" BLOCKED       aprobador    /approve <qué hacer> en Jira", " BLOCKED       approver     /approve <what to do> in Jira"),
+          tx(` ACCEPTANCE    cliente      /approve o /reject en ${H}`, ` ACCEPTANCE    customer     /approve or /reject in ${H}`),
+          tx(` BLOCKED       aprobador    /approve <qué hacer> en ${H}`, ` BLOCKED       approver     /approve <what to do> in ${H}`),
         ] },
         { t: "tip", texto: tx(
           `Cada comando /orqen: hace UNA etapa y se detiene. Al final te dice qué sigue y quién lo hace. Si no sabés en qué etapa está un pedido: orqen status ${recNum}`,
@@ -191,26 +193,29 @@ export function pasosTutorial(d: DatosTutorial, i: Idioma): Paso[] {
         { t: "tip", texto: tx("Si `orqen status` no muestra nada, todavía no pasó ningún pedido por orqen en esta copia del repo. Es normal al principio.",
           "If `orqen status` shows nothing, no request has gone through orqen in this copy of the repository yet. That is normal at first.") },
       ],
-      demo: ["orqen status", ...(d.jira ? ["orqen pending"] : [])],
+      demo: ["orqen status", ...(d.conectado ? ["orqen pending", "orqen connectors"] : [])],
     },
     {
       id: "analysis",
       titulo: tx("Analizar un pedido (analista)", "Analyze a request (analyst)"),
       bloques: [
         { t: "h", texto: CC },
-        { t: "cmd", lineas: [tx(`/orqen:analyze ${recNum} Tu Nombre`, `/orqen:analyze ${recNum} Your Name`)] },
+        { t: "cmd", lineas: [`/orqen:analyze ${recNum}`] },
         { t: "h", texto: tx("Qué va a pasar", "What will happen") },
         { t: "ol", items: [
-          tx("El agente toma el pedido y lee el REC, sus comentarios y el código.", "The agent takes the request and reads the REC, its comments, and the code."),
+          tx("El agente toma el pedido y lee el ticket externo, sus comentarios y el código.", "The agent takes the request and reads the external ticket, its comments, and the code."),
           tx("Te hace preguntas para entender bien qué hay que hacer. Contestá con tus palabras o elegí una opción.", "It asks you questions to understand what needs doing. Answer in your own words or pick an option."),
           tx("Te muestra un resumen: qué hay que hacer y cómo se va a probar. Si está bien, decile que sí.", "It shows you a summary: what needs doing and how it will be tested. If it is right, say yes."),
           tx("Te propone un carril (direct, light o full). Confirmalo o cambialo.", "It proposes a lane (direct, light, or full). Confirm it or change it."),
           tx("Si es light o full, escriben juntos la especificación: qué tiene que hacer el sistema.", "For light or full, you write the specification together: what the system must do."),
-          tx("Con tu OK, cierra el análisis: orqen crea el SIS en Jira y lo vincula al REC.", "With your OK, it closes the analysis: orqen creates the SIS in Jira and links it to the REC."),
+          HI ? tx(`Con tu OK, cierra el análisis: orqen crea el ticket interno en ${HI} y lo vincula al pedido.`, `With your OK, it closes the analysis: orqen creates the internal ticket in ${HI} and links it to the request.`)
+            : tx("Con tu OK, cierra el análisis y se lo cuenta al cliente en el ticket.", "With your OK, it closes the analysis and tells the customer on the ticket."),
         ] },
         { t: "h", texto: LISTO },
-        { t: "p", texto: tx(`El agente te dice algo como "Listo. Se creó ${sisNum}. Sigue DEVELOPMENT." Esa clave SIS es la que usa desarrollo.`,
-          `The agent says something like "Done. ${sisNum} was created. Next: DEVELOPMENT." Developers use that SIS key.`) },
+        { t: "p", texto: HI ? tx(`El agente te dice algo como "Listo. Se creó ${sisNum}. Sigue DEVELOPMENT." Esa clave es la que usa desarrollo.`,
+          `The agent says something like "Done. ${sisNum} was created. Next: DEVELOPMENT." Developers use that key.`)
+          : tx(`El agente te dice algo como "Listo. Sigue DEVELOPMENT." Desarrollo usa la misma clave ${recNum}.`,
+          `The agent says something like "Done. Next: DEVELOPMENT." Developers use the same key ${recNum}.`) },
         { t: "tip", texto: d.soporte
           ? tx(`En este proyecto hay soporte: los pedidos nuevos pasan primero por /orqen:support ${recNum}. Si soporte no puede responderle al cliente, te lo pasa con un resumen.`,
                `This project has support: new requests go first through /orqen:support ${recNum}. If support cannot answer the customer, it hands it to you with a summary.`)
@@ -262,8 +267,8 @@ export function pasosTutorial(d: DatosTutorial, i: Idioma): Paso[] {
         { t: "p", texto: d.gate === "github"
           ? tx("El agente revisa el PR y le da al senior un informe. Después el senior entra al PR en GitHub y pone Approve (sigue la entrega) o Request changes (vuelve a desarrollo con sus comentarios).",
                "The agent reviews the PR and gives the senior a report. Then the senior opens the PR on GitHub and clicks Approve (delivery comes next) or Request changes (it goes back to development with the comments).")
-          : tx("El agente revisa el PR y le da al senior un informe. Después el senior comenta en Jira /approve (sigue la entrega) o /reject motivo (vuelve a desarrollo).",
-               "The agent reviews the PR and gives the senior a report. Then the senior comments /approve (delivery comes next) or /reject reason (back to development) in Jira.") },
+          : tx(`El agente revisa el PR y le da al senior un informe. Después el senior comenta en ${H} /approve (sigue la entrega) o /reject motivo (vuelve a desarrollo).`,
+               `The agent reviews the PR and gives the senior a report. Then the senior comments /approve (delivery comes next) or /reject reason (back to development) in ${H}.`) },
       ],
     },
     {
@@ -329,8 +334,8 @@ export function pasosTutorial(d: DatosTutorial, i: Idioma): Paso[] {
           tx("El agente hace algo que no querés → Esc, y escribile qué querés.", "The agent does something you do not want → Esc, and tell it what you want."),
           tx(`No sabés en qué etapa está un pedido → orqen status ${recNum}`, `You do not know which stage a request is in → orqen status ${recNum}`),
           tx(`Dice que el pedido lo tiene otra persona → esperá. Si nadie lo está usando: orqen release ${recNum}`, `It says someone else has the request → wait. If nobody is using it: orqen release ${recNum}`),
-          tx(`El pedido quedó en BLOCKED → orqen status ${recNum} te dice por qué. Un aprobador lo destraba comentando /approve <qué hacer> en Jira.`,
-            `The request is BLOCKED → orqen status ${recNum} tells you why. An approver unblocks it by commenting /approve <what to do> in Jira.`),
+          tx(`El pedido quedó en BLOCKED → orqen status ${recNum} te dice por qué. Un aprobador lo destraba comentando /approve <qué hacer> en ${H}.`,
+            `The request is BLOCKED → orqen status ${recNum} tells you why. An approver unblocks it by commenting /approve <what to do> in ${H}.`),
           tx("Algo del entorno no prende → orqen env status y mirá su log. Si el puerto está ocupado, cerrá lo que lo está usando.", "Part of the environment does not start → orqen env status and read its log. If the port is busy, close whatever is using it."),
           tx('No aparecen los comandos /orqen: en Claude Code → cerralo, abrilo en la carpeta del repo y aceptá "Trust this folder". Si sigue igual: orqen update.',
             'The /orqen: commands do not show up in Claude Code → close it, open it in the repository folder, and accept "Trust this folder". If that does not help: orqen update.'),
@@ -356,8 +361,8 @@ export function pasosTutorial(d: DatosTutorial, i: Idioma): Paso[] {
           tx(`   /orqen:e2e-review ${sisNum.padEnd(11)} diseñador de tests`, `   /orqen:e2e-review ${sisNum.padEnd(11)} test designer`),
           tx(`   /orqen:code-review ${sisNum.padEnd(10)} senior`, `   /orqen:code-review ${sisNum.padEnd(10)} senior`),
           "",
-          tx(" DECIDIR (Jira / GitHub)", " DECIDE (Jira / GitHub)"),
-          tx("   /approve   /reject motivo     comentario en el REC", "   /approve   /reject reason     comment on the REC"),
+          tx(` DECIDIR (${H} / GitHub)`, ` DECIDE (${H} / GitHub)`),
+          tx("   /approve   /reject motivo     comentario en el ticket externo", "   /approve   /reject reason     comment on the external ticket"),
           ...(d.gate === "github" ? [tx("   Approve / Request changes     review en el PR de GitHub (senior)", "   Approve / Request changes     review on the GitHub PR (senior)")] : []),
           "",
           tx(" ENTORNO (terminal)", " ENVIRONMENT (terminal)"),

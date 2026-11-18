@@ -22,7 +22,7 @@ export interface PrReview { id: string; author: string; state: string; commit: s
 export interface Workspace {
   prepareBranch(key: string): string;
   currentBranch(): string;
-  /** `path` limits the commit to that path; `branch` commits only if it is the active branch (avoids committing on another REC's branch). */
+  /** `path` limits the commit to that path; `branch` commits only if it is the active branch (avoids committing on another request's branch). */
   commit(key: string, message: string, opts?: { path?: string; branch?: string }): boolean;
   /** Install dependencies, start the processes (all, or only `cuando: siempre`), wait until ready, migrate and seed. */
   startEnvironment?(all: boolean): Promise<EnvironmentResult>;
@@ -34,6 +34,10 @@ export interface Workspace {
   prReviews?(url: string): { head: string; reviews: PrReview[] };
 }
 
+/** Branch where a request is developed. */
+export const branchFor = (key: string) => `orqen/${key.toLowerCase()}`;
+const legacyBranchFor = (key: string) => `rec/${key.toLowerCase()}`;
+
 export class GitWorkspace implements Workspace {
   constructor(private cfg: Config) {}
   private git = (...args: string[]) =>
@@ -42,7 +46,8 @@ export class GitWorkspace implements Workspace {
   currentBranch() { return this.git("rev-parse", "--abbrev-ref", "HEAD"); }
 
   prepareBranch(key: string) {
-    const branch = `rec/${key.toLowerCase()}`;
+    const legacy = legacyBranchFor(key);   // requests started with an earlier version keep their branch
+    const branch = this.git("branch", "--list", legacy) ? legacy : branchFor(key);
     if (this.currentBranch() === branch) return branch;
     if (this.git("status", "--porcelain", "--untracked-files=no", ...this.excludeFactory()))
       throw new Error("The repo has uncommitted changes; cannot switch branches");
@@ -142,7 +147,7 @@ export class GitWorkspace implements Workspace {
 
   openPr(vars: Record<string, string>, command: string) {
     if (!command) return "";
-    // values come from Jira: they are sanitized so they cannot inject shell
+    // values come from the tickets: they are sanitized so they cannot inject shell
     const cmd = command.replace(/\{(\w+)\}/g, (_, k) => (vars[k] ?? "").replace(/["'`$\\;|&<>]/g, ""));
     const p = spawnSync(cmd, { shell: true, cwd: this.cfg.repoPath, encoding: "utf8" });
     return (p.stdout || p.stderr || "").trim();

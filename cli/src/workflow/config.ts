@@ -4,12 +4,15 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { TEMPLATES_DIR } from "../lib/template-assets.ts";
 import { existeConfig, leerConfig, type Config as ProjectConfig } from "../lib/config.ts";
+import { type ConnectorsSettings, connectorSettings } from "../connectors/config.ts";
+import { envWithLegacy, legacyConnectors, LEGACY_VARS } from "../connectors/legacy.ts";
 
-export const REC_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
+export const CLI_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 
 const env = (k: string, d = "") => process.env[k] ?? d;
 const split = (v: string) => v.split(",").map((s) => s.trim()).filter(Boolean);
-const kv = (v: string) => Object.fromEntries(split(v).map((p) => p.split("=").map((s) => s.trim())));
+/** New variable name, falling back to the one used by earlier versions. */
+const envL = (k: string, legacy: string, d = "") => envWithLegacy(process.env, k, legacy, d);
 
 function repoRoot(): string {
   try {
@@ -20,22 +23,19 @@ function repoRoot(): string {
 }
 
 export interface Config {
-  jiraUrl: string; jiraUser: string; jiraToken: string; jiraDeployment: "cloud" | "server";
-  jql: string;
+  /** Where the tickets live: external (what the client sees) and optional internal (the team's). See connectors/. */
+  connectors: ConnectorsSettings;
   /** SUPPORT_STAGE=on: `orqen pending` sends new requests to the support person first. `orqen support` works either way, and the analyst can still take a NEW one directly. */
   supportStage: boolean;
-  /** analysis = analysts (they also unblock BLOCKED together with code). */
+  /** analysis = analysts (they also unblock BLOCKED together with code). Accounts of the external connector. */
   approvers: { analysis?: string[]; code: string[]; client: string[]; execution?: string[] };
-  jiraTransitions: Record<string, string>;
-  /** SIS: issue created in another Jira project when the analysis closes (all lanes). */
-  sis: { project: string; type: string; link: string; transitions: Record<string, string>; operationalType: string };
-  factoryDir: string;       // per-REC record and state: orqen/work/<KEY>/ (committed with the branch)
+  factoryDir: string;       // record and state of each request: orqen/work/<KEY>/ (committed with the branch)
   repoPath: string; baseBranch: string; testCommand: string;
-  /** `orqen pr`: integration branch ("desarrollo"/"devel") the REC branch is sent to, and the command that opens that PR. */
+  /** `orqen pr`: integration branch ("desarrollo"/"devel") the request branch is sent to, and the command that opens that PR. */
   develBranch: string; develPrCommand: string;
-  /** Who decides in CODE_REVIEW: the review on the PR in GitHub (approvers.code = GitHub logins) or `/approve`/`/reject` in Jira. */
-  codeReviewGate: "github" | "jira";
-  /** GitHub logins whose reviews count in CODE_REVIEW when codeReviewGate is github (empty = any reviewer). Separate from approvers.code, which are Jira accounts. */
+  /** Who decides in CODE_REVIEW: the review on the PR in GitHub or `/approve`/`/reject` on the external ticket. */
+  codeReviewGate: "github" | "ticket";
+  /** GitHub logins whose reviews count in CODE_REVIEW when codeReviewGate is github (empty = any reviewer). Separate from approvers.code, which are accounts of the external connector. */
   githubReviewers: string[];
   openspecCmd: string;
   stateDir: string; lockMinutes: number; stagesDir: string;
@@ -53,9 +53,9 @@ export function loadConfig(over: Partial<Config> = {}): Config {
   const localState = join(repoPath, "cli", ".state");
   const baseBranch = env("BASE_BRANCH", project?.proyecto.rama_base ?? "main");
   return {
-    jiraUrl: env("JIRA_URL"), jiraUser: env("JIRA_USER"), jiraToken: env("JIRA_TOKEN"),
-    jiraDeployment: env("JIRA_DEPLOYMENT", "cloud") as "cloud" | "server",
-    jql: env("REC_JQL", "project = REC AND labels = rec-agente AND statusCategory != Done"),
+    connectors: project?.conectores
+      ? { external: connectorSettings(project.conectores.externo, process.env, project.general?.prefijos.requerimientos), internal: project.conectores.interno ? connectorSettings(project.conectores.interno, process.env, project.general?.prefijos.tickets) : undefined }
+      : legacyConnectors(process.env),
     supportStage: ["on", "true", "1", "yes"].includes(env("SUPPORT_STAGE").toLowerCase()),
     approvers: {
       analysis: split(env("APPROVERS_ANALYSIS")),
@@ -63,28 +63,33 @@ export function loadConfig(over: Partial<Config> = {}): Config {
       client: split(env("APPROVERS_CLIENT")),
       execution: split(env("APPROVERS_EXECUTION")),
     },
-    jiraTransitions: kv(env("JIRA_TRANSITIONS")),
-    sis: {
-      project: env("SIS_PROJECT", "SIS"), type: env("SIS_TYPE", "Task"), link: env("SIS_LINK", "Relates"),
-      transitions: kv(env("SIS_TRANSITIONS")),
-      operationalType: env("SIS_TYPE_OPERATIONAL") || env("SIS_TYPE", "Task"),
-    },
     factoryDir: env("FACTORY_DIR") || join(repoPath, "orqen", "work"),
     repoPath,
     baseBranch,
     testCommand: env("TEST_COMMAND", "npm test"),
     develBranch: env("DEVEL_BRANCH", "desarrollo"),
     develPrCommand: env("DEVEL_PR_COMMAND", 'gh pr create --base {base} --head {branch} --title "{key}: {title}" --body-file {body}'),
-    codeReviewGate: env("CODE_REVIEW_GATE", "github") === "jira" ? "jira" : "github",
+    // "jira" is the name used by earlier versions for "ticket"
+    codeReviewGate: ["ticket", "jira"].includes(env("CODE_REVIEW_GATE", "github")) ? "ticket" : "github",
     githubReviewers: split(env("GITHUB_REVIEWERS")),
     openspecCmd: env("OPENSPEC_CMD") && env("OPENSPEC_CMD") !== "openspec" ? env("OPENSPEC_CMD") : existsSync(localOpenSpec) ? localOpenSpec : "openspec",
-    stateDir: env("REC_STATE_DIR") || (existsSync(localState) || !project ? localState : join(repoPath, "orqen", "state")),
+    stateDir: envL("ORQEN_STATE_DIR", "REC_STATE_DIR") || (existsSync(localState) || !project ? localState : join(repoPath, "orqen", "state")),
     stagesDir: stages ?? join(TEMPLATES_DIR, "stages"),
     environment: project?.entornos,
-    lockMinutes: Number(env("REC_LOCK_MIN", "90")),
+    lockMinutes: Number(envL("ORQEN_LOCK_MIN", "REC_LOCK_MIN", "90")),
     // Headless agent command for `orqen cycle`. {prompt} is replaced (already escaped).
     agentCmd: env("AGENT_CMD") || project?.agente.comando || "claude -p --permission-mode acceptEdits",
-    intervalSec: Number(env("REC_INTERVAL_SEC", "120")),
+    intervalSec: Number(envL("ORQEN_INTERVAL_SEC", "REC_INTERVAL_SEC", "120")),
     ...over,
   };
+}
+
+let warned = false;
+/** Warns once when orqen/.env still uses the variables of earlier versions. */
+export function warnLegacy(cfg: Config) {
+  const used = cfg.connectors.legacy ?? [];
+  if (warned || !used.length) return;
+  warned = true;
+  console.error(`[orqen] orqen/.env uses variables of an earlier version (${used.join(", ")}). They still work; ` +
+    `run \`orqen update\` to move them to \`conectores\` in orqen/config.yaml (${used.map((k) => `${k} → ${LEGACY_VARS[k]}`).join(", ")}).`);
 }

@@ -8,6 +8,7 @@ import { buscarPaso, buscarRepo, datosDelRepo } from "../src/commands/tutorial.t
 import { detectarIdioma, normalizarIdioma } from "../src/lib/lang.ts";
 import { pasosTutorial, TEMAS, type DatosTutorial } from "../src/tutorial/content.ts";
 import { renderMarkdown, renderTerminal } from "../src/tutorial/render.ts";
+import { pasosApp } from "../src/tutorial/app.ts";
 
 test("normalizarIdioma: Spanish variants are es, anything else is en, C/POSIX/empty mean nothing", () => {
   for (const v of ["es", "es-AR", "es_ES.UTF-8", "Spanish", "español", '"es-419"']) assert.equal(normalizarIdioma(v), "es", v);
@@ -27,8 +28,8 @@ const base: DatosTutorial = {
     { nombre: "api", comando: "npm run dev", puerto: 3000, cuando: "siempre" },
     { nombre: "web", comando: "npm run dev", puerto: 5173, cuando: "e2e" },
   ],
-  tests: ["unitarios"], rec: "REC-123", sis: "SIS-456", soporte: false, gate: "github", ramaDevel: "desarrollo",
-  windows: false, db: true, jira: true,
+  tests: ["unitarios"], externo: "SOP-123", interno: "DEV-456", herramienta: "Jira", herramientaInterna: "Jira", soporte: false, gate: "github", ramaDevel: "desarrollo",
+  windows: false, db: true, conectado: true,
 };
 
 test("both languages have the same steps, in order, and render without placeholders", () => {
@@ -54,14 +55,16 @@ test("steps use the repository's data: processes, URLs, keys, gate, platform", (
   assert.match(env({ ...base, procesos: [] }, "en"), /No parts are configured/);
 
   const next = (d: DatosTutorial) => renderMarkdown(pasosTutorial(d, "en").find((p) => p.id === "next")!, "x");
-  assert.match(next({ ...base, rec: "RECL-123", sis: "DEV-456" }), /\/orqen:analyze RECL-123[\s\S]*\/orqen:implement DEV-456/);
+  assert.match(next({ ...base, externo: "SOPL-123", interno: "DEV-456" }), /\/orqen:analyze SOPL-123[\s\S]*\/orqen:implement DEV-456/);
   assert.match(next(base), /Approve on GitHub/);
-  assert.match(next({ ...base, gate: "jira" }), /then \/approve in Jira/);
+  assert.match(next({ ...base, gate: "ticket" }), /then \/approve in Jira/);
+  assert.match(next({ ...base, gate: "ticket", herramienta: "GitHub" }), /then \/approve in GitHub/);
+  assert.match(next({ ...base, herramientaInterna: undefined, interno: "SOP-123" }), /\/orqen:implement SOP-123/);
   assert.doesNotMatch(next(base), /SUPPORT/);
   assert.match(next({ ...base, soporte: true }), /SUPPORT\s+support\s+\/orqen:support/);
 });
 
-test("buscarPaso accepts a number or an id; buscarRepo walks up to orqen/config.yaml; datosDelRepo reads .env", () => {
+test("buscarPaso accepts a number or an id; buscarRepo walks up to orqen/config.yaml; datosDelRepo reads the .env of earlier versions", () => {
   const pasos = pasosTutorial(base, "es");
   assert.equal(buscarPaso(pasos, "1"), 0);
   assert.equal(buscarPaso(pasos, "env"), TEMAS.indexOf("env"));
@@ -73,14 +76,26 @@ test("buscarPaso accepts a number or an id; buscarRepo walks up to orqen/config.
   mkdirSync(join(repo, "orqen"), { recursive: true });
   mkdirSync(join(repo, "src", "deep"), { recursive: true });
   writeFileSync(join(repo, "orqen", "config.yaml"), "version: 1\n");
-  writeFileSync(join(repo, "orqen", ".env"), "REC_JQL=project = RECL AND labels = x\nSIS_PROJECT=DEV\nSUPPORT_STAGE=on\nCODE_REVIEW_GATE=jira\nJIRA_TOKEN=secret\n");
+  writeFileSync(join(repo, "orqen", ".env"), "REC_JQL=project = SOPL AND labels = x\nSIS_PROJECT=DEV\nSUPPORT_STAGE=on\nCODE_REVIEW_GATE=jira\nJIRA_TOKEN=secret\n");
   assert.equal(buscarRepo(join(repo, "src", "deep")), repo);
   const d = datosDelRepo(repo, "win32");
-  assert.equal(d.rec, "RECL-123");
-  assert.equal(d.sis, "DEV-456");
+  assert.equal(d.externo, "SOPL-123");
+  assert.equal(d.interno, "DEV-456");
   assert.equal(d.soporte, true);
-  assert.equal(d.gate, "jira");
+  assert.equal(d.gate, "ticket");
   assert.equal(d.windows, true);
-  assert.equal(d.jira, false);   // no JIRA_URL
+  assert.equal(d.conectado, false);   // no JIRA_URL
   assert.doesNotMatch(JSON.stringify(pasosTutorial(d, "es")), /secret/);
+});
+
+test("pasosApp: every step also says how to do it in the desktop app, in both languages", () => {
+  const d: DatosTutorial = { proyecto: "demo", procesos: [], tests: [], externo: "SOP-1", interno: "DEV-2", herramienta: "Jira", herramientaInterna: "Jira",
+    soporte: false, gate: "github", ramaDevel: "develop", windows: false, db: false, conectado: true };
+  for (const idioma of ["es", "en"] as const) {
+    const app = pasosApp(d, idioma);
+    for (const id of TEMAS) {
+      assert.ok(app[id]?.bloques.length, `${idioma}/${id}`);
+      assert.ok(!app[id].pantalla || ["pending", "env", "connectors"].includes(app[id].pantalla!), id);
+    }
+  }
 });

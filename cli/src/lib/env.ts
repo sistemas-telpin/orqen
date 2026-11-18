@@ -1,5 +1,5 @@
 /**
- * Read and write Git-ignored Jira credentials, project settings, and approvers in orqen/.env.
+ * Read and write Git-ignored connector credentials (tokens), settings, and approvers in orqen/.env.
  * `orqen init` lo genera a partir de orqen/.env.example con lo que la persona contesta.
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -55,7 +55,3 @@ export function escribirEnv(repo: string, plantilla: string, valores: Record<str
   mkdirSync(dirname(p), { recursive: true });
   writeFileSync(p, completarEnv(plantilla, valores));
 }
-
-export const jqlDeProyecto = (proyecto: string) => `project = ${proyecto} AND labels = rec-agente AND statusCategory != Done`;
-/** Proyecto de un JQL del estilo "project = REC AND ..." (para proponerlo como valor por defecto). */
-export const proyectoDeJql = (jql: string | undefined) => jql?.match(/project\s*=\s*"?([A-Za-z][\w-]*)"?/i)?.[1];

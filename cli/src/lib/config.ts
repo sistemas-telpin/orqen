@@ -7,13 +7,18 @@ import { parseDocument, stringify } from "yaml";
 import { z } from "zod";
 import { ProcesoEntorno } from "./processes.ts";
 import { Stack } from "./stack.ts";
+import { ConectoresYaml } from "../connectors/config.ts";
 
 export const ARCHIVO_CONFIG = "orqen/config.yaml";
+
+const Prefijo = z.string().trim().regex(/^[A-Za-z][A-Za-z0-9_]{0,19}$/, "Usá letras, números o guion bajo; empezá con una letra (máximo 20 caracteres).").transform((v) => v.toUpperCase());
+export const General = z.object({ prefijos: z.object({ requerimientos: Prefijo, tickets: Prefijo }) });
 
 export const Config = z.object({
   version: z.literal(1),
   orqen: z.object({ cli: z.string(), kit: z.string() }),
   proyecto: z.object({ nombre: z.string(), rama_base: z.string().default("main") }),
+  general: General.optional(),
   agente: z.object({ comando: z.string().nullish() }).default({}),
   openspec: z.object({
     version: z.string().nullish(),
@@ -21,6 +26,8 @@ export const Config = z.object({
     herramientas: z.array(z.string()).default(["claude"]),
   }),
   stack: Stack,
+  /** Where the tickets live (external = what the client sees, internal = optional team ticket). */
+  conectores: ConectoresYaml.nullish(),
   entornos: z.object({
     /** How each part of the project starts (npm run dev, npm start, mvn spring-boot:run…), without Docker in between. */
     procesos: z.array(ProcesoEntorno).default([]),

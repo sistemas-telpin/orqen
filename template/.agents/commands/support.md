@@ -1,25 +1,25 @@
 ---
 description: Handle a new customer request as first-line support, answer the customer when possible, and otherwise escalate it to the analyst
-argument-hint: REC-1234 [support person name]
+argument-hint: <KEY>
 allowed-tools: Bash(orqen:*), Read, Grep, Glob, Write, Skill, AskUserQuestion
 ---
 
-Handle the customer request in `$ARGUMENTS` with the support person who invoked this command. The first argument is the issue key. Use any remaining text as the person's name, or ask once and remember it. Work from the repository root and follow the customer request workflow in `AGENTS.md`.
+Handle the customer request in `$ARGUMENTS` with the support person who invoked this command. The argument is the issue key. Do not ask for the person's name: orqen takes it from this machine (`git config user.name`). Only if the person asks to sign with another name, add `--person "<name>"` to `orqen support`. Work from the repository root and follow the customer request workflow in `AGENTS.md`.
 
 ## Rules
 
-- **Talk to the person in their system language.** Run `orqen lang` once at the start (`es` = Spanish, `en` = English; the stage context also has it as `language`) and use it for every message, question, and option. Keep commands, state names, and paths as they are. Files and texts for Jira follow their own rules.
+- **Talk to the person in their system language.** Run `orqen lang` once at the start (`es` = Spanish, `en` = English; the stage context also has it as `language`) and use it for every message, question, and option. Keep commands, state names, and paths as they are. Files and texts posted on the tickets follow their own rules.
 - **Work with the person who invoked this command.** Before each important step, tell them what you are about to do and wait for their OK. When in doubt, ask them (with `AskUserQuestion` when available: concrete options plus your recommendation); never assume what you can ask. After each step, report what you did and what comes next.
-- Read-only on code and Jira (Jira MCP or `orqen search`). orqen posts the comment on the request. Do not edit code, tests, specs, or configuration.
+- Read-only on code and tickets (an MCP for the ticket tool, or `orqen search`). orqen posts the comment on the request. Do not edit code, tests, specs, or configuration.
 - Leave Git operations and writes to `orqen/state/` and `orqen/work/` to orqen.
 - Never promise dates, scope, or changes to the customer. Require the person's explicit approval of the outcome and of the exact text that reaches the customer.
 
 ## Steps
 
-1. Check that the argument is a REC issue key, such as `REC-1234`. If it is missing or invalid, ask for it and stop.
+1. Check that the argument is the key of the external ticket (the client's request). If it is missing, ask for it and stop.
 2. Claim the request and load the stage instructions, context, and output schema:
    ```sh
-   orqen support <KEY> --person "<name>" --agent support
+   orqen support <KEY> --agent support
    ```
    If this fails, explain the reason to the person and stop.
 3. Read the issue and comments, then look for the answer: similar requests, the documented behavior in `openspec/specs/`, and the code when needed. Report what you found.

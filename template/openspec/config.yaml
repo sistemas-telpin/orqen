@@ -2,12 +2,12 @@
 schema: spec-driven
 
 context: |
-  This repository uses Jira for customer requests (REC). Each change corresponds to a REC
+  This repository receives customer requests as tickets (Jira, GitHub or Asana; see `conectores` in orqen/config.yaml). Each change corresponds to a request
   and starts with its issue key, for example rec-123-export-invoices.
 
 rules:
   proposal:
-    - In "Why", cite the REC key and explain the customer's business problem.
+    - In "Why", cite the request key and explain the customer's business problem.
     - Include an "Out of scope" section under "What Changes".
   specs:
     - Cover every acceptance criterion with at least one Scenario using WHEN and THEN.

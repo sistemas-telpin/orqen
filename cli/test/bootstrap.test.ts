@@ -73,3 +73,39 @@ test("bootstrap refuses non-empty destinations and unknown stacks, and lists cus
   assert.equal(old.code, 1);
   assert.match(old.output, /Unknown command: create/);
 });
+
+test("bootstrap --list --json and --describe --json give the app the catalog, parameters and requirements", () => {
+  const list = cli("bootstrap", "--list", "--json");
+  assert.equal(list.code, 0, list.output);
+  assert.deepEqual(JSON.parse(list.output).stacks, [{ id: "example", nombre: "Example stack", descripcion: "Synthetic test catalog" }]);
+  const d = cli("bootstrap", "Facturación Web", "--describe", "example", "--json");
+  assert.equal(d.code, 0, d.output);
+  const info = JSON.parse(d.output);
+  assert.equal(info.carpeta, "facturacion-web");
+  assert.equal(info.parametros[0].id, "PORT");
+  assert.match(info.parametros[0].defecto, /^\d+$/);
+  assert.deepEqual(info.requisitos, []);
+  const bad = cli("bootstrap", "--describe", "nope", "--json");
+  assert.equal(bad.code, 1);
+  assert.match(JSON.parse(bad.output).error, /Unknown stack "nope"/);
+});
+
+test("without a catalog, --list --json says a stack repository is needed", () => {
+  const r = spawnSync(process.execPath, [TSX, CLI, "bootstrap", "--list", "--json"], {
+    encoding: "utf8", env: { ...process.env, NO_COLOR: "1", ORQEN_TOOLS_DIR: join(repoTemporal(), "no-catalog"), ORQEN_TOOLS_REPO: "" },
+  });
+  assert.equal(r.status, 1);
+  const out = JSON.parse(r.stdout);
+  assert.equal(out.needsRepo, true);
+  assert.match(out.error, /stack repository is required/);
+});
+
+test("bootstrap --params sets parameter values and rejects invalid ones", () => {
+  const dir = join(repoTemporal(), "project");
+  const r = cli("bootstrap", "Payments", "--dir", dir, "--stack", "example", "--yes", "--no-openspec", "--params", '{"PORT":"9123"}');
+  assert.equal(r.code, 0, r.output);
+  assert.match(readFileSync(join(dir, "README.md"), "utf8"), /Port: 9123/);
+  const bad = cli("bootstrap", "Payments", "--dir", join(repoTemporal(), "other"), "--stack", "example", "--yes", "--no-openspec", "--params", '{"PORT":"70000"}');
+  assert.equal(bad.code, 1);
+  assert.match(bad.output, /Port: A port is a number between 1 and 65535/);
+});

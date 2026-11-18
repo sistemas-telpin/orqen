@@ -1,0 +1,27 @@
+[package]
+name = "orqen-desktop"
+version = "0.1.0"
+edition = "2021"
+description = "ORQEN — AI Software Factory Kit (desktop app)"
+license = "MIT"
+
+[[bin]]
+name = "orqen-desktop"
+path = "src/main.rs"
+
+[dependencies]
+gpui = "0.2.2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+anyhow = "1"
+unicode-segmentation = "1"
+env_logger = "0.11"
+
+[profile.dev]
+opt-level = 1
+[profile.dev.package."*"]
+opt-level = 2
+
+# xattr 0.2.3 (through gpui_http_client) uses libc::ENOATTR, which recent libc removed on Linux.
+[patch.crates-io]
+xattr = { path = "patches/xattr" }

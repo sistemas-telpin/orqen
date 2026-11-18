@@ -1,5 +1,5 @@
 /**
- * OpenSpec integration (>= 2.0). Each REC (and each round) is an OpenSpec "change":
+ * OpenSpec integration (>= 2.0). Each request (and each round) is an OpenSpec "change":
  *   SPECIFICATION → openspec new change + the agent writes proposal/specs/design/tasks
  *   DEVELOPMENT   → the agent follows `openspec instructions apply` and ticks tasks.md
  *   TESTING       → the Scenarios of the spec deltas are the coverage checklist

@@ -6,9 +6,11 @@
  */
 import { basename, resolve } from "node:path";
 import { agentesInstalados, comandoRapido, explorarConAgente, explorarRapidoAislado, type ResultadoExploracion } from "../lib/agent.ts";
-import { ARCHIVO_CONFIG, entornosDesdeStack, escribirConfig, existeConfig, type Config } from "../lib/config.ts";
+import { ARCHIVO_CONFIG, entornosDesdeStack, escribirConfig, existeConfig, leerConfig, type Config } from "../lib/config.ts";
 import { detectar } from "../lib/detect.ts";
-import { escribirEnv, jqlDeProyecto, leerEnv, proyectoDeJql, RUTA_ENV } from "../lib/env.ts";
+import { escribirEnv, leerEnv, RUTA_ENV } from "../lib/env.ts";
+import { askConnectors, missingSecrets } from "../lib/connectors-setup.ts";
+import type { ConectoresYaml } from "../connectors/config.ts";
 import { aplicar, marketplace, planificar, type Cambio, type Decision, MARKETPLACE } from "../lib/kit.ts";
 import {
   estadoOpenSpec, esRepoNode, inicializarOpenSpec, instalarOpenSpec,
@@ -136,8 +138,9 @@ export async function init(o: OpcionesInit) {
   if (!o.sinOpenspec) openspecCfg = await prepararOpenSpec(repo, agentes.map((a) => a.id), o.herramientas, yes);
   const rama = await texto("Base branch for request branches and pull requests", ramaBase(repo), yes);
 
-  // Collect Jira settings while the agent works.
-  const datosEnv = await pedirEnv(repo, yes);
+  // Ask where the tickets live (and the approvers) while the agent works.
+  const pedido = await pedirConectores(repo, yes);
+  const datosEnv = pedido.env;
 
   // 4. Review the proposal.
   if (enCurso) {
@@ -165,6 +168,7 @@ export async function init(o: OpcionesInit) {
     agente: { comando: comandoAgente },
     openspec: openspecCfg,
     stack,
+    ...(pedido.conectores ? { conectores: pedido.conectores } : {}),
     entornos: pre ? pre.entornos : entornosDesdeStack(stack),
   };
   const vars = { RESUMEN_STACK: resumenStack(stack), BASE_BRANCH: config.proyecto.rama_base, AGENT_CMD: comandoAgente ? `${comandoAgente}` : "claude -p --permission-mode acceptEdits" };
@@ -184,14 +188,15 @@ export async function init(o: OpcionesInit) {
     p.log.success(`${RUTA_ENV} created ${gris("(ignored by Git)")}`);
   }
   const env = leerEnv(repo) ?? {};
-  const faltanEnv = ["JIRA_URL", "JIRA_USER", "JIRA_TOKEN"].filter((k) => !env[k] || /your-company|tu-empresa/.test(env[k]));
+  const faltanEnv = config.conectores ? missingSecrets(config.conectores, env) : [];
   const lado = res.filter((r) => r.accion === "guardado-al-lado");
   p.log.success(`${ARCHIVO_CONFIG} and kit v${VERSION_CLI} installed`);
   for (const r of lado) p.log.warn(`${r.ruta}: the proposed version is in ${r.detalle} for you to merge`);
 
   const mk = marketplace(existsSync(join(repo, MARKETPLACE)) ? readFileSync(join(repo, MARKETPLACE), "utf8") : undefined).nombre;
   const pasos = [
-    ...(faltanEnv.length ? [`Complete ${pc.cyan(RUTA_ENV)}: missing ${faltanEnv.join(", ")}. Git ignores this file.`] : []),
+    ...(!config.conectores ? [`Connect where the tickets live: ${pc.cyan("orqen connectors setup")} (Jira, GitHub or Asana).`] : []),
+    ...(faltanEnv.length ? [`Complete ${pc.cyan(RUTA_ENV)}: missing ${faltanEnv.join(", ")}. Git ignores this file. Then check with ${pc.cyan("orqen connectors")}.`] : []),
     `Review ${pc.cyan(ARCHIVO_CONFIG)}, then try: ${pc.cyan("orqen env up")} · ${pc.cyan("orqen env test")} · ${pc.cyan("orqen env down")}`,
     `Open Claude Code in this folder (restart it if it was open) and accept ${pc.bold("Trust this folder")}: ` +
       `the commands appear as ${pc.cyan("/orqen:tutorial")} (start here if you are new), ${pc.cyan("/orqen:support")}, ${pc.cyan("/orqen:analyze")}, ${pc.cyan("/orqen:implement")}, ${pc.cyan("/orqen:e2e-review")}, ${pc.cyan("/orqen:pr")} ` +
@@ -204,41 +209,30 @@ export async function init(o: OpcionesInit) {
 }
 
 /**
- * Collect Jira and approver settings. Return undefined to keep the existing file.
- * With --yes, use template values for a new file.
+ * Ask where the tickets live (external = what the client sees, internal = optional team ticket) and the approvers.
+ * Keeps the previous `conectores` and orqen/.env when the person does not want to review them; with --yes nothing is asked.
  */
-async function pedirEnv(repo: string, yes: boolean): Promise<Record<string, string> | undefined> {
+async function pedirConectores(repo: string, yes: boolean): Promise<{ conectores?: ConectoresYaml; env?: Record<string, string> }> {
   const actual = leerEnv(repo);
-  if (yes) return actual ? undefined : {};
-  if (actual && !(await confirmar(`Found an existing ${RUTA_ENV}. Review its settings?`, false, false))) return undefined;
+  let previos: ConectoresYaml | undefined;
+  try { previos = existeConfig(repo) ? leerConfig(repo).conectores ?? undefined : undefined; } catch { previos = undefined; }
+  if (yes) return { conectores: previos, env: actual ? undefined : {} };
+  const hay = !!previos || !!actual;
+  if (hay && !(await confirmar(`Connectors are already configured. Review them?`, false, false))) return { conectores: previos, env: undefined };
+  if (!(await confirmar(`Connect where the tickets live now (Jira, GitHub or Asana)? ${gris(`(tokens go to ${RUTA_ENV}, which Git ignores)`)}`, true, false)))
+    return { conectores: previos, env: actual ? undefined : {} };
   const previo = (k: string) => (actual?.[k] && !/your-company|tu-empresa/.test(actual[k]) ? actual[k] : "");
-  if (!(await confirmar(`Configure the Jira connection now? ${gris(`(saved in ${RUTA_ENV}, which Git ignores)`)}`, true, false))) return actual ? undefined : {};
-
-  const v: Record<string, string> = {};
-  v.JIRA_URL = (await textoValidado("Jira URL", previo("JIRA_URL"),
-    (x) => (/^https?:\/\/[^\s/]+\.[^\s]+$/.test(x) ? undefined : "Enter a URL, for example https://your-company.atlassian.net"),
-    "https://your-company.atlassian.net")).replace(/\/+$/, "");
-  v.JIRA_DEPLOYMENT = await elegir("Jira Cloud or Server / Data Center?", [
-    { value: "cloud", label: "Cloud", hint: "*.atlassian.net" },
-    { value: "server", label: "Server / Data Center" },
-  ], (previo("JIRA_DEPLOYMENT") as "cloud" | "server") || (/atlassian\.net/.test(v.JIRA_URL) ? "cloud" : "server"), false);
-  v.JIRA_USER = await textoValidado("Jira account used to create issues and post comments (bot email)", previo("JIRA_USER"),
-    (x) => (x ? undefined : "Enter a Jira account"), "bot@your-company.com");
-  const token = await secreto(`API token for this account ${gris(previo("JIRA_TOKEN") ? "(Enter to keep the existing token)" : "(Enter to skip)")}`);
-  if (token) v.JIRA_TOKEN = token;
-  const rec = await texto("Jira project key for customer requests", proyectoDeJql(actual?.REC_JQL) ?? "REC", false);
-  v.REC_JQL = jqlDeProyecto((rec || "REC").toUpperCase());
-  v.SIS_PROJECT = ((await texto("Jira project key for implementation issues", previo("SIS_PROJECT") || "SIS", false)) || "SIS").toUpperCase();
-
+  const r = await askConnectors(repo, previos, actual ?? {});
+  const v: Record<string, string> = { ...r.env };
   if (await confirmar(`Configure stage approvers? ${gris("(otherwise anyone can approve)")}`, false, false)) {
-    const pedir = (k: string, quien: string) => texto(`${quien} ${gris("(comma-separated Jira users, empty for anyone)")}`, previo(k), false);
+    const pedir = (k: string, quien: string) => texto(`${quien} ${gris("(comma-separated accounts of the external ticket tool, empty for anyone)")}`, previo(k), false);
     v.APPROVERS_CODE = await pedir("APPROVERS_CODE", "Code review");
     v.APPROVERS_CLIENT = await pedir("APPROVERS_CLIENT", "Customer acceptance");
     v.APPROVERS_ANALYSIS = await pedir("APPROVERS_ANALYSIS", "Analysts who can unblock requests");
     v.APPROVERS_EXECUTION = await pedir("APPROVERS_EXECUTION", "Operational changes (database or infrastructure)");
   }
   // Keep existing settings that were not prompted for.
-  return { ...actual, ...v };
+  return { conectores: r.conectores, env: { ...actual, ...v } };
 }
 
 /** Let the agent inspect the repository directly. */

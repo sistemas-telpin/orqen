@@ -10,8 +10,8 @@ import { escribirConfig, leerConfig } from "../src/lib/config.ts";
 import { normalizar } from "../src/lib/kit.ts";
 import { ejecutarAsync } from "../src/lib/proc.ts";
 import { bajarProcesos } from "../src/lib/processes.ts";
-import { type Rec, Store } from "../src/workflow/store.ts";
-import { FakeJira } from "./fakes.ts";
+import { type WorkItem, Store } from "../src/workflow/store.ts";
+import { both, FakeTracker, testConnectors } from "./fakes.ts";
 import { catalogoTemporal, repoTemporal } from "./helpers.ts";
 
 export const CLI = fileURLToPath(new URL("../dist/index.js", import.meta.url));
@@ -30,7 +30,7 @@ export async function workflowFixture(t: TestContext, deployment = "server") {
   writeFileSync(join(repo, "package.json"), JSON.stringify({ name: "e2e-project", type: "module", scripts: { test: "node test.mjs" } }));
   writeFileSync(join(repo, "export.mjs"), "export const exportCsv = () => '';\n");
   writeFileSync(join(repo, "test.mjs"), "import assert from 'node:assert/strict'; import { exportCsv } from './export.mjs'; assert.equal(exportCsv([{n: 1}]), 'n\\n1');\n");
-  const jira = new FakeJira({ "REC-7": { title: "Export invoices to CSV", description: "Accounting needs a CSV export", labels: ["rec-agente"] } });
+  const jira = new FakeTracker({ "REQ-7": { title: "Export invoices to CSV", description: "Accounting needs a CSV export", labels: ["orqen"] } });
   const requests: string[] = [];
   let failLinks = 0;
   const server = createServer(async (req, res) => {
@@ -41,15 +41,16 @@ export async function workflowFixture(t: TestContext, deployment = "server") {
       requests.push(`${req.method} ${path}`);
       let raw = ""; for await (const part of req) raw += part;
       const body = raw ? JSON.parse(raw) : {};
-      if (req.method === "GET" && ["/rest/api/2/search", "/rest/api/3/search/jql"].includes(path)) return send(200, { issues: Object.keys(jira.issues).filter((key) => key.startsWith((url.searchParams.get("jql")?.match(/project\s*=\s*([A-Z]+)/i)?.[1] ?? "REC") + "-")).map((key) => ({ key })) });
+      if (req.method === "GET" && ["/rest/api/2/search", "/rest/api/3/search/jql"].includes(path)) return send(200, { issues: Object.keys(jira.issues).filter((key) => key.startsWith((url.searchParams.get("jql")?.match(/project\s*=\s*([A-Z]+)/i)?.[1] ?? "REQ") + "-")).map((key) => ({ key })) });
       if (path === "/rest/api/2/issue" && req.method === "POST") {
         const f = body.fields;
-        const key = await jira.createIssue({ project: f.project.key, type: f.issuetype.name, title: f.summary, description: f.description });
+        assert.equal(f.project.key, "DEV"); assert.equal(f.issuetype.name, "Task");
+        const key = await jira.create({ route: "development", title: f.summary, description: f.description, labels: f.labels });
         return send(201, { key });
       }
       if (path === "/rest/api/2/issueLink" && req.method === "POST") {
         if (failLinks-- > 0) return send(503, { error: "temporary link failure" });
-        await jira.link(body.inwardIssue.key, body.outwardIssue.key, body.type.name); return send(201, {});
+        assert.equal(body.type.name, "Relates"); await jira.link(body.inwardIssue.key, body.outwardIssue.key); return send(201, {});
       }
       const match = path.match(/^\/rest\/api\/2\/issue\/([A-Z]+-\d+)(?:\/(comment|transitions))?$/);
       if (!match || !jira.issues[match[1]]) return send(404, { error: "unknown endpoint or issue" });
@@ -63,7 +64,7 @@ export async function workflowFixture(t: TestContext, deployment = "server") {
         return send(200, { transitions: transitions.map((name, id) => ({ id: String(id), name })) });
       }
       if (req.method === "PUT") { Object.assign(jira.issues[key], body.fields); return send(204, {}); }
-      const issue = await jira.issue(key);
+      const issue = await jira.ticket(key);
       return send(200, { key, fields: { summary: issue.title, description: issue.description, labels: issue.labels, status: { name: "Open" } } });
     } catch (e) { send(500, { error: (e as Error).message }); }
   });
@@ -74,12 +75,11 @@ export async function workflowFixture(t: TestContext, deployment = "server") {
   writeFileSync(prScript, "console.log('https://github.example.test/team/project/pull/1');\n");
   const env: NodeJS.ProcessEnv = {
     ...process.env, NO_COLOR: "1", ORQEN_LANG: "en", ORQEN_TOOLS_DIR: catalog, ORQEN_TOOLS_REPO: "@example/catalog",
-    REPO_PATH: repo, REC_STATE_DIR: stateDir, FACTORY_DIR: join(repo, "orqen/work"), BASE_BRANCH: "main",
+    REPO_PATH: repo, ORQEN_STATE_DIR: stateDir, FACTORY_DIR: join(repo, "orqen/work"), BASE_BRANCH: "main",
     JIRA_URL: `http://127.0.0.1:${port}`, JIRA_DEPLOYMENT: deployment, JIRA_USER: "bot@example.test", JIRA_TOKEN: "test-only",
-    REC_JQL: "project = REC", REC_AGENT: "e2e", SUPPORT_STAGE: "on", SIS_PROJECT: "SIS", SIS_TYPE: "Task", SIS_LINK: "Relates",
-    SIS_TRANSITIONS: "DEVELOPMENT=In Progress,CLOSED=Done", JIRA_TRANSITIONS: "CLOSED=Done",
+    ORQEN_AGENT: "e2e", SUPPORT_STAGE: "on",
     APPROVERS_ANALYSIS: "analyst", APPROVERS_CODE: "senior", APPROVERS_CLIENT: "client", APPROVERS_EXECUTION: "dba",
-    CODE_REVIEW_GATE: "jira", GITHUB_REVIEWERS: "senior", DEVEL_BRANCH: "desarrollo",
+    CODE_REVIEW_GATE: "ticket", GITHUB_REVIEWERS: "senior", DEVEL_BRANCH: "desarrollo",
     DEVEL_PR_COMMAND: `node "${prScript}"`, OPENSPEC_CMD: OPENSPEC, TEST_COMMAND: "node test.mjs",
     OPENSPEC_TELEMETRY_DISABLED: "1",
   };
@@ -91,15 +91,15 @@ export async function workflowFixture(t: TestContext, deployment = "server") {
     assert.equal(result.codigo, options.exit ?? 0, `orqen ${args.join(" ")}\n${result.stdout}\n${result.stderr}\nTranscript: ${transcript}`);
     return result.stdout;
   }
-  const record = () => new Store(stateDir).get("REC-7")!;
+  const record = () => new Store(stateDir).get("REQ-7")!;
   const context = (output: string) => JSON.parse(output.match(/## Context\s+```json\s+([\s\S]*?)```/)![1]);
   const complete = (key: string, data: unknown, exit = 0) => command(["complete", key, "-"], { input: JSON.stringify(data), exit });
   async function human(author: string, message: string) {
-    jira.human("REC-7", author, message);
+    jira.human("REQ-7", author, message);
     await command(["pending", "--json"]);
     return record();
   }
-  function state(expected: Rec["state"]) { assert.equal(record().state, expected); }
+  function state(expected: WorkItem["state"]) { assert.equal(record().state, expected); }
   function file(path: string, content: string) { mkdirSync(join(repo, path, ".."), { recursive: true }); writeFileSync(join(repo, path), content); }
   t.after(async () => {
     bajarProcesos(repo);
@@ -109,6 +109,10 @@ export async function workflowFixture(t: TestContext, deployment = "server") {
   await command(["init", "--yes", "--no-ai", "--no-openspec"]);
   const config = leerConfig(repo);
   config.entornos = { procesos: [], variables: {}, preparar: [], migrar: [], seed: [], tests: { unitarios: "node test.mjs" } };
+  config.conectores = {
+    externo: { tipo: "jira", filtro: "project = REQ", transiciones: { CLOSED: "Done" } },
+    interno: { tipo: "jira", proyecto: "DEV", tipo_ticket: "Task", vinculo: "Relates", transiciones: { DEVELOPMENT: "In Progress", CLOSED: "Done" } },
+  };
   escribirConfig(repo, config);
   git("add", "."); git("commit", "-qm", "Initialize fixture with installed ORQEN kit");
   const remote = join(root, "remote.git");
@@ -131,15 +135,15 @@ export const implementation = "export const exportCsv = (invoices) => ['n', ...i
 export async function supportEscalation(f: WorkflowFixture) {
   const pending = JSON.parse(await f.command(["pending", "--json"]));
   assert.equal(pending[0].for, "support");
-  await f.command(["support", "REC-7", "--person", "Support Person"]);
-  await f.complete("REC-7", { summary: "The requested invoice export does not exist yet.", checked: ["Issue, comments and current code"], outcome: "escalate", escalation_summary: "A code change is needed to provide the requested CSV export.", support_ok: true });
+  await f.command(["support", "REQ-7", "--person", "Support Person"]);
+  await f.complete("REQ-7", { summary: "The requested invoice export does not exist yet.", checked: ["Issue, comments and current code"], outcome: "escalate", escalation_summary: "A code change is needed to provide the requested CSV export.", support_ok: true });
   f.state("ANALYSIS");
-  const ctx = f.context(await f.command(["analyze", "REC-7", "--analyst", "Analyst"]));
+  const ctx = f.context(await f.command(["analyze", "REQ-7", "--analyst", "Analyst"]));
   assert.equal(ctx.previous_stages.SUPPORT.outcome, "escalate");
 }
 
 export async function implementWithSwarm(f: WorkflowFixture) {
-  const sis = f.record().sis!;
+  const sis = f.record().internal!;
   const ctx = f.context(await f.command(["take", sis]));
   assert.equal(ctx.state, "DEVELOPMENT");
   assert.equal(ctx.environment.ok, true);
@@ -150,12 +154,12 @@ export async function implementWithSwarm(f: WorkflowFixture) {
   writeFileSync(worker, `import {readFileSync, writeFileSync} from 'node:fs'; const prompt = readFileSync(0, 'utf8'); if (!prompt.includes('${sis}') || !prompt.includes('acceptance_criteria')) process.exit(2); writeFileSync('export.mjs', ${JSON.stringify(implementation)});`);
   const report = JSON.parse(await f.command(["swarm", "--file", task, "--planner", `node "${planner}"`, "--small", `node "${worker}"`, "--large", `node "${worker}"`, "--yes", "--json", "--apply"]));
   assert.equal(report.ok, true); assert.equal(report.applied, true);
-  assert.equal(f.git("branch", "--show-current"), "rec/rec-7");
+  assert.equal(f.git("branch", "--show-current"), "orqen/req-7");
   assert.equal(normalizar(readFileSync(join(f.repo, "export.mjs"), "utf8")), implementation);
 }
 
 export async function testAndReview(f: WorkflowFixture, completeDevelopment = true) {
-  const sis = f.record().sis!;
+  const sis = f.record().internal!;
   const previousPr = f.record().artifacts.devel_pr;
   if (completeDevelopment) await f.complete(sis, development);
   f.state("TESTING");

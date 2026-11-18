@@ -35,6 +35,47 @@ export interface OpcionesBootstrap {
   listar?: boolean;
   /** Skip running generators and installs (tests). */
   sinComandos?: boolean;
+  /** --list / --describe print JSON (the desktop app). */
+  json?: boolean;
+  /** --describe <stack>: parameters (free ports already proposed), requirements and how it will start. */
+  describir?: string;
+  /** --params '{"PORT":"8081"}': parameter values (the rest use their defaults). */
+  parametros?: Record<string, string>;
+}
+
+/** Missing requirements that prevent creating the code: the commands its generators run, and node. */
+export function bloqueantes(tool: Tool, req: ReturnType<typeof chequearRequisitos>) {
+  const paraCrear = new Set(tool.scaffold.flatMap((s) => ("correr" in s ? [s.correr.split(/\s+/)[0]] : [])));
+  return req.filter((r) => !r.ok && (paraCrear.has(r.comando) || r.comando === "node"));
+}
+
+/** `orqen bootstrap --list --json` and `--describe <stack> --json`, for the desktop app. Errors are JSON too. */
+async function bootstrapJson(o: OpcionesBootstrap) {
+  const fail = (error: string, extra: Record<string, unknown> = {}) => { console.log(JSON.stringify({ error, ...extra })); process.exitCode = 1; };
+  try { await prepararTools(o.toolsRepo, true); }
+  catch (e) { return fail((e as Error).message, { needsRepo: !existsSync(TOOLS_DIR) }); }
+  const stacks = listarTools();
+  if (!o.describir) return console.log(JSON.stringify({ stacks, dir: TOOLS_DIR }));
+  const stack = stacks.find((t) => t.id === o.describir);
+  if (!stack) return fail(`Unknown stack "${o.describir}". Available: ${stacks.map((t) => t.id).join(", ")}`);
+  const base = variablesBase(o.nombre || "Project");
+  const vars: Variables = { ...base };
+  const parametros = [];
+  for (const prm of parametrosDe(stack.id, base)) {
+    const defecto = prm.tipo === "puerto" ? String(await puertoLibre(Number(prm.defecto))) : prm.defecto;
+    vars[prm.id] = defecto;
+    parametros.push({ id: prm.id, pregunta: prm.pregunta, tipo: prm.tipo, defecto, enUso: prm.tipo === "puerto" && defecto !== prm.defecto ? prm.defecto : undefined });
+  }
+  if (vars.PAQUETE) vars.PAQUETE_RUTA = vars.PAQUETE.replaceAll(".", "/");
+  let tool: Tool;
+  try { tool = cargarTool(stack.id, vars); } catch (e) { return fail((e as Error).message); }
+  const req = chequearRequisitos(tool);
+  const bloquea = new Set(bloqueantes(tool, req).map((r) => r.comando));
+  console.log(JSON.stringify({
+    stack, carpeta: base.PROYECTO_ID, parametros,
+    requisitos: req.map((r) => ({ ...r, bloquea: bloquea.has(r.comando) })),
+    procesos: tool.entornos.procesos.map((x) => ({ nombre: x.nombre, comando: x.comando, ruta: x.ruta, cuando: x.cuando })),
+  }));
 }
 
 const vacio = (dir: string) => !existsSync(dir) || readdirSync(dir).length === 0;
@@ -58,6 +99,7 @@ function correr(cmd: string, cwd: string): Promise<{ ok: boolean; cola: string }
 }
 
 export async function bootstrap(o: OpcionesBootstrap) {
+  if (o.json && (o.listar || o.describir)) return bootstrapJson(o);
   const yes = !!o.yes || !interactivo();
   if (!o.listar) {
     await mostrarLogo({
@@ -66,7 +108,7 @@ export async function bootstrap(o: OpcionesBootstrap) {
         "Bootstrap will:",
         "  • Ask the name and the stack, and generate the code with the official generators",
         "  • Add the tools that start its environments (database in Docker, servers…)",
-        "  • Leave the repository ready for agents (orqen init, OpenSpec, Jira)",
+        "  • Leave the repository ready for agents (orqen init, OpenSpec, connectors)",
       ],
     });
     p.intro(`${azul("orqen")} ${magenta("bootstrap")} ${gris(`v${VERSION_CLI}`)}`);
@@ -102,7 +144,12 @@ export async function bootstrap(o: OpcionesBootstrap) {
       if (String(libre) !== def) p.log.info(`Port ${def} is in use: proposing ${libre} for "${prm.pregunta}".`);
       def = String(libre);
     }
-    vars[prm.id] = yes ? def : await textoValidado(prm.pregunta, def, (v) => validarParametro(prm.tipo, v));
+    const dado = o.parametros?.[prm.id];
+    if (dado !== undefined) {
+      const error = validarParametro(prm.tipo, dado);
+      if (error) { p.cancel(`${prm.pregunta}: ${error}`); process.exitCode = 1; return; }
+    }
+    vars[prm.id] = dado ?? (yes ? def : await textoValidado(prm.pregunta, def, (v) => validarParametro(prm.tipo, v)));
   }
   if (vars.PAQUETE) vars.PAQUETE_RUTA = vars.PAQUETE.replaceAll(".", "/");
 
@@ -113,8 +160,7 @@ export async function bootstrap(o: OpcionesBootstrap) {
   const req = chequearRequisitos(tool);
   p.note(req.map((r) => `${tick(r.ok, r.comando !== "docker")} ${r.comando.padEnd(8)} ${gris(r.detalle)}`).join("\n"), "Requirements");
   // To create the code you need the commands its generators run; Docker is only needed to run the database.
-  const paraCrear = new Set(tool.scaffold.flatMap((s) => ("correr" in s ? [s.correr.split(/\s+/)[0]] : [])));
-  const bloquean = req.filter((r) => !r.ok && (paraCrear.has(r.comando) || r.comando === "node"));
+  const bloquean = bloqueantes(tool, req);
   if (bloquean.length && !o.sinComandos) {
     p.cancel(bloquean.map((r) => `${r.comando}: ${r.ayuda ?? r.detalle}`).join("\n")); process.exitCode = 1; return;
   }
@@ -184,7 +230,7 @@ export async function bootstrap(o: OpcionesBootstrap) {
     `${pc.bold("1.")} ${pc.cyan(`cd ${dir}`)}`,
     `${pc.bold("2.")} ${pc.cyan("orqen env up")} ${gris("starts the database and the backend and runs the migrations (--all: also the frontend)")}`,
     `${pc.bold("3.")} ${pc.cyan("orqen env test")} ${gris("· orqen env down when you are done")}`,
-    `${pc.bold("4.")} ${gris("Push it to your Git remote and start working on requests: /orqen:analyze REC-1234 (new to orqen? run /orqen:tutorial in Claude Code)")}`,
+    `${pc.bold("4.")} ${gris("Push it to your Git remote and start working on requests: /orqen:analyze <KEY> (new to orqen? run /orqen:tutorial in Claude Code)")}`,
   ].join("\n"), "Next steps");
   p.outro(`${magenta("//")} ${pc.bold(`${vars.PROYECTO} is ready.`)}`);
 }

@@ -57,10 +57,7 @@ export function nextSteps(item: WorkItem, cfg: Pick<Config, "supportStage">): Ne
     case "ANALYSIS": return [s(3, "analyst", `/orqen:analyze ${k}`, "Continue the analysis")];
     case "WAITING_CLIENT": return [s(0, "client", `orqen status ${k}`, "Waiting for the client's answers on the request")];
     case "DEVELOPMENT": return [s(5, "developer", `/orqen:implement ${ik}`, returned(item) ? "Implement the requested changes" : "Implement")];
-    case "TESTING": return [
-      s(0, "developer", `orqen take ${ik} --agent tester`, "Run the automatic testing"),
-      s(6, "developer", `/orqen:pr ${ik}`, "Open the PR"),
-    ];
+    case "TESTING": return [s(5, "developer", `/orqen:implement ${ik}`, "The agent runs the testing on its own (full regression)")];
     case "QA_REVIEW": return [
       s(7, "qa", `/orqen:review ${ik}`, "QA: check the e2e of the change on screen, approve or reject"),
       ...(item.artifacts.devel_pr ? [] : [s(6, "developer", `/orqen:pr ${ik}`, "Open the PR")]),
@@ -68,7 +65,9 @@ export function nextSteps(item: WorkItem, cfg: Pick<Config, "supportStage">): Ne
     case "CODE_REVIEW":
       if (!item.artifacts.devel_pr) return [s(6, "developer", `/orqen:pr ${ik}`, "Explain the changes and open the PR")];
       return [s(9, "senior", `/orqen:approve ${ik}`, "Senior: approve the PR or request changes")];
-    case "DELIVERY": return [s(9, "senior", `/orqen:approve ${ik}`, "Deliver to the client")];
+    case "DELIVERY": return item.artifacts.devel_pr && !item.artifacts.devel_pr_merged
+      ? [s(0, "senior", `merge ${item.artifacts.devel_pr}`, "Merge the approved PR by hand; orqen detects it"), s(9, "senior", `/orqen:approve ${ik}`, "Then deliver to the client")]
+      : [s(9, "senior", `/orqen:approve ${ik}`, "Deliver to the client")];
     case "ACCEPTANCE": return [s(0, "client", `orqen status ${k}`, "Waiting for the client to confirm with /approve")];
     case "EXECUTION": case "VERIFICATION": return [s(0, "developer", `orqen take ${ik}`, "Operational stage")];
     case "EXECUTION_APPROVAL": case "APPLICATION": return [s(0, "gate", `orqen status ${k}`, "Waiting for /approve on the request")];

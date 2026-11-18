@@ -8,6 +8,10 @@ import { analysis, CLI, delivery, development, implementWithSwarm, implementatio
 
 const testing = (scenario: string) => ({ scenarios: [{ requirement: "Acceptance criterion", scenario, covered: true, test: "test.mjs" }], failure_diagnosis: "", suggestions: [], coverage_ok: true });
 async function finish(f: WorkflowFixture) {
+  // without gh orqen cannot see the merge: the person who merged the PR by hand confirms it
+  await f.command(["take", f.record().issue!], { exit: 1 }); f.state("DELIVERY");
+  await f.command(["merged", f.record().issue!]);
+  assert.ok(f.record().artifacts.devel_pr_merged);
   await f.command(["take", f.record().issue!]);
   f.state("DELIVERY");
   await f.complete(f.record().issue!, delivery); f.state("ACCEPTANCE");
@@ -105,6 +109,7 @@ test("CLI: support to direct development, failed tests, swarm, PR rejection, cli
   await testAndReview(f);
   assert.equal(f.record().artifacts.code_reviews.length, 2);
   await f.human("senior", "/approve"); f.state("DELIVERY");
+  await f.command(["merged", sis]);
   await f.command(["take", sis]); await f.complete(sis, delivery); f.state("ACCEPTANCE");
   await f.human("client", "/reject Please explicitly document empty exports"); f.state("ANALYSIS");
   assert.equal(f.record().round, 2); assert.equal(f.record().issue, undefined);
@@ -222,7 +227,14 @@ test("CLI: default GitHub gate ignores stale and unauthorized approvals, handles
   await f.command(["take", f.record().issue!]); await testAndReview(f);
   review("approved", "senior", "APPROVED", "current-head");
   await f.command(["pending", "--json"]); f.state("DELIVERY");
-  await finish(f);
+  // the PR is still open: delivery waits; once merged by hand on GitHub, orqen detects it on its own
+  await f.command(["take", f.record().issue!], { exit: 1 });
+  const snap = JSON.parse(readFileSync(snapshot, "utf8"));
+  writeFileSync(snapshot, JSON.stringify({ ...snap, state: "MERGED", mergedAt: "2026-11-18T12:00:00Z", mergedBy: { login: "integrator" } }));
+  await f.command(["list", "prs", "--json"]);
+  assert.equal(f.record().artifacts.devel_pr_merged.by, "integrator");
+  await f.command(["take", f.record().issue!]); await f.complete(f.record().issue!, delivery); f.state("ACCEPTANCE");
+  await f.human("client", "/approve"); f.state("CLOSED");
 });
 
 });

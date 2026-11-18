@@ -1,5 +1,5 @@
 ---
-description: Implement a request using its OpenSpec change or the approved direct-lane plan
+description: Implement a request using its OpenSpec change or the approved direct-lane plan, then run the testing stage automatically
 argument-hint: <KEY>
 allowed-tools: Bash(orqen:*), Bash(openspec:*), Bash(npm:*), Bash(npx:*), Read, Grep, Glob, Write, Edit, Skill, AskUserQuestion
 ---
@@ -14,12 +14,13 @@ Implement the request identified by `$ARGUMENTS` from the repository root. It ca
 - Read the tickets read-only. orqen posts comments and moves the tickets.
 - Leave Git operations, branch changes, OpenSpec archiving, and writes to `orqen/state/`, `orqen/work/`, and orqen configuration to orqen.
 - Follow the approved scope, specifications or plan, and acceptance criteria. Ask the user or block the request if you need a decision to proceed.
-- Stop once `orqen complete` advances the request out of `DEVELOPMENT`.
+- **Testing is your job, not the person's.** When development closes, the request moves to `TESTING`: run that stage yourself right away (step 6), without asking for an OK at each step, and report the result. The human review of the e2e is QA's, later, in `QA_REVIEW` (full lane).
+- Stop once `TESTING` advances the request, or when it sends the request back to development and the person decides how to continue.
 
 ## Steps
 
 1. Check that the argument is a request or issue key. Ask for the key if it is missing.
-2. Run `orqen status <KEY>`. If it is unknown, explain that it is not a request of this repository and stop. Claim work only in `DEVELOPMENT` for a development request. Otherwise:
+2. Run `orqen status <KEY>`. If it is unknown, explain that it is not a request of this repository and stop. Claim work only in `DEVELOPMENT` for a development request; in `TESTING`, go straight to step 6. Otherwise:
    - `ANALYSIS` or `WAITING_CLIENT`: Explain that analysis must finish first.
    - `EXECUTION` or `VERIFICATION`: Explain that the request follows the operational workflow.
    - `BLOCKED`: Report the reason from the status history.
@@ -46,7 +47,14 @@ Implement the request identified by `$ARGUMENTS` from the repository root. It ca
    ```sh
    orqen complete <KEY> <output.json> --agent implementer
    ```
-   Correct validation errors and retry until the command reports success.
-6. Report the implementation, tests and results, assumptions or deviations, and the next stage.
+   Correct validation errors and retry until the command reports success. The request moves to `TESTING`.
+6. **Testing (automatic).** Tell the person in one line that you are running the testing stage, then claim it:
+   ```sh
+   orqen take <KEY> --agent tester
+   ```
+   orqen starts the whole environment, runs every test type (including the full e2e regression), stops it, and prints `test_result` and the `scenarios` to evaluate. Follow the testing stage it prints: map each scenario (or acceptance criterion) to its test, diagnose failures, and submit with `orqen complete <KEY> <output.json> --agent tester` without waiting for an OK. Do not edit files in this stage. Ask the person only about a doubt that changes the outcome (for example, whether a failing test or the code is wrong).
+   - **Passed:** the request moves to `QA_REVIEW` (full lane) or `CODE_REVIEW`. The next step is `/orqen:pr <KEY>`.
+   - **Failed:** the request goes back to `DEVELOPMENT` with the diagnosis. Show it to the person and ask whether to fix it now; with their OK, go back to step 3 (the failures come in `test_result` and `previous_stages.TESTING`).
+7. Report the implementation, the testing result (suite and scenario coverage), assumptions or deviations, and the next step.
 
 If you cannot proceed, run `orqen block <KEY> "<specific reason>"`.

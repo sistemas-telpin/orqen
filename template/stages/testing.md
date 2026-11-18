@@ -1,6 +1,6 @@
 ## Testing (`TESTING`)
 
-> If `human_present` is `true`, tell the person what you are about to do, wait for their OK at each important step, and ask them about any doubt (see "Working with the person" in AGENTS.md). If it is `false`, run `orqen block` for any doubt that changes the outcome.
+> This stage is automatic: it is the agent's job, not the person's. Do not ask for an OK at each step; run it and report the result. If `human_present` is `true`, ask the person only about a doubt that changes the outcome (such as whether a failing test or the code is wrong). If it is `false`, run `orqen block` for such a doubt. The human review of the e2e comes later, in `QA_REVIEW` (full lane).
 
 orqen already started the complete environment, ran every configured test type (unit, integration, the full end-to-end regression, and visual), and shut it down. This is the only stage that runs the whole regression: development ran only the unit tests and the e2e of this change. See `test_result` and `environment`. The `scenarios` field lists the OpenSpec scenarios or, for the direct lane, the analysis acceptance criteria.
 

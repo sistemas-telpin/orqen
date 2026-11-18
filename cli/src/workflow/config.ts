@@ -25,7 +25,7 @@ export interface Config {
   /** SUPPORT_STAGE=on: `orqen pending` sends new requests to the support person first. `orqen support` works either way, and the analyst can still take a NEW one directly. */
   supportStage: boolean;
   /** analysis = analysts (they also unblock BLOCKED together with code). */
-  approvers: { analysis?: string[]; code: string[]; client: string[]; execution?: string[] };
+  approvers: { analysis?: string[]; qa?: string[]; code: string[]; client: string[]; execution?: string[] };
   jiraTransitions: Record<string, string>;
   /** SIS: issue created in another Jira project when the analysis closes (all lanes). */
   sis: { project: string; type: string; link: string; transitions: Record<string, string>; operationalType: string };
@@ -59,6 +59,7 @@ export function loadConfig(over: Partial<Config> = {}): Config {
     supportStage: ["on", "true", "1", "yes"].includes(env("SUPPORT_STAGE").toLowerCase()),
     approvers: {
       analysis: split(env("APPROVERS_ANALYSIS")),
+      qa: split(env("APPROVERS_QA")),
       code: split(env("APPROVERS_CODE")),
       client: split(env("APPROVERS_CLIENT")),
       execution: split(env("APPROVERS_EXECUTION")),

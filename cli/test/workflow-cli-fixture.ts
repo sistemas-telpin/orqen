@@ -162,11 +162,16 @@ export async function testAndReview(f: WorkflowFixture, completeDevelopment = tr
   const ctx = f.context(await f.command(["take", sis]));
   assert.equal(ctx.test_result.ok, true, ctx.test_result.output);
   await f.complete(sis, { scenarios: ctx.scenarios.map((s: { requirement: string; scenario: string }) => ({ ...s, covered: true, test: "test.mjs" })), failure_diagnosis: "", suggestions: [], coverage_ok: true });
-  f.state("CODE_REVIEW");
+  const full = f.record().lane === "full";   // only the full lane goes through QA
+  f.state(full ? "QA_REVIEW" : "CODE_REVIEW");
   assert.equal(f.record().artifacts.devel_pr, previousPr, "Testing must not open or replace the PR");
   const info = JSON.parse(await f.command(["pr", sis])); assert.equal(info.base, "desarrollo");
   const body = "Implement the agreed CSV export for accounting. The header and invoice numbers are covered by test.mjs. Verify by exporting an invoice and checking its CSV contents.";
   await f.command(["pr", sis, "-"], { input: body });
-  await f.command(["review", sis, "-", "--verdict", "approve"], { input: "Approve. The implementation matches the approved analysis, the CSV scenario is covered by test.mjs, and no additional changes or risks were identified." });
+  if (full) {
+    await f.command(["review", sis, "approve", "--report", "-"], { input: "The e2e of the CSV export were reviewed on screen and cover the scenario." });
+    f.state("CODE_REVIEW");
+  }
+  await f.command(["code-review", sis, "-", "--verdict", "approve"], { input: "Approve. The implementation matches the approved analysis, the CSV scenario is covered by test.mjs, and no additional changes or risks were identified." });
   f.state("CODE_REVIEW");
 }

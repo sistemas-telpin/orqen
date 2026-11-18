@@ -2,7 +2,7 @@
 
 ```text
 [SUPPORT] → ANALYSIS ⇄ WAITING_CLIENT → DEVELOPMENT ⇄ TESTING
-  → CODE_REVIEW → DELIVERY → ACCEPTANCE → CLOSED
+  → [QA_REVIEW, full lane only] → CODE_REVIEW → DELIVERY → ACCEPTANCE → CLOSED
   Issues that require intervention → BLOCKED
 ```
 
@@ -76,10 +76,11 @@ Propose the steps, rollback, and read-only verification. A person authorized by 
 
 `/orqen:implement <SIS>` runs `orqen swarm --file <task> --yes --json --apply` internally after the person approves the implementation plan. Supply the approved analysis, scope, criteria, spec or direct plan, and feedback as task context. ORQEN integrates a verified result into the request branch. Do not ask the person to run the engine or show its worker logs; report scope, progress, decisions and results. A failed run or integration must not advance the stage. Keep the existing approval before `orqen complete`.
 
-### Integration PR and code review
+### Integration PR, QA, and code review
 
 - `TESTING` opens no PR. The only PR is the integration PR to `DEVEL_BRANCH`, opened with `/orqen:pr` (`orqen pr <KEY> <explanation.md>`) from the request branch. orqen commits pending changes, pushes, and opens or updates it.
-- The senior reviews that PR in `CODE_REVIEW`, supported by `/orqen:code-review <KEY>`: review the PR diff read-only against the analysis, spec or plan, and acceptance criteria, and give a verdict plus each finding with its severity, `file:line`, impact, and possible solutions. When the senior accepts the report, record it with `orqen review <KEY> <report.md> --verdict <approve|minor|reject>`. It does not change the stage. With the default `CODE_REVIEW_GATE=github`, the senior decides with a review on the PR in GitHub (limited to `GITHUB_REVIEWERS` when set): orqen reads it, moves to `DELIVERY` on approval, and returns to `DEVELOPMENT` on "changes requested" (the review text becomes feedback for the agent). Only reviews on the PR's current head count, so a later push needs a new review. With `CODE_REVIEW_GATE=jira`, the senior comments `/approve` or `/reject <reason>` in Jira instead.
+- Only the **full lane** goes through `QA_REVIEW` after `TESTING`; the direct and light lanes go straight to `CODE_REVIEW`. QA runs `/orqen:review <KEY>`: it checks on screen the e2e of the change (`TESTING` already ran the whole regression) and records the decision with `orqen review <KEY> approve|reject [--reason "<what to fix>"] [--report <report.md>]`. Approval moves to `CODE_REVIEW`; rejection returns to `DEVELOPMENT` with the reason as feedback. QA can also comment `/approve` or `/reject <reason>` (limited to `APPROVERS_QA`).
+- The senior reviews that PR in `CODE_REVIEW`, supported by `/orqen:code-review <KEY>`: review the PR diff read-only against the analysis, spec or plan, and acceptance criteria, and give a verdict plus each finding with its severity, `file:line`, impact, and possible solutions. When the senior accepts the report, record it with `orqen code-review <KEY> <report.md> --verdict <approve|minor|reject>`. It does not change the stage. With the default `CODE_REVIEW_GATE=github`, the senior decides with a review on the PR in GitHub (limited to `GITHUB_REVIEWERS` when set): orqen reads it, moves to `DELIVERY` on approval, and returns to `DEVELOPMENT` on "changes requested" (the review text becomes feedback for the agent). Only reviews on the PR's current head count, so a later push needs a new review. With `CODE_REVIEW_GATE=jira`, the senior comments `/approve` or `/reject <reason>` in Jira instead.
 
 ### Rules
 

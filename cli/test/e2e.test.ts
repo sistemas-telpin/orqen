@@ -131,8 +131,10 @@ test("full REC with real OpenSpec", { skip: !existsSync(OPENSPEC) && "openspec m
     scenarios: [{ requirement: "Exportar a CSV", scenario: "Facturas con encabezado", covered: true, test: "test.mjs" }],
     failure_diagnosis: "", suggestions: [], coverage_ok: true,
   });
-  assert.deepEqual(r, { ok: true, next: "CODE_REVIEW" });
+  assert.deepEqual(r, { ok: true, next: "QA_REVIEW" });   // full lane: QA before the senior
 
+  await p.qaReview("REC-7", "approve", "", "E2E del cambio revisados en pantalla.", "qa");
+  assert.equal(state(), "CODE_REVIEW");
   jira.human("REC-7", "senior", "/approve");
   await p.review();
   assert.equal(state(), "DELIVERY");

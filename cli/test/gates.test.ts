@@ -199,6 +199,52 @@ test("testing approved goes to CODE_REVIEW without pushing or opening a PR", asy
   assert.match(jira.last("REC-1"), /is opened with \/orqen:pr/);
 });
 
+test("QA_REVIEW: only the full lane goes through QA; QA approves to CODE_REVIEW or sends it back with the reason", async () => {
+  const { jira, cfg } = setup();
+  cfg.approvers.qa = ["qa-lead"];
+  const ws: Workspace = { ...failingTests, runTests: () => ({ ok: true, output: "ok" }) };
+  const store = new Store(cfg.stateDir);
+  const flow = new Process(cfg, jira, store, ws, fakeOs);
+  const passed = { scenarios: [{ requirement: "R", scenario: "E", covered: true, test: "a.test.ts::e" }], failure_diagnosis: "", suggestions: [], coverage_ok: true };
+
+  for (const lane of ["direct", "light"] as const) {   // no QA outside the full lane
+    store.save({ ...newRec("REC-1"), state: "TESTING", branch: "rec/rec-1", change: lane === "light" ? "c" : "", lane });
+    await flow.take("REC-1");
+    assert.deepEqual(await flow.complete("REC-1", passed), { ok: true, next: "CODE_REVIEW" });
+  }
+
+  store.save({ ...newRec("REC-1"), state: "TESTING", branch: "rec/rec-1", change: "c", lane: "full", testingAttempts: 1 });
+  await flow.take("REC-1");
+  assert.deepEqual(await flow.complete("REC-1", passed), { ok: true, next: "QA_REVIEW" });
+  assert.match(jira.last("REC-1"), /QA review \(full lane\)/);
+  await assert.rejects(flow.codeReview("REC-1", "x".repeat(100), "approve"), /recorded in CODE_REVIEW/);
+  await assert.rejects(flow.qaReview("REC-1", "maybe"), /Invalid decision/);
+  await assert.rejects(flow.qaReview("REC-1", "reject", "no"), /what development must fix/);
+
+  const r1 = await flow.qaReview("REC-1", "reject", "The login e2e does not check the error message.", "", "Quique");
+  assert.equal(r1.next, "DEVELOPMENT");
+  const rec = store.get("REC-1")!;
+  assert.equal(rec.testingAttempts, 0);
+  assert.deepEqual(rec.feedback.at(-1), { from: "Quique", rejection: "The login e2e does not check the error message." });
+  assert.match(jira.last("REC-1"), /changes requested by Quique/);
+
+  store.save({ ...store.get("REC-1")!, state: "QA_REVIEW" });
+  const r2 = await flow.qaReview("REC-1", "approve", "", "All e2e of the change reviewed on screen.", "Quique");
+  assert.deepEqual([r2.n, r2.next], [2, "CODE_REVIEW"]);
+  assert.equal(readFileSync(join(cfg.factoryDir, "REC-1", "round-1", "qa-review-2.md"), "utf8").trim(), "All e2e of the change reviewed on screen.");
+  await assert.rejects(flow.qaReview("REC-1", "approve"), /not waiting for QA/);
+
+  // QA can also decide in the request, limited to APPROVERS_QA
+  store.save({ ...store.get("REC-1")!, state: "QA_REVIEW", lastSeenComment: "" });
+  jira.coms["REC-1"] = [];
+  jira.human("REC-1", "intruder", "/approve");
+  await flow.review();
+  assert.equal(store.get("REC-1")!.state, "QA_REVIEW");
+  jira.human("REC-1", "qa-lead", "/reject Missing e2e for the empty list");
+  await flow.review();
+  assert.equal(store.get("REC-1")!.state, "DEVELOPMENT");
+});
+
 test("review: records the code review in CODE_REVIEW with an open PR, numbered per round, commented on the SIS", async () => {
   const { jira, cfg } = setup();
   jira.coms["SIS-9"] = [];

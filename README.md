@@ -16,7 +16,7 @@ Opcionalmente, una persona de **soporte** atiende primero el reclamo con el agen
 | Soporte (opcional) | `/orqen:support REC-1234`: busca la respuesta, la redacta para el cliente y, si no se puede resolver, escala al analista con un resumen |
 | Analista           | `/orqen:analyze REC-1234`: analiza el REC, elige el carril, escribe la spec si hace falta y crea el SIS en Jira   |
 | Agente             | `/orqen:implement SIS-442`: implementa la spec o el plan aprobado · `/orqen:pr SIS-442`: abre el PR a desarrollo |
-| Diseñador de e2e   | `/orqen:e2e-review SIS-442`: valida visualmente los tests e2e                                                     |
+| QA                 | `/orqen:review SIS-442`: solo carril completo; revisa en pantalla los e2e del cambio y aprueba o pide cambios     |
 | Senior             | `/orqen:code-review SIS-442`: revisa el PR con el agente y después aprueba o pide cambios en GitHub               |
 | Modo desatendido   | `orqen cycle --loop`: avanza los gates y lanza las etapas de agente pendientes                                   |
 | Aprobadores (Jira) | `/approve` o `/reject <motivo>` en el issue (conformidad del cliente, carril operativo, destrabar un BLOCKED)    |
@@ -26,7 +26,7 @@ Opcionalmente, una persona de **soporte** atiende primero el reclamo con el agen
 - **CLI `orqen`** (paquete npm, Node ≥ 20.12): maneja la máquina de estados, Jira, git, los PRs, los entornos de prueba y OpenSpec.
   Es determinística: el agente produce contenido y `orqen` decide el flujo.
 - **`AGENTS.md` / `CLAUDE.md`**: lo que lee el agente. Explican el proceso y las reglas, y le indican que use la CLI.
-- **Plugin de Claude Code** (`orqen/plugin/`): los comandos `/orqen:tutorial`, `/orqen:support`, `/orqen:analyze`, `/orqen:implement`, `/orqen:e2e-review`, `/orqen:pr` y `/orqen:code-review`, y el skill `orqen:grilling`.
+- **Plugin de Claude Code** (`orqen/plugin/`): los comandos `/orqen:tutorial`, `/orqen:support`, `/orqen:analyze`, `/orqen:implement`, `/orqen:pr`, `/orqen:review` (QA) y `/orqen:code-review`, y el skill `orqen:grilling`.
 - **`orqen/stages/`**: las guías de cada etapa (soporte, análisis, especificación, desarrollo, testing, entrega, ejecución y verificación). Se pueden editar.
 - **`orqen/work/<KEY>/`**: registro y estado de cada REC dentro del repo (lo escribe `orqen`).
 - **`openspec/config.yaml`**: reglas del proceso REC aplicadas a los artefactos de OpenSpec.
@@ -141,7 +141,8 @@ orqen/work/REC-1234/
     ├── analysis.md        resumen, criterios, decisiones del grilling, carril y justificación, SIS, estimación
     ├── analysis.json      la salida validada de la etapa
     ├── devel-pr.md        explicación del PR a desarrollo (orqen pr)
-    ├── code-review-1.md   informes del code review para el senior (orqen review), uno por review
+    ├── qa-review-1.md     decisiones de QA con su informe (orqen review; solo carril completo)
+    ├── code-review-1.md   informes del code review para el senior (orqen code-review), uno por review
     └── execution/         (solo carril operativo) script.sql, pasos, rollback, verificación
 ```
 
@@ -180,7 +181,7 @@ Es una etapa del agente, sin intervención humana. `orqen take` levanta todos lo
 El agente mapea **cada Scenario** (carril directo: cada **criterio de aceptación**) contra el test que lo verifica, y `orqen` decide:
 aprueba solo si la suite pasó y todo está cubierto. Si no, vuelve a DEVELOPMENT; al tercer intento fallido pasa a BLOCKED.
 
-**Testing no abre ningún PR**: al aprobar, el REC pasa a CODE_REVIEW y el PR se abre con `/orqen:pr`.
+**Testing no abre ningún PR**: al aprobar, el REC pasa a QA_REVIEW (solo carril completo) o a CODE_REVIEW, y el PR se abre con `/orqen:pr`.
 
 ### Qué tests corre cada paso
 
@@ -188,31 +189,31 @@ aprueba solo si la suite pasó y todo está cubierto. Si no, vuelve a DEVELOPMEN
 | --- | --- |
 | DEVELOPMENT (`/orqen:implement`) | Unit tests del código que cambia y los **e2e de los Scenarios o criterios que agrega o toca** el cambio. Corre solo esos: `orqen env test unitarios` y `orqen env test e2e -- <archivos o filtro>` |
 | TESTING (automático, todos los carriles) | **Todos** los tests configurados: unit, integración, la **regresión e2e completa** y visual. Es el único paso que corre la regresión entera |
-| Revisión de e2e (QA) | No repite la regresión: valida con criterio y en pantalla los e2e del cambio |
+| QA_REVIEW (solo carril completo) | No repite la regresión: QA valida con criterio y en pantalla los e2e del cambio |
 
-## Revisión de e2e: `/orqen:e2e-review SIS-3312`
+## QA: `/orqen:review SIS-3312` (solo carril completo)
 
-Los tests e2e se generan durante la implementación a partir de los Scenarios / criterios de aceptación. Este comando deja todo
-listo para que el **diseñador de testing e2e** (una persona) los valide **visualmente** y **espera su aprobación**, con los ajustes
-que haga a mano. No mueve el estado del REC (no hace `take` ni `complete`): se corre con el REC en `TESTING` o `CODE_REVIEW`,
-parado en la rama del REC, y acepta la key del SIS o la del REC.
+Solo los cambios del **carril completo** pasan por QA: al aprobar TESTING, el REC entra en el gate **QA_REVIEW**. Los carriles
+directo y liviano van directo a CODE_REVIEW. TESTING ya corrió toda la regresión, así que QA no la repite: revisa **en pantalla**
+los e2e de este cambio y decide si prueban lo que se pidió.
 
 ```mermaid
 flowchart TD
-    A["/orqen:e2e-review SIS-3312"] --> B["orqen status: ¿TESTING o CODE_REVIEW?<br/>¿rama del REC activa?"]
+    A["/orqen:review SIS-3312"] --> B["orqen status: ¿QA_REVIEW?<br/>¿rama del REC activa?"]
     B -->|"no"| X(["Se explica la etapa y se corta"])
-    B -->|"sí"| C["Arma la lista de escenarios / criterios<br/>y los mapea contra los tests e2e de la rama"]
-    C --> D["Deja listo el modo visual<br/>(headed / trace / video) + guía de revisión"]
-    D --> E{"Diseñador e2e<br/>(revisa y ajusta a mano)"}
-    E -->|"ajustó"| F["Re-corre los e2e y revisa el diff<br/>(¿siguen cubriendo todo?)"] --> E
-    E -->|"rechaza"| R(["Qué corregir → DEVELOPMENT<br/>(lo decide una persona)"])
-    E -->|"aprueba explícito + corrida en verde"| G(["Resumen listo para el PR/SIS<br/>→ sigue CODE_REVIEW"])
+    B -->|"sí"| C["Arma la lista de Scenarios<br/>y los cruza con los e2e del cambio"]
+    C --> D["orqen env up --all + orqen env test e2e -- &lt;los del cambio&gt;<br/>en modo visual (headed / trace / video)"]
+    D --> E{"QA<br/>(revisa y ajusta a mano)"}
+    E -->|"ajustó"| F["Re-corre esos e2e<br/>y /orqen:pr para subir los ajustes"] --> E
+    E -->|"pide cambios"| R(["orqen review SIS-3312 reject --reason …<br/>→ DEVELOPMENT con el motivo"])
+    E -->|"aprueba + corrida en verde"| G(["orqen review SIS-3312 approve --report …<br/>→ CODE_REVIEW"])
 ```
 
-El agente **no edita los tests**: señala observaciones (escenarios sin e2e, tests que no verifican el THEN, esperas fijas) y el
-diseñador decide. La aprobación la da la persona en la conversación; igual que el OK del analista, **`orqen` no puede comprobarla**
-(barrera de proceso, no de seguridad). Los ajustes quedan sin commitear en la rama del REC: `orqen pr` los commitea y los empuja
-con el PR a desarrollo (si el PR ya existía, hay que volver a correr `/orqen:pr` para sumarlos).
+El agente **no edita los tests**: señala observaciones (escenarios sin e2e, tests que no verifican el THEN, esperas fijas) y QA
+decide. La decisión la registra `orqen review <KEY> approve|reject [--reason "<qué corregir>"] [--report <informe.md>]`: guarda
+`qa-review-<n>.md`, la comenta en el REC y el SIS y mueve el REC. QA también puede comentar `/approve` o `/reject <motivo>` en el REC
+(lo limita `APPROVERS_QA`). Si QA ajustó tests, los cambios quedan sin commitear en la rama: hay que correr `/orqen:pr` antes de
+aprobar para que lleguen al PR que revisa el senior.
 
 ## PR a desarrollo: `/orqen:pr SIS-32`
 
@@ -250,7 +251,7 @@ flowchart TD
     B -->|"sí"| C["Lee el diff del PR (origin/base...origin/rama)<br/>contra análisis, spec/plan y criterios"]
     C --> D["Verifica cada hallazgo<br/>(escenario concreto que falla)"]
     D --> E["Informe: veredicto · hallazgos con severidad, archivo:línea,<br/>qué pasa, por qué importa y posibles soluciones"]
-    E --> R["orqen review SIS-32 informe.md --verdict …<br/>guarda code-review-n.md · lo comenta en el SIS"]
+    E --> R["orqen code-review SIS-32 informe.md --verdict …<br/>guarda code-review-n.md · lo comenta en el SIS"]
     R --> F{"Senior"}
     F -->|"Approve en el PR de GitHub"| G(["DELIVERY"])
     F -->|"Request changes con el texto que dejó listo el agente"| H(["DEVELOPMENT<br/>(los hallazgos llegan como feedback)"])
@@ -260,7 +261,7 @@ Es **solo lectura**: el agente no corrige código, no comenta ni aprueba el PR (
 Cada hallazgo tiene severidad (`blocking`, `important`, `minor` o `to verify`) y una a tres soluciones posibles, con la recomendada primero.
 Si el veredicto no es aprobable, el agente deja redactado el texto del pedido de cambios.
 
-Cuando el senior da el informe por cerrado, el agente lo registra con `orqen review <KEY> <informe.md> --verdict <approve|minor|reject>`
+Cuando el senior da el informe por cerrado, el agente lo registra con `orqen code-review <KEY> <informe.md> --verdict <approve|minor|reject>`
 (solo en `CODE_REVIEW` y con el PR abierto). Queda en `orqen/work/<KEY>/round-N/code-review-<n>.md` (numerado: un segundo review después
 de un pedido de cambios no pisa al primero), se commitea si el repo está en la rama del REC (viaja con el próximo push) y se comenta en el SIS.
 
@@ -293,6 +294,7 @@ flowchart LR
     ESPERA["WAITING_CLIENT<br/>(máx. 3 rondas)"]:::humano
     DESA["DEVELOPMENT"]:::agente
     TEST["TESTING"]:::agente
+    QA["QA_REVIEW<br/>(QA + /orqen:review,<br/>solo carril completo)"]:::humano
     REV["CODE_REVIEW<br/>(senior + /orqen:code-review)"]:::humano
     DELIVERY["DELIVERY"]:::agente
     CONF["ACCEPTANCE<br/>(cliente)"]:::humano
@@ -304,7 +306,10 @@ flowchart LR
     ANALYSIS <-->|preguntas / respuestas| ESPERA
     ANALYSIS -->|"OK analista: carril + SIS"| DESA
     DESA <-->|tests fallan / pasan| TEST
-    TEST -->|"/orqen:pr abre el PR"| REV
+    TEST -->|"directo / liviano"| REV
+    TEST -->|"completo"| QA
+    QA -->|"aprueba"| REV
+    QA -.->|"pide cambios"| DESA
     REV -->|"approve en el PR"| DELIVERY
     REV -.->|"changes requested"| DESA
     DELIVERY --> CONF
@@ -325,6 +330,7 @@ Jira, git, PR y `openspec archive` los ejecuta solo `orqen`; el agente produce c
 | WAITING_CLIENT | cliente           | responde en Jira (máx. 3 rondas)                                                                              | —                                                                                                                                                             |
 | DEVELOPMENT    | agente            | implementa con el entorno levantado; con spec tilda `tasks.md`, en directo sigue el `plan`                    | flujo _apply_; `orqen` rechaza si queda alguna tarea sin tildar                                                                                               |
 | TESTING        | `orqen` + agente  | `orqen` corre la suite y el agente mapea test ↔ **cada Scenario** (directo: cada **criterio de aceptación**). No abre PR | si falta alguno, se rechaza                                                                                                                         |
+| QA_REVIEW      | QA                | solo carril completo: revisa en pantalla los e2e del cambio (`/orqen:review`) y aprueba (→ CODE_REVIEW) o pide cambios (→ DEVELOPMENT) | — |
 | CODE_REVIEW    | senior            | revisa el PR a desarrollo (`/orqen:pr`) con el informe de `/orqen:code-review` y decide con un review en GitHub | —                                                                                                                                                             |
 | DELIVERY       | `orqen` + agente  | `orqen` archiva (si hubo spec) y el agente escribe notas y mensaje al cliente                                 | `openspec archive` fusiona los deltas en `openspec/specs` y se empuja a la rama del PR                                                                       |
 | ACCEPTANCE     | cliente           | `/approve` cierra; `/reject` abre la ronda 2 (vuelve a ANALYSIS: nuevo carril, change y SIS)                  | nuevo change `…-r2`                                                                                                                                           |
@@ -429,7 +435,7 @@ actualizan solos; para los editados elegís conservar, reemplazar o dejar una co
 | `SUPPORT_STAGE`                                              | `on`: `orqen pending` manda los REC nuevos primero a soporte. Por defecto `off`; `/orqen:support` funciona con cualquiera de los dos valores. No hay lista de personas de soporte: puede tomarlo cualquiera |
 | `SIS_PROJECT`, `SIS_TYPE`, `SIS_LINK`, `SIS_TYPE_OPERATIONAL` | Cómo se crea y vincula el SIS                                                              |
 | `JIRA_TRANSITIONS`, `SIS_TRANSITIONS`                        | Transiciones de Jira por estado                                                            |
-| `APPROVERS_ANALYSIS`, `APPROVERS_CODE`, `APPROVERS_CLIENT`, `APPROVERS_EXECUTION` | Quién puede decidir en cada gate de Jira, con cuentas de Jira (vacío = cualquiera). `APPROVERS_CODE` también destraba un BLOCKED |
+| `APPROVERS_ANALYSIS`, `APPROVERS_QA`, `APPROVERS_CODE`, `APPROVERS_CLIENT`, `APPROVERS_EXECUTION` | Quién puede decidir en cada gate de Jira, con cuentas de Jira (vacío = cualquiera). `APPROVERS_CODE` también destraba un BLOCKED |
 | `CODE_REVIEW_GATE`, `GITHUB_REVIEWERS`                       | Quién decide en CODE_REVIEW: `github` (review en el PR, por defecto) o `jira` (`/approve` y `/reject`). `GITHUB_REVIEWERS`: usuarios de GitHub cuyos reviews cuentan (vacío = cualquiera) |
 | `BASE_BRANCH`, `TEST_COMMAND`                                | Rama base de las ramas de REC y suite por defecto (si `config.yaml` no define tests)       |
 | `DEVEL_BRANCH`, `DEVEL_PR_COMMAND`                           | Rama de integración y comando que abre el PR (`orqen pr`)                                  |
@@ -535,7 +541,7 @@ Los modelos son comandos headless, así que se puede usar cualquier agente: `--s
 **Implementación**: en Claude Code, `/orqen:implement SIS-442`. En otro agente: _"implementá el SIS-442"_ (`orqen status` → `orqen take` →
 apply de la spec o plan → `orqen complete`).
 
-**Validación de e2e**: en Claude Code, `/orqen:e2e-review SIS-3312`, a cargo del diseñador de testing e2e. En otro agente: _"preparame la revisión de e2e del SIS-3312"_.
+**QA (solo carril completo)**: en Claude Code, `/orqen:review SIS-3312`, a cargo de QA. En otro agente: _"hacé la revisión de QA del SIS-3312"_.
 
 **PR a desarrollo**: en Claude Code, `/orqen:pr SIS-32`. En otro agente: _"abrí el PR a desarrollo del SIS-32"_ (`orqen pr` → explicación → `orqen pr <KEY> <archivo.md>`).
 
@@ -570,7 +576,8 @@ orqen lane <KEY> <direct|light|full>   Registra el carril (light/full: rama + ch
 orqen take <KEY> [--agent N]           Reserva una etapa de agente y prepara rama y entorno
 orqen complete <KEY> <salida.json|->   Valida la salida de la etapa y avanza el proceso
 orqen pr <KEY> [<explicación.md>] [--title T]                     Sin archivo: informa. Con archivo: commit + push + PR a DEVEL_BRANCH
-orqen review <KEY> <informe.md|-> --verdict <approve|minor|reject> Registra el informe del code review (CODE_REVIEW)
+orqen review <KEY> approve|reject [--reason T] [--report F]           Decisión de QA (QA_REVIEW, solo carril completo)
+orqen code-review <KEY> <informe.md|-> --verdict <approve|minor|reject> Registra el informe del code review (CODE_REVIEW)
 orqen status [KEY]                     Estado actual y log
 orqen schema <ETAPA>                   JSON Schema de la salida de una etapa
 orqen block <KEY> <motivo>             Escala a una persona

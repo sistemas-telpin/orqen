@@ -12,6 +12,7 @@ export const State = {
   WAITING_CLIENT: "WAITING_CLIENT",   // gate: the client answers questions
   DEVELOPMENT: "DEVELOPMENT",         // agent: implements (openspec apply, or the plan of the direct lane)
   TESTING: "TESTING",                 // script runs tests; agent verifies scenarios/criteria
+  QA_REVIEW: "QA_REVIEW",             // gate (full lane only): QA reviews the e2e of the change
   CODE_REVIEW: "CODE_REVIEW",         // gate: a senior reviews the PR
   DELIVERY: "DELIVERY",               // script: openspec archive (if there was a spec); agent: notes + message
   // --- fast lane (route=operational): SQL script / restart / runbook, no code or OpenSpec
@@ -42,9 +43,10 @@ export const LANES: readonly Lane[] = ["direct", "light", "full"];
 
 export const isAgentState = (s: State): s is AgentState => AGENT_STATES.includes(s);
 
-export type Gate = "WAITING_CLIENT" | "CODE_REVIEW" | "ACCEPTANCE" | "EXECUTION_APPROVAL" | "APPLICATION";
+export type Gate = "WAITING_CLIENT" | "QA_REVIEW" | "CODE_REVIEW" | "ACCEPTANCE" | "EXECUTION_APPROVAL" | "APPLICATION";
 export const GATES: Record<Gate, { kind: "answer" | "approval"; approve: State; reject: State }> = {
   WAITING_CLIENT: { kind: "answer", approve: "ANALYSIS", reject: "ANALYSIS" },
+  QA_REVIEW: { kind: "approval", approve: "CODE_REVIEW", reject: "DEVELOPMENT" },
   CODE_REVIEW: { kind: "approval", approve: "DELIVERY", reject: "DEVELOPMENT" },
   ACCEPTANCE: { kind: "approval", approve: "CLOSED", reject: "ANALYSIS" },
   EXECUTION_APPROVAL: { kind: "approval", approve: "APPLICATION", reject: "EXECUTION" },
@@ -59,7 +61,7 @@ export const MAX_QUESTION_ROUNDS = 3;
 export function nextStateAfterStage(
   state: AgentState,
   output: Record<string, any>,
-  c: { testingAttempts: number; questionRounds: number },
+  c: { testingAttempts: number; questionRounds: number; lane?: Lane },
 ): State {
   switch (state) {
     case "SUPPORT":
@@ -73,7 +75,7 @@ export function nextStateAfterStage(
     case "DEVELOPMENT":
       return output.completed ? "TESTING" : "BLOCKED";
     case "TESTING":
-      if (output.approved) return "CODE_REVIEW";
+      if (output.approved) return c.lane === "full" ? "QA_REVIEW" : "CODE_REVIEW";   // only the full lane goes through QA
       return c.testingAttempts >= MAX_TESTING_ATTEMPTS ? "BLOCKED" : "DEVELOPMENT";
     case "DELIVERY":
       return "ACCEPTANCE";

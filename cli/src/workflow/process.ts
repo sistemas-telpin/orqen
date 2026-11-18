@@ -25,7 +25,7 @@ import { type Rec, Store, newRec } from "./store.ts";
 import type { EnvironmentResult, PrReview, Workspace } from "./workspace.ts";
 
 const CMD = /^\s*\/(approve|reject)\b\s*([\s\S]*)/i;
-/** Verdicts of `orqen review` (code review report for the senior) and how they read in Jira. */
+/** Verdicts of `orqen code-review` (code review report for the senior) and how they read in Jira. */
 export const VERDICTS = { approve: "Approvable", minor: "Approvable with minor changes", reject: "Reject" } as const;
 const JIRA_MAX = 30_000;   // Jira rejects comments over 32767 characters
 
@@ -193,7 +193,7 @@ export class Process {
     const rec = this.store.get(key);
     if (!rec) throw new Error(`${key} is unknown to orqen.`);
     if (rec.route === "operational") throw new Error(`${key} is operational (no code): there is no branch to send.`);
-    if (!rec.branch || !["TESTING", "CODE_REVIEW", "DELIVERY", "ACCEPTANCE", "CLOSED"].includes(rec.state))
+    if (!rec.branch || !["TESTING", "QA_REVIEW", "CODE_REVIEW", "DELIVERY", "ACCEPTANCE", "CLOSED"].includes(rec.state))
       throw new Error(`${key} is in ${rec.state}: the PR to ${this.cfg.develBranch} is opened once development is done (TESTING or later).`);
     return {
       key, state: rec.state, branch: rec.branch, base: this.cfg.develBranch, lane: rec.lane, sis: rec.sis,
@@ -270,6 +270,43 @@ export class Process {
     }
     this.store.log(key, { ts: new Date().toISOString(), from: rec.state, to: rec.state, detail: `code review #${n}: ${verdict}`, agent });
     return { n, path, verdict, committed, commentedOn };
+  }
+
+  // ================================================================ QA review
+  /**
+   * QA decision in QA_REVIEW (full lane only): approve sends the request to the senior (CODE_REVIEW); reject sends it back to
+   * DEVELOPMENT with the reason as feedback. The optional report is saved as round-N/qa-review-<n>.md and committed by the move.
+   * QA can also decide with /approve or /reject in the request (APPROVERS_QA).
+   */
+  async qaReview(key: string, decision: string, reason = "", report = "", by = "qa") {
+    const rec = this.store.get(key);
+    if (!rec || rec.state !== "QA_REVIEW")
+      throw new Error(`${key} is not waiting for QA (state: ${rec?.state ?? "unknown"}). Only full-lane requests go through QA, after TESTING.`);
+    if (decision !== "approve" && decision !== "reject") throw new Error(`Invalid decision "${decision}". Options: approve, reject`);
+    if (decision === "reject" && reason.trim().length < 10)
+      throw new Error('Say what development must fix: --reason "<text>" (10 characters or more).');
+    const reviews: { round: number; n: number; decision: string; by: string; file?: string; ts: string }[] = (rec.artifacts.qa_reviews ??= []);
+    const n = reviews.filter((r) => r.round === rec.round).length + 1;
+    let path: string | undefined;
+    if (report.trim()) {
+      path = `orqen/work/${key}/round-${rec.round}/qa-review-${n}.md`;
+      this.fac.write(rec, `qa-review-${n}.md`, report.trim() + "\n");
+    }
+    reviews.push({ round: rec.round, n, decision, by, file: path, ts: new Date().toISOString() });
+    const pr = rec.artifacts.devel_pr ? ` (${rec.artifacts.devel_pr})` : "";
+    let text = decision === "approve"
+      ? `*QA review #${n}*: approved by ${by}. Next: the senior reviews the PR${pr}.`
+      : `*QA review #${n}*: changes requested by ${by}.\n${reason.trim()}\n\nReturning to development.`;
+    if (report.trim()) text += `\n\n${report.trim()}`;
+    if (text.length > JIRA_MAX) text = text.slice(0, JIRA_MAX) + `\n\n… (truncated; full report in \`${path}\`)`;
+    // the decision is what matters: a failed comment must not leave the request half moved
+    await this.attemptAsync(() => this.commentWithSis(rec, text));
+    if (decision === "reject") {
+      rec.feedback.push({ from: by, rejection: reason.trim() });
+      rec.testingAttempts = 0;
+      await this.move(rec, GATES.QA_REVIEW.reject, `QA requested changes (${by})`, by);
+    } else await this.move(rec, GATES.QA_REVIEW.approve, `QA approved (${by})`, by);
+    return { n, path, next: rec.state };
   }
 
   // ================================================================ complete
@@ -436,7 +473,9 @@ export class Process {
         if (s.approved) {
           // testing does not open the PR: the senior reviews the PR to the devel branch (`orqen pr`)
           const pr = rec.artifacts.devel_pr ? `PR to *${this.cfg.develBranch}*: ${rec.artifacts.devel_pr}` : `Branch \`${rec.branch}\` (the PR to *${this.cfg.develBranch}* is opened with /orqen:pr)`;
-          const decide = this.cfg.codeReviewGate === "github"
+          const decide = next === "QA_REVIEW"
+            ? "QA review (full lane): QA reviews the e2e of the change with /orqen:review and approves or requests changes. Then the senior reviews the PR."
+            : this.cfg.codeReviewGate === "github"
             ? "Code review: approve or request changes on the PR in GitHub."
             : "Code review: comment */approve* or */reject <reason>*.";
           return this.commentWithSis(rec, `Tests passed and all scenarios are covered:\n${table}\n\n${pr}\n${decide}`);
@@ -486,7 +525,7 @@ export class Process {
 
   private approvers(s: State): string[] {
     const a = this.cfg.approvers;
-    return ({ CODE_REVIEW: a.code, ACCEPTANCE: a.client, EXECUTION_APPROVAL: a.execution ?? [], APPLICATION: a.execution ?? [], BLOCKED: [...(a.analysis ?? []), ...a.code] } as Record<string, string[]>)[s] ?? [];
+    return ({ QA_REVIEW: a.qa ?? [], CODE_REVIEW: a.code, ACCEPTANCE: a.client, EXECUTION_APPROVAL: a.execution ?? [], APPLICATION: a.execution ?? [], BLOCKED: [...(a.analysis ?? []), ...a.code] } as Record<string, string[]>)[s] ?? [];
   }
 
   /**
@@ -552,7 +591,7 @@ export class Process {
       if (action === "reject") rec.feedback.push({ from: c.authorName, rejection: reason });
       if (action === "approve" && reason && rec.state === "APPLICATION")
         rec.feedback.push({ from: c.authorName, text: reason });  // result of the application
-      if (rec.state === "CODE_REVIEW" && action === "reject") rec.testingAttempts = 0;
+      if ((rec.state === "CODE_REVIEW" || rec.state === "QA_REVIEW") && action === "reject") rec.testingAttempts = 0;
       if (rec.state === "EXECUTION_APPROVAL" && action === "approve")
         await this.jira.comment(rec.key, "Operational change approved. Apply the proposal as written and comment */approve <result>* on success or */reject <reason>* on failure.");
       if (rec.state === "ACCEPTANCE" && action === "reject") {

@@ -12,7 +12,7 @@ import { Process } from "../workflow/process.ts";
 import { Store } from "../workflow/store.ts";
 import { GitWorkspace } from "../workflow/workspace.ts";
 
-export const WORKFLOW_COMMANDS = ["pending", "support", "analyze", "lane", "take", "complete", "pr", "review", "schema", "block", "release", "search", "status", "cycle"];
+export const WORKFLOW_COMMANDS = ["pending", "support", "analyze", "lane", "take", "complete", "pr", "review", "code-review", "schema", "block", "release", "search", "status", "cycle"];
 
 export const WORKFLOW_HELP = `Customer request workflow:
   pending [--json]                      List pending analyst and agent work
@@ -22,7 +22,8 @@ export const WORKFLOW_HELP = `Customer request workflow:
   take <KEY> [--agent NAME]             Claim an agent stage
   complete <KEY> <output.json|->       Validate output and advance the workflow
   pr <KEY> [<explanation.md>]          Inspect or open the integration PR
-  review <KEY> <report.md|-> --verdict <approve|minor|reject>   Record the code review report (CODE_REVIEW)
+  review <KEY> approve|reject [--reason TEXT] [--report FILE]  QA decision (QA_REVIEW, full lane only)
+  code-review <KEY> <report.md|-> --verdict <approve|minor|reject>   Record the senior's code review report (CODE_REVIEW)
   schema <STAGE> · block <KEY> <reason> · release <KEY> · search <JQL>
   status [KEY] · cycle [--loop]`;
 
@@ -208,10 +209,32 @@ export async function runWorkflow(cmd: string, rest: string[]) {
         return;
       }
       case "review": {
+        // before QA_REVIEW existed, `orqen review ... --verdict` recorded the senior's report: keep it working
+        if (rest.includes("--verdict")) {
+          console.error("⚠ `orqen review --verdict` is now `orqen code-review`; `orqen review` is the QA decision. Running code-review.");
+          cmd = "code-review";
+          return dispatch();
+        }
+        try {
+          const reason = flag("reason") ?? "";
+          const reportFile = flag("report");
+          const key = toRec(rest[0]);
+          const decision = rest[1] ?? "";
+          if (!key || !decision) throw new Error('Usage: orqen review <KEY> approve|reject [--reason "<what to fix>"] [--report <report.md|->]');
+          const report = reportFile === undefined ? "" : reportFile === "-" ? readFileSync(0, "utf8") : readFileSync(reportFile, "utf8");
+          const r = await flow.qaReview(key, decision, reason, report, person || agent);
+          console.log(`✔ QA review #${r.n} (${decision}) → ${r.next}${r.path ? ` · report: ${r.path}` : ""}`);
+        } catch (e) {
+          console.error(`✘ ${(e as Error).message}`);
+          process.exitCode = 1;
+        }
+        return;
+      }
+      case "code-review": {
         try {
           const verdict = flag("verdict") ?? "";
           const key = toRec(rest[0]);
-          if (!rest[1]) throw new Error("Usage: orqen review <KEY> <report.md|-> --verdict <approve|minor|reject>");
+          if (!rest[1]) throw new Error("Usage: orqen code-review <KEY> <report.md|-> --verdict <approve|minor|reject>");
           const body = rest[1] === "-" ? readFileSync(0, "utf8") : readFileSync(rest[1], "utf8");
           const r = await flow.codeReview(key, body, verdict, agent);
           console.log(`✔ code review #${r.n} (${r.verdict}) → ${r.path}${r.committed ? " (committed)" : " (not committed: not on the REC branch; it goes with the next commit of the branch)"}; ${r.commentedOn ? `commented on ${r.commentedOn}` : "NOT commented on Jira (see the warning): paste it by hand"}`);

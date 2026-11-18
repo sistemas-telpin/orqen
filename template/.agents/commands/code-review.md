@@ -10,7 +10,7 @@ Review the integration PR for `$ARGUMENTS` on behalf of the senior who runs this
 
 - **Talk to the person in their system language.** Run `orqen lang` once at the start (`es` = Spanish, `en` = English; the stage context also has it as `language`) and use it for every message, question, and option. Keep commands, state names, and paths as they are. Files and texts for Jira follow their own rules.
 - **Work with the person who invoked this command.** Before each important step, tell them what you are about to do and wait for their OK. When in doubt, ask them (with `AskUserQuestion` when available: concrete options plus your recommendation); never assume what you can ask. After each step, report what you did and what comes next.
-- Read-only on code. Do not edit code or tests, even when the fix is obvious: propose it as a solution. The only file you write is the report, in a temporary file, to record it with `orqen review`.
+- Read-only on code. Do not edit code or tests, even when the fix is obvious: propose it as a solution. The only file you write is the report, in a temporary file, to record it with `orqen code-review`.
 - Do not comment on, approve, or merge the PR (`gh pr review`, `gh pr comment`, and `gh pr merge` are not allowed). Use Jira for read-only access.
 - Leave the request stage unchanged. Do not run `orqen take`, `complete`, `block`, or `release`. Leave Git writes, branch changes, and OpenSpec archiving to orqen.
 - Base every finding on code you read, with its location (`file:line`). If something looks wrong but you cannot confirm it, mark it `to verify` and say what to check. Skip style issues that a linter already enforces.
@@ -46,7 +46,7 @@ Review the integration PR for `$ARGUMENTS` on behalf of the senior who runs this
 10. When the senior accepts the report, write it to a temporary file with the verdict, summary, findings with their solutions, and the text of the changes request when there is one. Record it once:
 
     ```sh
-    orqen review <KEY> <report.md> --verdict <approve|minor|reject> --agent code-review
+    orqen code-review <KEY> <report.md> --verdict <approve|minor|reject> --agent code-review
     ```
 
     orqen saves it as `orqen/work/<KEY>/round-<N>/code-review-<n>.md` (numbered, so a later review does not overwrite it), commits it when the repository is on the request branch, and comments it on the SIS. It does not change the stage. Running it again records another review. If orqen reports that the Jira comment failed, the report is still saved: ask the senior to paste it manually. Do not continue with delivery or fix anything.

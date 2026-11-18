@@ -7,7 +7,8 @@
  *   round-N/analysis.md|json     what was decided in the grilling: summary, criteria, decisions, lane, SIS
  *   round-N/execution/           script, steps, rollback and verification of the operational lane
  *   round-N/devel-pr.md          explanation of the PR to the devel branch (`orqen pr`)
- *   round-N/code-review-<n>.md   code review reports for the senior (`orqen review`), one per review
+ *   round-N/qa-review-<n>.md     QA decisions with their report (`orqen review`, full lane only)
+ *   round-N/code-review-<n>.md   code review reports for the senior (`orqen code-review`), one per review
  *
  * It is committed together with the REC branch, so traceability sits next to the code and the spec.
  * Writing here must never break the process: errors are logged and processing continues.

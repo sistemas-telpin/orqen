@@ -10,7 +10,7 @@ Run the QA review of `$ARGUMENTS` with the QA person who invoked this command. O
 
 - **Talk to the person in their system language.** Run `orqen lang` once at the start (`es` = Spanish, `en` = English; the stage context also has it as `language`) and use it for every message, question, and option. Keep commands, state names, and paths as they are. Files and texts posted on the tickets follow their own rules.
 - **Work with the person who invoked this command.** Before each important step, tell them what you are about to do and wait for their OK. When in doubt, ask them (with `AskUserQuestion` when available: concrete options plus your recommendation); never assume what you can ask. After each step, report what you did and what comes next.
-- Do not run `orqen take`, `complete`, `block`, or `release`. The only workflow command you run is `orqen review` at the end, with QA's explicit decision (`orqen qa <KEY> <report.md> --verdict <approve|reject>` is equivalent).
+- Do not run `orqen take`, `complete`, `block`, or `release`. The only workflow command you run is `orqen review` at the end, with QA's explicit decision.
 - Leave test edits to QA. Read the tickets read-only and leave Git writes, branch changes, and OpenSpec archiving to orqen.
 - Do not rerun the full regression: `TESTING` already ran every test type. Focus on the end-to-end tests of this change and whether they check what was asked.
 - Report missing coverage and failures as observed. Wait for explicit approval of a passing run after any manual edits.

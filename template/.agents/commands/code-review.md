@@ -1,52 +1,7 @@
 ---
-description: Review the integration PR of a request for the senior and report whether the changes are sound or list each problem with its possible solutions
+description: Now part of /orqen:approve (the senior's optional PR report, before approving or requesting changes)
 argument-hint: <KEY>
 allowed-tools: Bash(orqen:*), Bash(git fetch:*), Bash(git diff:*), Bash(git log:*), Bash(git show:*), Bash(git status:*), Bash(git branch:*), Bash(gh pr view:*), Bash(gh pr diff:*), Bash(orqen env test:*), Read, Grep, Glob, Write, AskUserQuestion
 ---
 
-Review the integration PR for `$ARGUMENTS` on behalf of the senior who runs this command. Tell them whether the changes are sound and, for each problem, explain it with possible solutions. The senior decides: you give them a report, and they approve or request changes in a review on the PR in GitHub (or comment `/approve` or `/reject` on the ticket when the project uses `CODE_REVIEW_GATE=ticket`). Follow the workflow in `AGENTS.md`.
-
-## Rules
-
-- **Talk to the person in their system language.** Run `orqen lang` once at the start (`es` = Spanish, `en` = English; the stage context also has it as `language`) and use it for every message, question, and option. Keep commands, state names, and paths as they are. Files and texts posted on the tickets follow their own rules.
-- **Work with the person who invoked this command.** Before each important step, tell them what you are about to do and wait for their OK. When in doubt, ask them (with `AskUserQuestion` when available: concrete options plus your recommendation); never assume what you can ask. After each step, report what you did and what comes next.
-- Read-only on code. Do not edit code or tests, even when the fix is obvious: propose it as a solution. The only file you write is the report, in a temporary file, to record it with `orqen code-review`.
-- Do not comment on, approve, or merge the PR (`gh pr review`, `gh pr comment`, and `gh pr merge` are not allowed). Read the tickets read-only.
-- Leave the request stage unchanged. Do not run `orqen take`, `complete`, `block`, or `release`. Leave Git writes, branch changes, and OpenSpec archiving to orqen.
-- Base every finding on code you read, with its location (`file:line`). If something looks wrong but you cannot confirm it, mark it `to verify` and say what to check. Skip style issues that a linter already enforces.
-
-## Steps
-
-1. Validate the key (request or issue). Run `orqen status <KEY>` and continue only for a development request in `CODE_REVIEW`. Otherwise, report the stage and stop.
-2. Run `orqen pr <KEY>` to read the branch, base, lane, analysis path, spec change, and PR URL (`existing`). If there is no PR, tell the senior to open it with `/orqen:pr <KEY>` and stop.
-3. Run `git fetch origin` and review the remote branch, so the senior does not need to switch branches: `git log origin/<base>..origin/<branch> --oneline`, `git diff origin/<base>...origin/<branch> --stat`, and the diff of each relevant file. Use `gh pr view` and `gh pr diff` when available to confirm you are reviewing what the PR contains. If the local branch has unpushed changes, say that the review covers the PR only.
-4. Review the diff against:
-   - the analysis (summary, acceptance criteria, grilling decisions, and risks) and, for the light and full lanes, `proposal.md`, `design.md`, and the scenarios in the spec deltas; for the direct lane, the plan;
-   - the PR explanation in `orqen/work/<KEY>/round-<N>/devel-pr.md`: does it describe what the diff contains?
-   - the repository conventions (`AGENTS.md`, `CLAUDE.md`, linters, and neighboring code).
-5. Look for, in this order:
-   - **Correctness**: logic that misses a scenario or criterion, edge cases (null, empty, limits, concurrency), swallowed or misreported errors, and regressions in existing code the change touches.
-   - **Security and data**: injection (SQL, shell, HTML), missing permission checks or validation, secrets in code, and migrations that cannot be rolled back or that break existing data.
-   - **Scope**: changes outside the request, and deviations from the spec or plan that the PR does not explain.
-   - **Tests**: scenarios or criteria without a test, tests that do not check the THEN, and fragile tests. Run tests or linters with `orqen env test` when you need them to back a claim.
-   - **Maintainability**: duplication, dead code, debug leftovers, and names or structures that contradict the repository conventions, only when the impact is real.
-6. Verify each finding before reporting it. Re-read the code in context (callers and prior validation) and describe the concrete failing scenario (input or state → wrong result). If you cannot build that scenario, mark it `to verify` or drop it.
-7. Give the senior the report:
-   - **Verdict**, in one line: `Approvable`, `Approvable with minor changes`, or `Reject`, with the reason.
-   - **Summary**: what the PR does, whether it meets the request, and how well tests cover it.
-   - **Findings**, most severe first. For each:
-     - `#N` · **severity** (`blocking`: breaks a criterion, security, or data · `important`: a likely bug or debt that should not be merged · `minor`: an improvement · `to verify`) · `file:line`;
-     - **What happens**: the problem in one or two sentences;
-     - **Why it matters**: the concrete failing scenario, or the criterion or scenario it breaks;
-     - **Possible solutions**: one to three concrete options (what to change and where, with a short snippet if it helps) and their cost or trade-off. Put the recommended option first and mark it.
-   - **What is good**: two or three lines, only when useful.
-   - If there are no findings, say so plainly.
-8. If the verdict is not `Approvable`, draft the text for the senior's "request changes" review (or the `/reject <reason>` comment in the ticket mode) with the blocking and important findings (number, location, problem, and recommended solution, one line each). orqen passes that text back to development as feedback. If the verdict is approvable, remind the senior to approve the PR in GitHub (or comment `/approve` in the ticket mode). The senior posts it, not you. A push to the PR after their review makes it stale, so they need to review again.
-9. Stay available while the senior digs into a finding, drops one, or asks for another area to be reviewed, and update the report with their decisions.
-10. When the senior accepts the report, write it to a temporary file with the verdict, summary, findings with their solutions, and the text of the changes request when there is one. Record it once:
-
-    ```sh
-    orqen code-review <KEY> <report.md> --verdict <approve|minor|reject> --agent code-review
-    ```
-
-    orqen saves it as `orqen/work/<KEY>/round-<N>/code-review-<n>.md` (numbered, so a later review does not overwrite it), commits it when the repository is on the request branch, and comments it on the issue (or the external one when there is none). It does not change the stage. Running it again records another review. If orqen reports that the comment failed, the report is still saved: ask the senior to paste it manually. Do not continue with delivery or fix anything.
+The code review report is now the first (optional) step of `/orqen:approve`. Tell the person in one line (in their system language: run `orqen lang`) that from now on it is `/orqen:approve $ARGUMENTS`, which offers the report and then records their decision. Then read `orqen/plugin/commands/approve.md` and follow it with `$ARGUMENTS` as the key.

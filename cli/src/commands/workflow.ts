@@ -23,25 +23,20 @@ export const WORKFLOW_HELP = `Customer request workflow (the 9 steps):
   support <KEY> [--person NAME]         2 · First-line support (/orqen:support)
   analyze <KEY> [--analyst NAME]        3 · Analysis (/orqen:analyze)
   list issues [--json]                  4 · Development queue: issues nobody took, the ones that came back marked
-  take <KEY> [--agent NAME]             5 · Claim an agent stage (/orqen:implement)
+  take <KEY> [--agent NAME]             5 · Claim an agent stage (/orqen:implement: development, then testing)
   pr <KEY> [<explanation.md>]           6 · Inspect or open the integration PR (/orqen:pr)
   review <KEY> approve|reject [--reason TEXT] [--report FILE]   7 · QA decision in QA_REVIEW, full lane (/orqen:review)
   list prs [--json]                     8 · Senior's queue: PRs to review and whether the review is on the last commit
   approve <KEY> [--changes <comment.md|->] [--person NAME]   9 · Senior: approve the PR or request changes (/orqen:approve)
+  code-review <KEY> <report.md|-> --verdict <approve|minor|reject>   Record the senior's optional PR report (does not decide)
   merged <KEY> [--person NAME]          After approval a person merges the PR by hand; confirm it when orqen cannot read it from GitHub
-  pending [--json]                      List pending analyst and agent work (older list)
-  support <KEY> [--person NAME]         Start first-line support
-  analyze <KEY> [--analyst NAME]        Start analysis
   lane <KEY> <direct|light|full>        Record the lane
-  take <KEY> [--agent NAME]             Claim an agent stage
   complete <KEY> <output.json|->       Validate output and advance the workflow
-  pr <KEY> [<explanation.md>]          Inspect or open the integration PR
-  qa <KEY> <report.md|-> --verdict <approve|reject> [--person NAME]   Same QA decision, with the report as the reason
-  code-review <KEY> <report.md|-> --verdict <approve|minor|reject>   Record the senior's code review report (CODE_REVIEW)
   schema <STAGE> · block <KEY> <reason> · release <KEY> · search <query>
   status [KEY] [--json] · cycle [--loop]
   connectors [setup|get|check <json>|set <json>] [--json] Show/check the connectors, or set them up (get/check/set: JSON for tools such as orqen-gui)
-  connectors github-choices <json|-> <requests|issues> <repositories|projects|statuses> List GitHub choices for a draft`;
+  connectors github-choices <json|-> <requests|issues> <repositories|projects|statuses> List GitHub choices for a draft
+Older names (still work, with a notice): pending → list requests · qa → review`;
 
 /** The person at this machine: Git's user.name for this repository, otherwise the system user. */
 export function quienSoy(repo: string): string | undefined {
@@ -179,6 +174,7 @@ export async function runWorkflow(cmd: string, rest: string[]) {
         return;
       }
       case "qa": {
+        console.error("[orqen] `orqen qa` is now `orqen review <KEY> approve|reject --report <file>`; this name still works.");
         try {
           const verdict = flag("verdict") ?? "";
           const key = toKey(rest[0]);
@@ -220,6 +216,7 @@ export async function runWorkflow(cmd: string, rest: string[]) {
         return;
       }
       case "pending": {
+        if (!rest.includes("--json")) console.error("[orqen] `orqen pending` is now `orqen list requests` (by role, with the next command); this name still works.");
         const p = await flow.review();
         if (has("json")) return console.log(JSON.stringify(p, null, 2));
         if (!p.length) return console.log("No requests with pending work.");

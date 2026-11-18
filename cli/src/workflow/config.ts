@@ -26,7 +26,7 @@ function repoRoot(): string {
 export interface Config {
   /** Where the tickets live: requests (what the client sees) and optional issues (the team's). See connectors/. */
   connectors: ConnectorsSettings;
-  /** SUPPORT_STAGE=on: `orqen pending` sends new requests to the support person first. `orqen support` works either way, and the analyst can still take a NEW one directly. */
+  /** SUPPORT_STAGE=on: `orqen list requests` sends new requests to the support person first. `orqen support` works either way, and the analyst can still take a NEW one directly. */
   supportStage: boolean;
   /** analysis = analysts (they also unblock BLOCKED together with code). qa = who decides QA_REVIEW (full lane). Accounts of the requests system. */
   approvers: { analysis?: string[]; qa?: string[]; code: string[]; client: string[]; execution?: string[] };

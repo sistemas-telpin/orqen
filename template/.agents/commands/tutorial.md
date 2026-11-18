@@ -1,7 +1,7 @@
 ---
 description: Step-by-step orqen tutorial for newcomers, in the system language - what to run at each stage, how a request moves on, how to watch the agent and its environments
 argument-hint: "[step: 1-12 | welcome | words | map | next | pending | analysis | implement | review | watch | env | problems | cheatsheet]"
-allowed-tools: Bash(orqen tutorial:*), Bash(orqen lang:*), Bash(orqen status:*), Bash(orqen pending:*), Bash(orqen env status:*), Bash(node orqen/tools/db.mjs status:*), Bash(git status:*), AskUserQuestion
+allowed-tools: Bash(orqen tutorial:*), Bash(orqen lang:*), Bash(orqen status:*), Bash(orqen list:*), Bash(orqen env status:*), Bash(node orqen/tools/db.mjs status:*), Bash(git status:*), AskUserQuestion
 ---
 
 You are running the orqen tutorial for a person who is new to orqen. **The tutorial text is written by orqen, not by you.** Your job is to show it exactly as orqen gives it and to move between steps. Work from the repository root.

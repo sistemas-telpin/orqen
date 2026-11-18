@@ -200,7 +200,7 @@ export async function init(o: OpcionesInit) {
     ...(faltanEnv.length ? [`Configure provider accounts in Settings > Connectors: missing ${faltanEnv.join(", ")}. These accounts are shared across repositories.`] : []),
     `Review ${pc.cyan(ARCHIVO_CONFIG)}, then try: ${pc.cyan("orqen env up")} · ${pc.cyan("orqen env test")} · ${pc.cyan("orqen env down")}`,
     `Open Claude Code in this folder (restart it if it was open) and accept ${pc.bold("Trust this folder")}: ` +
-      `the commands appear as ${pc.cyan("/orqen:tutorial")} (start here if you are new), ${pc.cyan("/orqen:support")}, ${pc.cyan("/orqen:analyze")}, ${pc.cyan("/orqen:list")}, ${pc.cyan("/orqen:implement")}, ${pc.cyan("/orqen:pr")}, ${pc.cyan("/orqen:review")} (QA), ${pc.cyan("/orqen:approve")}, ${pc.cyan("/orqen:code-review")} ` +
+      `the commands appear as ${pc.cyan("/orqen:tutorial")} (start here if you are new), ${pc.cyan("/orqen:support")}, ${pc.cyan("/orqen:analyze")}, ${pc.cyan("/orqen:list")}, ${pc.cyan("/orqen:implement")}, ${pc.cyan("/orqen:pr")}, ${pc.cyan("/orqen:review")} (QA), ${pc.cyan("/orqen:approve")} ` +
       gris(`(type /orqen: to list them; check with /plugin → orqen@${mk})`),
     `Commit the changes (orqen/, .claude/, .claude-plugin/, AGENTS.md, CLAUDE.md, openspec/) so the team gets the same commands.`,
   ];

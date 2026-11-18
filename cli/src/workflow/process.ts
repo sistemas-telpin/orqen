@@ -188,7 +188,7 @@ export class Process {
   async analyze(key: string, agent = "agent", analyst = agent) {
     const item = this.store.get(key) ?? newWorkItem(key);
     if (item.state === "WAITING_CLIENT")
-      throw new Error(`${key} is waiting for client answers on the ticket. When they reply it goes back to ANALYSIS (\`orqen pending\`).`);
+      throw new Error(`${key} is waiting for client answers on the ticket. When they reply it goes back to ANALYSIS (\`orqen list requests\`).`);
     if (item.state !== "NEW" && item.state !== "SUPPORT" && item.state !== "ANALYSIS")
       throw new Error(`${key} already went through the analysis (state: ${item.state}). If it must be redone, a rejection or an escalation sends it back to ANALYSIS.`);
     this.assertClaimable(item, agent);
@@ -229,7 +229,7 @@ export class Process {
   async take(key: string, agent = "agent", fromAnalyze = false) {
     const item = this.store.get(key);
     if (!item || !isAgentState(item.state))
-      throw new Error(`${key} has no work for an agent (state: ${item?.state ?? "unknown"}). Run \`orqen pending\`.`);
+      throw new Error(`${key} has no work for an agent (state: ${item?.state ?? "unknown"}). Run \`orqen list requests\`.`);
     if (item.state === "ANALYSIS" && !fromAnalyze)
       throw new Error(`The analysis of ${key} is driven by an analyst: use /orqen:analyze ${key} (or \`orqen analyze ${key}\`).`);
     if (item.state === "SUPPORT" && !fromAnalyze)

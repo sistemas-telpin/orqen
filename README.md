@@ -20,7 +20,7 @@ Opcionalmente, una persona de **soporte** atiende primero el reclamo con el agen
 | Agente             | `/orqen:implement DEV-442`: implementa la spec o el plan aprobado y corre solo TESTING (la regresión completa) · `/orqen:pr DEV-442`: abre el PR a desarrollo |
 | Todos              | `/orqen:list requests` (`orqen list requests`): la lista de trabajo por rol, sin tomar nada · desarrollo: `/orqen:list issues` · senior: `/orqen:list prs` |
 | QA                 | `/orqen:review DEV-442`: solo carril completo, en `QA_REVIEW`; revisa en pantalla los e2e del cambio y aprueba (`orqen review … approve`) o pide cambios (vuelve a desarrollo) |
-| Senior             | `/orqen:approve DEV-442`: informe opcional del PR (`/orqen:code-review`), después aprueba o pide cambios (`orqen approve`, queda el review en el PR) y entrega al cliente |
+| Senior             | `/orqen:approve DEV-442`: informe opcional del PR, después aprueba o pide cambios (`orqen approve`, queda el review en el PR) y entrega al cliente |
 | Modo desatendido   | `orqen cycle --loop`: avanza los gates y lanza las etapas de agente pendientes                                   |
 | Aprobadores        | `/approve` o `/reject <motivo>` en el request (conformidad del cliente, carril operativo, destrabar un BLOCKED)    |
 
@@ -29,7 +29,7 @@ Opcionalmente, una persona de **soporte** atiende primero el reclamo con el agen
 - **CLI `orqen`** (paquete npm, Node ≥ 20.12): maneja la máquina de estados, los tickets (conectores), git, los PRs, los entornos de prueba y OpenSpec.
   Es determinística: el agente produce contenido y `orqen` decide el flujo.
 - **`AGENTS.md` / `CLAUDE.md`**: lo que lee el agente. Explican el proceso y las reglas, y le indican que use la CLI.
-- **Plugin de Claude Code** (`orqen/plugin/`): los comandos `/orqen:tutorial`, `/orqen:support`, `/orqen:analyze`, `/orqen:list`, `/orqen:implement`, `/orqen:pr`, `/orqen:review` (QA), `/orqen:approve` y `/orqen:code-review` (`/orqen:e2e-review` queda como alias de `/orqen:review`), y el skill `orqen:grilling`.
+- **Plugin de Claude Code** (`orqen/plugin/`): los comandos `/orqen:tutorial`, `/orqen:support`, `/orqen:analyze`, `/orqen:list`, `/orqen:implement`, `/orqen:pr`, `/orqen:review` (QA), `/orqen:approve` (`/orqen:e2e-review` y `/orqen:code-review` quedan como nombres viejos que redirigen), y el skill `orqen:grilling`.
 - **`orqen/stages/`**: las guías de cada etapa (soporte, análisis, especificación, desarrollo, testing, entrega, ejecución y verificación). Se pueden editar.
 - **`orqen/work/<KEY>/`**: registro y estado de cada pedido dentro del repo (lo escribe `orqen`).
 - **`openspec/config.yaml`**: reglas del proceso de pedidos aplicadas a los artefactos de OpenSpec.
@@ -49,7 +49,7 @@ siguiente** · ver qué hay para hacer · analizar · implementar · testing, PR
   (siguiente, probalo, otro tema, salir). Si la persona pregunta algo, el agente contesta corto y vuelve al tutorial.
 - **Con los datos del repo**: procesos, puertos y URLs de `orqen/config.yaml`, claves de ejemplo según los conectores (Jira, GitHub o Asana), si hay soporte,
   cómo se decide el code review y el comando para seguir un log en PowerShell (Windows) o bash. Nunca muestra secretos de `orqen/.env`.
-- **"Probalo ahora"** solo corre comandos de lectura (`orqen status`, `orqen pending`, `orqen env status`, `git status`). Nunca toma ni cambia un pedido.
+- **"Probalo ahora"** solo corre comandos de lectura (`orqen status`, `orqen list requests`, `orqen env status`, `git status`). Nunca toma ni cambia un pedido.
 
 `orqen tutorial --list` lista los pasos y `orqen tutorial --step <n|id>` imprime uno.
 
@@ -66,7 +66,7 @@ pantalla, `Get-UICulture`; en macOS, `AppleLanguages`; en Linux, `LC_ALL` / `LAN
 ## Soporte (opcional): `/orqen:support SOP-1234`
 
 Es la etapa **antes del analista**: la persona que recibe el reclamo intenta responderle al cliente sin llegar a un análisis ni a
-un desarrollo. `SUPPORT_STAGE` (en `orqen/.env`, apagada por defecto) solo decide si `orqen pending` manda los pedidos nuevos a soporte: con `on` aparecen primero ahí; con `off`, el flujo es el de siempre
+un desarrollo. `SUPPORT_STAGE` (en `orqen/.env`, apagada por defecto) solo decide si `orqen list requests` manda los pedidos nuevos a soporte: con `on` aparecen primero ahí; con `off`, el flujo es el de siempre
 (`NEW` → `ANALYSIS`).
 
 ```mermaid
@@ -103,7 +103,7 @@ analista. El agente nunca promete fechas, alcance ni cambios al cliente.
 `support.json` (la salida validada). Cuando el analista abre el pedido escalado, recibe todo eso en `previous_stages.SUPPORT`, y la guía de
 análisis le indica partir de ahí en vez de repetir el trabajo. La guía de la etapa está en `orqen/stages/support.md` y se puede editar.
 
-`orqen pending` lista los pedidos para soporte aparte de los del analista y los del agente. Un pedido resuelto por soporte no tiene rama, así que su
+`orqen list requests` lista los pedidos para soporte aparte de los del analista y los del agente. Un pedido resuelto por soporte no tiene rama, así que su
 registro en `orqen/work/` no se commitea solo (como pasa con el carril operativo).
 
 ## Análisis: `/orqen:analyze SOP-1234`
@@ -241,23 +241,24 @@ La explicación queda en `orqen/work/<KEY>/round-N/devel-pr.md`. Es idempotente:
 Como `orqen` commitea lo pendiente de la rama antes de empujar, los ajustes manuales (p. ej. los del diseñador de e2e) viajan con el PR.
 Si el repo no está en la rama del pedido, `orqen pr` falla antes de escribir, commitear o empujar nada.
 
-## Code review: `/orqen:code-review DEV-32`
+## Code review y decisión del senior: `/orqen:approve DEV-32`
 
-Lo corre el **senior** con el pedido en `CODE_REVIEW` y el PR a desarrollo ya abierto. El agente revisa el diff del PR contra lo pedido
-(análisis, spec o plan, Scenarios / criterios de aceptación, explicación del PR y convenciones del repo) y le devuelve un informe para decidir.
-No mueve el estado: la decisión la toma el senior con un review en el PR de GitHub (ver más abajo).
+Lo corre el **senior** con el pedido en `CODE_REVIEW` y el PR a desarrollo ya abierto. Primero, si el senior quiere, el agente revisa el diff
+del PR contra lo pedido (análisis, spec o plan, Scenarios / criterios de aceptación, explicación del PR y convenciones del repo) y le devuelve
+un informe. El informe no mueve el estado: después el senior aprueba o pide cambios (`orqen approve`, que deja el review en el PR de GitHub).
+`/orqen:code-review` quedó como nombre viejo: avisa y sigue con `/orqen:approve`.
 
 ```mermaid
 flowchart TD
-    A["/orqen:code-review DEV-32"] --> B["orqen status + orqen pr<br/>¿CODE_REVIEW? ¿hay PR?"]
+    A["/orqen:approve DEV-32<br/>(informe opcional)"] --> B["orqen status + orqen pr<br/>¿CODE_REVIEW? ¿hay PR?"]
     B -->|"no"| X(["Se explica y se corta<br/>(sin PR: primero /orqen:pr)"])
     B -->|"sí"| C["Lee el diff del PR (origin/base...origin/rama)<br/>contra análisis, spec/plan y criterios"]
     C --> D["Verifica cada hallazgo<br/>(escenario concreto que falla)"]
     D --> E["Informe: veredicto · hallazgos con severidad, archivo:línea,<br/>qué pasa, por qué importa y posibles soluciones"]
     E --> R["orqen code-review DEV-32 informe.md --verdict …<br/>guarda code-review-n.md · lo comenta en el issue"]
     R --> F{"Senior"}
-    F -->|"Approve en el PR de GitHub"| G(["DELIVERY"])
-    F -->|"Request changes con el texto que dejó listo el agente"| H(["DEVELOPMENT<br/>(los hallazgos llegan como feedback)"])
+    F -->|"orqen approve: approve en el PR"| G(["DELIVERY"])
+    F -->|"orqen approve --changes con el texto que dejó listo el agente"| H(["DEVELOPMENT<br/>(los hallazgos llegan como feedback)"])
 ```
 
 Es **solo lectura**: el agente no corrige código, no comenta ni aprueba el PR (solo `gh pr view` / `gh pr diff`) y no escribe en el ticket.
@@ -271,7 +272,7 @@ de un pedido de cambios no pisa al primero), se commitea si el repo está en la 
 ### Cómo se decide el gate: review en GitHub
 
 Con `CODE_REVIEW_GATE=github` (el valor por defecto) el senior **no necesita comentar nada en el ticket**: aprueba o pide cambios con un review en el PR,
-y `orqen` lo lee con `gh` en cada `orqen pending` / `orqen cycle`:
+y `orqen` lo lee con `gh` en cada `orqen list` / `orqen cycle`:
 
 - **Approve** → el pedido pasa a DELIVERY y se comenta en el pedido y el issue.
 - **El merge lo hace una persona.** orqen nunca mergea el PR: después del approve, alguien lo mergea a mano a `desarrollo`.
@@ -303,7 +304,7 @@ flowchart LR
     DESA["DEVELOPMENT"]:::agente
     TEST["TESTING"]:::agente
     QA["QA_REVIEW<br/>(QA + /orqen:review,<br/>solo carril completo)"]:::humano
-    REV["CODE_REVIEW<br/>(senior + /orqen:code-review)"]:::humano
+    REV["CODE_REVIEW<br/>(senior + /orqen:approve)"]:::humano
     DELIVERY["DELIVERY"]:::agente
     CONF["ACCEPTANCE<br/>(cliente)"]:::humano
     CLOSED(["CLOSED"]):::final
@@ -339,7 +340,7 @@ Tickets, git, PR y `openspec archive` los ejecuta solo `orqen`; el agente produc
 | DEVELOPMENT    | agente            | implementa con el entorno levantado; con spec tilda `tasks.md`, en directo sigue el `plan`                    | flujo _apply_; `orqen` rechaza si queda alguna tarea sin tildar                                                                                               |
 | TESTING        | `orqen` + agente  | `orqen` corre la suite y el agente mapea test ↔ **cada Scenario** (directo: cada **criterio de aceptación**). No abre PR | si falta alguno, se rechaza                                                                                                                         |
 | QA_REVIEW      | QA                | solo carril completo: revisa en pantalla los e2e del cambio (`/orqen:review`) y aprueba (→ CODE_REVIEW) o pide cambios (→ DEVELOPMENT) | — |
-| CODE_REVIEW    | senior            | revisa el PR a desarrollo (`/orqen:pr`) con el informe de `/orqen:code-review` y decide con un review en GitHub | —                                                                                                                                                             |
+| CODE_REVIEW    | senior            | revisa el PR a desarrollo (`/orqen:pr`) con el informe opcional de `/orqen:approve` y decide con un review en GitHub | —                                                                                                                                                             |
 | DELIVERY       | `orqen` + agente  | `orqen` archiva (si hubo spec), espera el merge manual del PR y el agente escribe notas y mensaje al cliente                                 | `openspec archive` fusiona los deltas en `openspec/specs` y se empuja a la rama del PR                                                                       |
 | ACCEPTANCE     | cliente           | `/approve` cierra; `/reject` abre la ronda 2 (vuelve a ANALYSIS: nuevo carril, change y issue)                  | nuevo change `…-r2`                                                                                                                                           |
 
@@ -444,7 +445,7 @@ Las credenciales de proveedores van en `~/.orqen/providers.env`; las opciones de
 | `JIRA_URL`, `JIRA_USER`, `JIRA_TOKEN`, `JIRA_DEPLOYMENT`      | Conexión a Jira (`cloud` o `server`). Otro Jira: otro prefijo y `credenciales: <PREFIJO>` en el conector |
 | `GITHUB_TOKEN`                                               | GitHub Issues/Projects (vacío = la sesión de `gh`)                                         |
 | `ASANA_TOKEN`                                                | Asana (token personal)                                                                     |
-| `SUPPORT_STAGE`                                              | `on`: `orqen pending` manda los pedidos nuevos primero a soporte. Por defecto `off`; `/orqen:support` funciona con cualquiera de los dos valores. No hay lista de personas de soporte: puede tomarlo cualquiera |
+| `SUPPORT_STAGE`                                              | `on`: `orqen list requests` manda los pedidos nuevos primero a soporte. Por defecto `off`; `/orqen:support` funciona con cualquiera de los dos valores. No hay lista de personas de soporte: puede tomarlo cualquiera |
 | `APPROVERS_ANALYSIS`, `APPROVERS_QA`, `APPROVERS_CODE`, `APPROVERS_CLIENT`, `APPROVERS_EXECUTION` | Quién puede decidir en cada gate, con cuentas del sistema de requests (vacío = cualquiera). `APPROVERS_CODE` también destraba un BLOCKED |
 | `CODE_REVIEW_GATE`, `GITHUB_REVIEWERS`                       | Quién decide en CODE_REVIEW: `github` (review en el PR, por defecto) o `ticket` (`/approve` y `/reject` en el ticket; `jira` sigue funcionando). `GITHUB_REVIEWERS`: usuarios de GitHub cuyos reviews cuentan (vacío = cualquiera) |
 | `BASE_BRANCH`, `TEST_COMMAND`                                | Rama base de las ramas de pedidos y suite por defecto (si `config.yaml` no define tests)       |
@@ -613,7 +614,7 @@ apply de la spec o plan → `orqen complete`).
 
 **PR a desarrollo**: en Claude Code, `/orqen:pr DEV-32`. En otro agente: _"abrí el PR a desarrollo del DEV-32"_ (`orqen pr` → explicación → `orqen pr <KEY> <archivo.md>`).
 
-**Code review**: en Claude Code, `/orqen:code-review DEV-32`, a cargo del senior. En otro agente: _"hacé el code review del PR del DEV-32"_.
+**Code review y decisión**: en Claude Code, `/orqen:approve DEV-32`, a cargo del senior. En otro agente: _"hacé el code review del PR del DEV-32"_.
 
 **Resto de las etapas, interactivo**: _"procesá el SOP-123"_ → `orqen take` → trabaja → `orqen complete`.
 
@@ -624,12 +625,12 @@ orqen cycle --loop     # cada ORQEN_INTERVAL_SEC: avanza gates y lanza AGENT_CMD
 ```
 
 Para cambiar de agente alcanza con cambiar `AGENT_CMD`, por ejemplo a `codex exec --full-auto {prompt}`.
-Los pedidos nuevos no se toman solos: quedan en NEW hasta que soporte corre `support` o un analista corre `analyze` (con `SUPPORT_STAGE=on`, `orqen pending` los lista primero para soporte).
+Los pedidos nuevos no se toman solos: quedan en NEW hasta que soporte corre `support` o un analista corre `analyze` (con `SUPPORT_STAGE=on`, `orqen list requests` los lista primero para soporte).
 
 ### Comandos
 
 ```text
-orqen                                  Abre la app de escritorio de ORQEN en este repo (orqen --help: la ayuda)
+orqen                                  Muestra la ayuda (la app de escritorio es aparte: orqen-gui)
 orqen init [dir]                       Inicializa un repo
 orqen update [dir]                     Actualiza la CLI, OpenSpec y el kit
 
@@ -638,7 +639,7 @@ orqen env setup | up [--all] | test [tipo] | status | down
 orqen tutorial [paso] [--step <n|id>] [--list] [--lang es|en]   Tutorial paso a paso · orqen lang: idioma detectado
 orqen swarm "<tarea>" [--parallel N] [--plan-only | --plan plan.json] [--small C] [--large C] [--yes]
 
-orqen pending [--json]                 Pedidos con trabajo: para soporte / para analizar / para un agente
+orqen list requests|issues|prs [--json] Tablero por rol · cola de desarrollo · cola de PRs (y merges pendientes)
 orqen support <KEY> [--person N]       Abre la atención de soporte (anda con SUPPORT_STAGE on u off)
 orqen analyze <KEY> [--analyst N]      Abre el análisis con un analista
 orqen lane <KEY> <direct|light|full>   Registra el carril (light/full: rama + change de OpenSpec)
@@ -646,7 +647,8 @@ orqen take <KEY> [--agent N]           Reserva una etapa de agente y prepara ram
 orqen complete <KEY> <salida.json|->   Valida la salida de la etapa y avanza el proceso
 orqen pr <KEY> [<explicación.md>] [--title T]                     Sin archivo: informa. Con archivo: commit + push + PR a DEVEL_BRANCH
 orqen review <KEY> approve|reject [--reason T] [--report F]           Decisión de QA (QA_REVIEW, solo carril completo)
-orqen code-review <KEY> <informe.md|-> --verdict <approve|minor|reject> Registra el informe del code review (CODE_REVIEW)
+orqen approve <KEY> [--changes <comentario.md|->]                     Decisión del senior: aprueba el PR o pide cambios
+orqen code-review <KEY> <informe.md|-> --verdict <approve|minor|reject> Registra el informe opcional del senior (no decide)
 orqen merged <KEY> [--person NOMBRE]     Confirma el merge manual del PR cuando orqen no puede leerlo (sin gh)
 orqen status [KEY]                     Estado actual y log
 orqen schema <ETAPA>                   JSON Schema de la salida de una etapa
@@ -657,7 +659,9 @@ orqen search <JQL>                     Busca issues (antecedentes / relacionados
 orqen cycle [--loop]                   Modo desatendido
 ```
 
-`take`, `complete`, `status`, `block`, `release`, `pr` y `review` aceptan la clave del request o la de su issue.
+`take`, `complete`, `status`, `block`, `release`, `pr`, `review` y `approve` aceptan la clave del request o la de su issue.
+Nombres viejos que siguen andando con un aviso: `orqen pending` → `orqen list requests`, `orqen qa` → `orqen review`,
+`/orqen:e2e-review` → `/orqen:review`, `/orqen:code-review` → `/orqen:approve`.
 
 ## Garantías y límites
 

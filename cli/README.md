@@ -69,7 +69,7 @@ A planner model (default Opus) splits the task into a dependency graph of small 
 ## Process a request
 
 ```sh
-orqen pending
+orqen list requests
 orqen analyze SOP-1234
 orqen status DEV-442
 orqen take DEV-442

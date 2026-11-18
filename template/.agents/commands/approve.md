@@ -1,7 +1,7 @@
 ---
 description: The senior decides whether the PR is integrated - optional report first, then approve (on to delivery) or request changes (back to development); in DELIVERY, deliver to the client
 argument-hint: <KEY>
-allowed-tools: Bash(orqen:*), Bash(git fetch:*), Bash(git diff:*), Bash(git log:*), Bash(git show:*), Bash(git status:*), Bash(git branch:*), Bash(gh pr view:*), Bash(gh pr diff:*), Read, Grep, Glob, Write, AskUserQuestion
+allowed-tools: Bash(orqen:*), Bash(git fetch:*), Bash(git diff:*), Bash(git log:*), Bash(git show:*), Bash(git status:*), Bash(git branch:*), Bash(gh pr view:*), Bash(gh pr diff:*), Bash(orqen env test:*), Read, Grep, Glob, Write, AskUserQuestion
 ---
 
 Help the senior who invoked this command decide on the integration PR of `$ARGUMENTS`, and record their decision with orqen. The senior decides; you inform and execute. Follow the workflow in `AGENTS.md`.
@@ -10,7 +10,8 @@ Help the senior who invoked this command decide on the integration PR of `$ARGUM
 
 - **Talk to the person in their system language.** Run `orqen lang` once at the start (`es` = Spanish, `en` = English; the stage context also has it as `language`) and use it for every message, question, and option. Keep commands, state names, and paths as they are. Files and texts posted on the tickets follow their own rules.
 - **Work with the person who invoked this command.** Before each important step, tell them what you are about to do and wait for their OK. When in doubt, ask them (with `AskUserQuestion` when available: concrete options plus your recommendation); never assume what you can ask. After each step, report what you did and what comes next.
-- Read-only on code. Do not edit code or tests: a problem goes in the report with its possible solutions, and back to development as a requested change.
+- Read-only on code. Do not edit code or tests, even when the fix is obvious: a problem goes in the report with its possible solutions, and back to development as a requested change. The only file you write is the report or the changes request, in a temporary file.
+- Base every finding on code you read, with its location (`file:line`). If something looks wrong but you cannot confirm it, mark it `to verify` and say what to check. Skip style issues that a linter already enforces.
 - The decision is recorded only with `orqen approve`, and only with the senior's explicit choice. Never use `gh pr review`, `gh pr comment`, or `gh pr merge` directly.
 - A decision is valid only on the last commit of the PR: if there is a push after it, the PR has to be reviewed again.
 
@@ -23,7 +24,16 @@ Help the senior who invoked this command decide on the integration PR of `$ARGUM
    - `DELIVERY`: go to step 6.
    - Another state: report it and its `next` command, and stop.
 2. Run `orqen pr <KEY>` (branch, base, lane, analysis, spec change, PR URL). Ask the senior whether they want a report before deciding (recommended when nobody reviewed the diff yet).
-3. If they want it, review the PR read-only exactly as `orqen/plugin/commands/code-review.md` describes (remote branch diff against the analysis, spec or plan, and repository conventions; each finding verified, with severity, `file:line`, the failing scenario, and possible solutions, the recommended one first). Give the verdict (`Approvable`, `Approvable with minor changes`, or `Reject`) and the findings. When the senior accepts the report, record it with `orqen code-review <KEY> <report.md> --verdict <approve|minor|reject> --agent code-review` (it does not change the stage).
+3. **Report (optional).** If the senior wants it, review the PR read-only:
+   - Run `git fetch origin` and review the remote branch, so the senior does not need to switch branches: `git log origin/<base>..origin/<branch> --oneline`, `git diff origin/<base>...origin/<branch> --stat`, and the diff of each relevant file. Use `gh pr view` and `gh pr diff` when available to confirm you are reviewing what the PR contains. If the local branch has unpushed changes, say that the review covers the PR only.
+   - Review the diff against the analysis (summary, acceptance criteria, grilling decisions, and risks) and, for the light and full lanes, `proposal.md`, `design.md`, and the spec scenarios; for the direct lane, the plan. Check the PR explanation in `orqen/work/<KEY>/round-<N>/devel-pr.md` against the diff, and the repository conventions (`AGENTS.md`, `CLAUDE.md`, linters, neighboring code).
+   - Look for, in this order: **correctness** (missed scenarios or criteria, edge cases, swallowed errors, regressions); **security and data** (injection, missing permission checks or validation, secrets, migrations that cannot be rolled back); **scope** (changes outside the request, unexplained deviations); **tests** (scenarios without a test, tests that do not check the THEN, fragile tests; run `orqen env test` when you need it to back a claim); **maintainability**, only when the impact is real.
+   - Verify each finding: re-read the code in context and describe the concrete failing scenario (input or state → wrong result). If you cannot build it, mark it `to verify` or drop it.
+   - Give the senior the **verdict** in one line (`Approvable`, `Approvable with minor changes`, or `Reject`, with the reason), a short **summary** (what the PR does, whether it meets the request, test coverage), and the **findings**, most severe first: `#N` · severity (`blocking` · `important` · `minor` · `to verify`) · `file:line`; what happens; why it matters (the failing scenario or the criterion it breaks); one to three possible solutions with their trade-off, the recommended one first. If there are no findings, say so plainly.
+   - Stay available while the senior digs into a finding, drops one, or asks for another area, and update the report. When they accept it, record it once (it does not change the stage; orqen saves it as `orqen/work/<KEY>/round-<N>/code-review-<n>.md` and comments it on the tickets):
+     ```sh
+     orqen code-review <KEY> <report.md> --verdict <approve|minor|reject> --agent code-review
+     ```
 4. Ask the senior for the decision:
    - **Approve**:
      ```sh

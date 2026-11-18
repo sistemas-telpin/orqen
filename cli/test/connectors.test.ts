@@ -10,7 +10,6 @@ import { GithubTracker } from "../src/connectors/github.ts";
 import { JiraTracker } from "../src/connectors/jira.ts";
 import { canLinkNatively, trackerFor } from "../src/connectors/index.ts";
 import { isBotComment } from "../src/connectors/types.ts";
-import { findApp } from "../src/lib/app.ts";
 
 async function server(handler: (req: IncomingMessage, body: any) => [number, unknown]) {
   const calls: Array<{ method: string; path: string; body: any }> = [];
@@ -205,14 +204,3 @@ test("Asana: tagged tasks of the project, stories as comments, sections as trans
   assert.deepEqual(s.calls.at(-1)!.body.data.projects, ["77"]);
 });
 
-test("orqen opens the desktop app when it is installed", () => {
-  const has = (...paths: string[]) => (p: string) => paths.includes(p);
-  const win = join("C:/U/AppData/Local", "Programs", "ORQEN", "ORQEN.exe");
-  assert.equal(findApp("win32", { LOCALAPPDATA: "C:/U/AppData/Local" }, has(win), "/h", ""), win);
-  assert.equal(findApp("darwin", {}, has(join("/h", "Applications", "ORQEN.app")), "/h", ""), join("/h", "Applications", "ORQEN.app"));
-  assert.equal(findApp("linux", { PATH: "/usr/bin:/usr/local/bin" }, has(join("/usr/local/bin", "orqen-desktop")), "/h", ""), join("/usr/local/bin", "orqen-desktop"));
-  assert.equal(findApp("linux", { ORQEN_APP: "/x/app" }, has("/x/app"), "/h"), "/x/app");
-  assert.equal(findApp("linux", { PATH: "" }, has(), "/h", ""), undefined);
-  const dev = join("/src/orqen/cli/dist", "..", "..", "app", "target", "release", "orqen-desktop");
-  assert.equal(findApp("linux", { PATH: "" }, has(dev), "/h", "/src/orqen/cli/dist/index.js"), dev);
-});

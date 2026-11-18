@@ -8,7 +8,7 @@ Su arquitectura permite que múltiples agentes colaboren de manera coordinada en
 
 Uno de sus pilares es el aprendizaje continuo a partir de la experiencia: aprovechar los resultados de desarrollos anteriores para enriquecer una base de conocimiento reutilizable y mejorar progresivamente los procesos de trabajo.
 
-El flujo completo son **9 pasos**, uno por comando: `list requests` · `support` · `analyze` · `list issues` · `implement` · `pr` · `review` (QA, solo carril completo) · `list prs` · `approve` (senior). En la app de escritorio, al elegir un pedido se abre una terminal para chatear con el agente con el comando que sigue ya sugerido.
+El flujo completo son **9 pasos**, uno por comando: `list requests` · `support` · `analyze` · `list issues` · `implement` · `pr` · `review` (QA, solo carril completo) · `list prs` · `approve` (senior). En la [app de escritorio](https://github.com/sistemas-telpin/orqen-gui), al elegir un pedido se abre una terminal para chatear con el agente con el comando que sigue ya sugerido.
 
 Opcionalmente, una persona de **soporte** atiende primero el reclamo con el agente (`/orqen:support SOP-1234`) e intenta responderle al cliente. Si no alcanza, lo escala al analista. El análisis lo conduce un **analista** con el agente (`/orqen:analyze SOP-1234`); el resto lo lleva el agente con aprobaciones humanas.
 
@@ -448,8 +448,8 @@ Las credenciales de proveedores van en `~/.orqen/providers.env`; las opciones de
 
 ## App de escritorio
 
-`app/` es la app de ORQEN (Rust + GPUI, el framework de Zed) para Windows, macOS y Linux: pendientes, entornos, enjambre, conectores y tutorial, con la animación del logo al abrir. No tiene lógica propia: muestra lo que devuelve la CLI con `--json`.
-Se abre con `orqen` (sin argumentos) en la carpeta de un proyecto: la primera vez la CLI la baja ya compilada para tu sistema (Windows, macOS o Linux) y la abre; no hace falta instalar Rust ni nada más. GitHub Actions la compila y la publica en cada release (`v*`). Ver `app/README.md`.
+La app de escritorio (Rust + GPUI) es un proyecto aparte: **[orqen-gui](https://github.com/sistemas-telpin/orqen-gui)**. Este repo es solo la CLI y no depende de ella: `orqen` sin argumentos muestra la ayuda.
+La app no tiene lógica propia: usa la CLI instalada (`npm i -g orqen`) con sus salidas `--json` (`status`, `list requests`, `env status`, `connectors get|check|set`, `bootstrap --list|--describe`, `tutorial --step`, `usage`). Si cambiás esas salidas, avisá en orqen-gui.
 
 ## Conectores: sistema de requests y sistema de issues
 

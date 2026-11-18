@@ -39,7 +39,7 @@ export const WORKFLOW_HELP = `Customer request workflow (the 9 steps):
   code-review <KEY> <report.md|-> --verdict <approve|minor|reject>   Record the senior's code review report (CODE_REVIEW)
   schema <STAGE> · block <KEY> <reason> · release <KEY> · search <query>
   status [KEY] [--json] · cycle [--loop]
-  connectors [setup|get|check <json>|set <json>] [--json] Show/check the connectors, or set them up (get/check/set: used by the app)
+  connectors [setup|get|check <json>|set <json>] [--json] Show/check the connectors, or set them up (get/check/set: JSON for tools such as orqen-gui)
   connectors github-choices <json|-> <requests|issues> <repositories|projects|statuses> List GitHub choices for a draft`;
 
 /** The person at this machine: Git's user.name for this repository, otherwise the system user. */
@@ -367,7 +367,7 @@ export async function runWorkflow(cmd: string, rest: string[]) {
         return;
       }
       case "connectors": {
-        // used by the desktop app: {"conectores": {...}, "env": {"JIRA_TOKEN": "..."}} on stdin or in a file
+        // JSON for tools such as orqen-gui: {"conectores": {...}, "env": {"JIRA_TOKEN": "..."}} on stdin or in a file
         const draftInput = () => JSON.parse(!rest[1] || rest[1] === "-" ? readFileSync(0, "utf8") : readFileSync(rest[1], "utf8"));
         if (rest[0] === "general-get" || rest[0] === "general-set") {
           const { leerConfig, escribirConfig } = await import("../lib/config.ts");
@@ -379,7 +379,7 @@ export async function runWorkflow(cmd: string, rest: string[]) {
           escribirConfig(cfg.repoPath, updated);
           return console.log(JSON.stringify({ general: updated.general, hasHistory }));
         }
-        // the app's editor: current values (tokens masked) and a check of a draft before saving it
+        // a connectors editor (orqen-gui): current values (tokens masked) and a check of a draft before saving it
         if (rest[0] === "get") {
           const { connectorsView } = await import("../lib/connectors-edit.ts");
           const { existeConfig, leerConfig } = await import("../lib/config.ts");

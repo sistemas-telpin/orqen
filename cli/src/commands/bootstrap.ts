@@ -35,7 +35,7 @@ export interface OpcionesBootstrap {
   listar?: boolean;
   /** Skip running generators and installs (tests). */
   sinComandos?: boolean;
-  /** --list / --describe print JSON (the desktop app). */
+  /** --list / --describe print JSON (for tools such as orqen-gui). */
   json?: boolean;
   /** --describe <stack>: parameters (free ports already proposed), requirements and how it will start. */
   describir?: string;
@@ -49,7 +49,7 @@ export function bloqueantes(tool: Tool, req: ReturnType<typeof chequearRequisito
   return req.filter((r) => !r.ok && (paraCrear.has(r.comando) || r.comando === "node"));
 }
 
-/** `orqen bootstrap --list --json` and `--describe <stack> --json`, for the desktop app. Errors are JSON too. */
+/** `orqen bootstrap --list --json` and `--describe <stack> --json`, for tools such as orqen-gui. Errors are JSON too. */
 async function bootstrapJson(o: OpcionesBootstrap) {
   const fail = (error: string, extra: Record<string, unknown> = {}) => { console.log(JSON.stringify({ error, ...extra })); process.exitCode = 1; };
   try { await prepararTools(o.toolsRepo, true); }

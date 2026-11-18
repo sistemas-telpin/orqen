@@ -14,8 +14,7 @@ export function trackerFor(s: ConnectorSettings): Tracker {
 }
 
 export function buildConnectors(s: ConnectorsSettings): Connectors {
-  const external = trackerFor(s.external);
-  return { external, internal: s.internal ? trackerFor(s.internal) : undefined };
+  return { requests: trackerFor(s.requests), issues: s.issues ? trackerFor(s.issues) : undefined };
 }
 
 /** Both connectors point to the same tool and account: the tickets can be linked natively. */

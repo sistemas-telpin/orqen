@@ -168,7 +168,7 @@ fn detail_head(d: &Sample, es: bool, cur: usize, lane: Option<&str>) -> Div {
     div().flex().flex_col().gap(px(8.))
         .child(div().flex().items_center().gap(px(7.))
             .child(mono(d.ext.clone()).text_size(px(13.)).font_weight(FontWeight::SEMIBOLD).text_color(c(BLUE_TEXT)))
-            .children(d.int.clone().map(|k| chip(format!("{} {k}", t(es, "interno", "internal")), 0x4A1E3D, 0xFFB3D9)))
+            .children(d.int.clone().map(|k| chip(format!("{} {k}", t(es, "issue", "issue")), 0x4A1E3D, 0xFFB3D9)))
             .children(lane.map(|l| chip(format!("{} {l}", t(es, "carril", "lane")), BORDER_2, TEXT_2))))
         .child(pipeline(es, cur))
 }
@@ -224,8 +224,8 @@ fn words(es: bool, d: &Sample) -> Div {
         .child(group("DEVELOPMENT", es, 1))
         .child(row(&d.ext, d.int.as_deref(), Some("light"), format!("{} claude", t(es, "Trabajando:", "Working:")), MUTED, Some("fig-w-dot"), true));
     let mut legends = div().flex_1().flex().flex_col().gap(px(10.))
-        .child(legend(mono(d.ext.clone()).text_size(px(11.)).text_color(c(BLUE_TEXT)), t(es, "ticket externo: el pedido del cliente", "external ticket: the customer request")));
-    if let Some(k) = &d.int { legends = legends.child(legend(chip(k.clone(), 0x4A1E3D, 0xFFB3D9), t(es, "ticket interno: la tarea del equipo", "internal ticket: the team's task"))); }
+        .child(legend(mono(d.ext.clone()).text_size(px(11.)).text_color(c(BLUE_TEXT)), t(es, "request: el pedido del cliente", "request: the customer ticket")));
+    if let Some(k) = &d.int { legends = legends.child(legend(chip(k.clone(), 0x4A1E3D, 0xFFB3D9), t(es, "issue: la tarea del equipo", "issue: the team's task"))); }
     legends = legends
         .child(legend(div().flex().items_center().gap(px(6.)).child(dot(stage_color("DEVELOPMENT"))).child(div().text_size(px(11.)).text_color(c(TEXT_2)).child(stage_name("DEVELOPMENT", es))), t(es, "etapa: el grupo donde está", "stage: the group it is in")))
         .child(legend(chip("light", BORDER_2, MUTED), t(es, "carril: direct, light o full", "lane: direct, light or full")))
@@ -352,7 +352,7 @@ fn env(es: bool, d: &Sample) -> Div {
 
 fn problems(es: bool, d: &Sample) -> Div {
     let banner = div().p(px(8.)).rounded(px(8.)).bg(c(0x1D1810)).text_size(px(11.)).text_color(c(AMBER))
-        .child(format!("{} {}: 401 Unauthorized", t(es, "No se pudo consultar el ticket externo", "Could not query the external ticket"), d.tool));
+        .child(format!("{} {}: 401 Unauthorized", t(es, "No se pudieron consultar los requests", "Could not query the requests"), d.tool));
     let gear = div().flex().flex_wrap().items_center().gap(px(6.)).text_size(px(11.)).text_color(c(TEXT_2))
         .child(icon("gear", 12., MUTED)).child(t(es, "Configuración", "Settings")).child(icon("arrow", 10., DIM))
         .child(icon("plug", 12., MUTED)).child(t(es, "Conectores", "Connectors")).child(icon("arrow", 10., DIM))

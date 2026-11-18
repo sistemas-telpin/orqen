@@ -1,10 +1,10 @@
 /**
- * Connectors: where the tickets live. orqen works with two roles:
+ * Connectors: where the tickets live. orqen works with two systems:
  *
- *  - external: the ticket the client sees (their request). orqen reads it, answers on it and asks for /approve or /reject there.
- *  - internal: optional. The team's own ticket, created when the analysis closes, where development is tracked.
+ *  - requests: where the client's requests arrive (what the client sees). orqen reads them, answers on them and asks for /approve or /reject there.
+ *  - issues: optional. The team's own issues, one created per request when the analysis closes, where development is tracked.
  *
- * Each role can live in a different place (e.g. the client's Jira and the team's GitHub Projects). The process only
+ * Each system can be any tool (e.g. the client's Jira and the team's GitHub Projects). The process only
  * talks to this interface; jira.ts, github.ts and asana.ts translate it to each API.
  */
 
@@ -19,7 +19,7 @@ export const STATE_LABEL = "orqen-state-";
 export const LEGACY_STATE_LABELS = ["rec-state-"];
 
 export type ConnectorKind = "jira" | "github" | "asana";
-export type Role = "external" | "internal";
+export type Role = "requests" | "issues";
 
 export interface Comment { id: string; author: string; authorName: string; body: string; created: string }
 
@@ -51,7 +51,7 @@ export interface Tracker {
   setStateLabel(key: string, state: string): Promise<void>;
   /** Moves the ticket to a column/status/section by name. false if the tool has no such destination. */
   transition(key: string, name: string): Promise<boolean>;
-  /** Creates a ticket where this connector creates them (internal role) and returns its key. */
+  /** Creates a ticket where this connector creates them (issues system) and returns its key. */
   create(t: NewTicket): Promise<string>;
   /** Native link between two tickets of this same connector, when the tool has one. */
   link?(from: string, to: string): Promise<void>;
@@ -62,9 +62,9 @@ export interface Tracker {
 }
 
 export interface Connectors {
-  external: Tracker;
-  /** Absent: the team works only on the external ticket. */
-  internal?: Tracker;
+  requests: Tracker;
+  /** Absent: the team works only on the request. */
+  issues?: Tracker;
 }
 
 /** Readable detail of a failed check: Node's fetch only says "fetch failed" and leaves the reason in `cause`. */

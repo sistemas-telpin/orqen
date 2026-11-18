@@ -81,7 +81,7 @@ export class JiraTracker implements Tracker {
   }
 
   async create(t: NewTicket) {
-    if (!this.s.project) throw new Error("The Jira connector has no project (conectores.interno.proyecto) to create tickets in");
+    if (!this.s.project) throw new Error("The Jira connector has no project (conectores.issues.proyecto) to create tickets in");
     const r = await this.req("POST", "/rest/api/2/issue", {
       fields: {
         project: { key: this.s.project }, issuetype: { name: t.route === "operational" ? this.s.operationalType : this.s.issueType },

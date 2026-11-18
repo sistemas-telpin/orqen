@@ -28,7 +28,7 @@ const base: DatosTutorial = {
     { nombre: "api", comando: "npm run dev", puerto: 3000, cuando: "siempre" },
     { nombre: "web", comando: "npm run dev", puerto: 5173, cuando: "e2e" },
   ],
-  tests: ["unitarios"], externo: "SOP-123", interno: "DEV-456", herramienta: "Jira", herramientaInterna: "Jira", soporte: false, gate: "github", ramaDevel: "desarrollo",
+  tests: ["unitarios"], request: "SOP-123", issue: "DEV-456", herramienta: "Jira", herramientaIssues: "Jira", soporte: false, gate: "github", ramaDevel: "desarrollo",
   windows: false, db: true, conectado: true,
 };
 
@@ -55,11 +55,11 @@ test("steps use the repository's data: processes, URLs, keys, gate, platform", (
   assert.match(env({ ...base, procesos: [] }, "en"), /No parts are configured/);
 
   const next = (d: DatosTutorial) => renderMarkdown(pasosTutorial(d, "en").find((p) => p.id === "next")!, "x");
-  assert.match(next({ ...base, externo: "SOPL-123", interno: "DEV-456" }), /\/orqen:analyze SOPL-123[\s\S]*\/orqen:implement DEV-456/);
+  assert.match(next({ ...base, request: "SOPL-123", issue: "DEV-456" }), /\/orqen:analyze SOPL-123[\s\S]*\/orqen:implement DEV-456/);
   assert.match(next(base), /Approve on GitHub/);
   assert.match(next({ ...base, gate: "ticket" }), /then \/approve in Jira/);
   assert.match(next({ ...base, gate: "ticket", herramienta: "GitHub" }), /then \/approve in GitHub/);
-  assert.match(next({ ...base, herramientaInterna: undefined, interno: "SOP-123" }), /\/orqen:implement SOP-123/);
+  assert.match(next({ ...base, herramientaIssues: undefined, issue: "SOP-123" }), /\/orqen:implement SOP-123/);
   assert.doesNotMatch(next(base), /SUPPORT/);
   assert.match(next({ ...base, soporte: true }), /SUPPORT\s+support\s+\/orqen:support/);
 });
@@ -79,8 +79,8 @@ test("buscarPaso accepts a number or an id; buscarRepo walks up to orqen/config.
   writeFileSync(join(repo, "orqen", ".env"), "REC_JQL=project = SOPL AND labels = x\nSIS_PROJECT=DEV\nSUPPORT_STAGE=on\nCODE_REVIEW_GATE=jira\nJIRA_TOKEN=secret\n");
   assert.equal(buscarRepo(join(repo, "src", "deep")), repo);
   const d = datosDelRepo(repo, "win32");
-  assert.equal(d.externo, "SOPL-123");
-  assert.equal(d.interno, "DEV-456");
+  assert.equal(d.request, "SOPL-123");
+  assert.equal(d.issue, "DEV-456");
   assert.equal(d.soporte, true);
   assert.equal(d.gate, "ticket");
   assert.equal(d.windows, true);
@@ -89,7 +89,7 @@ test("buscarPaso accepts a number or an id; buscarRepo walks up to orqen/config.
 });
 
 test("pasosApp: every step also says how to do it in the desktop app, in both languages", () => {
-  const d: DatosTutorial = { proyecto: "demo", procesos: [], tests: [], externo: "SOP-1", interno: "DEV-2", herramienta: "Jira", herramientaInterna: "Jira",
+  const d: DatosTutorial = { proyecto: "demo", procesos: [], tests: [], request: "SOP-1", issue: "DEV-2", herramienta: "Jira", herramientaIssues: "Jira",
     soporte: false, gate: "github", ramaDevel: "develop", windows: false, db: false, conectado: true };
   for (const idioma of ["es", "en"] as const) {
     const app = pasosApp(d, idioma);

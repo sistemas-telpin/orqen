@@ -17,7 +17,7 @@ Review the integration PR for `$ARGUMENTS` on behalf of the senior who runs this
 
 ## Steps
 
-1. Validate the key (external or internal ticket). Run `orqen status <KEY>` and continue only for a development request in `CODE_REVIEW`. Otherwise, report the stage and stop.
+1. Validate the key (request or issue). Run `orqen status <KEY>` and continue only for a development request in `CODE_REVIEW`. Otherwise, report the stage and stop.
 2. Run `orqen pr <KEY>` to read the branch, base, lane, analysis path, spec change, and PR URL (`existing`). If there is no PR, tell the senior to open it with `/orqen:pr <KEY>` and stop.
 3. Run `git fetch origin` and review the remote branch, so the senior does not need to switch branches: `git log origin/<base>..origin/<branch> --oneline`, `git diff origin/<base>...origin/<branch> --stat`, and the diff of each relevant file. Use `gh pr view` and `gh pr diff` when available to confirm you are reviewing what the PR contains. If the local branch has unpushed changes, say that the review covers the PR only.
 4. Review the diff against:
@@ -49,4 +49,4 @@ Review the integration PR for `$ARGUMENTS` on behalf of the senior who runs this
     orqen code-review <KEY> <report.md> --verdict <approve|minor|reject> --agent code-review
     ```
 
-    orqen saves it as `orqen/work/<KEY>/round-<N>/code-review-<n>.md` (numbered, so a later review does not overwrite it), commits it when the repository is on the request branch, and comments it on the internal ticket (or the external one when there is none). It does not change the stage. Running it again records another review. If orqen reports that the comment failed, the report is still saved: ask the senior to paste it manually. Do not continue with delivery or fix anything.
+    orqen saves it as `orqen/work/<KEY>/round-<N>/code-review-<n>.md` (numbered, so a later review does not overwrite it), commits it when the repository is on the request branch, and comments it on the issue (or the external one when there is none). It does not change the stage. Running it again records another review. If orqen reports that the comment failed, the report is still saved: ask the senior to paste it manually. Do not continue with delivery or fix anything.

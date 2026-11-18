@@ -8,20 +8,20 @@ import { analysis, CLI, delivery, development, implementWithSwarm, implementatio
 
 const testing = (scenario: string) => ({ scenarios: [{ requirement: "Acceptance criterion", scenario, covered: true, test: "test.mjs" }], failure_diagnosis: "", suggestions: [], coverage_ok: true });
 async function finish(f: WorkflowFixture) {
-  await f.command(["take", f.record().internal!]);
+  await f.command(["take", f.record().issue!]);
   f.state("DELIVERY");
-  await f.complete(f.record().internal!, delivery); f.state("ACCEPTANCE");
+  await f.complete(f.record().issue!, delivery); f.state("ACCEPTANCE");
   await f.human("client", "/approve"); f.state("CLOSED");
   assert.ok(f.jira.issues["REQ-7"].labels?.includes("orqen-state-closed"));
   assert.ok(f.jira.transitions["REQ-7"].includes("Done"));
-  assert.ok(f.jira.transitions[f.record().internal!].includes("Done"));
+  assert.ok(f.jira.transitions[f.record().issue!].includes("Done"));
   assert.deepEqual(JSON.parse(await f.command(["pending", "--json"])), []);
-  const status = await f.command(["status", f.record().internal!]); assert.match(status, /"state": "CLOSED"/);
+  const status = await f.command(["status", f.record().issue!]); assert.match(status, /"state": "CLOSED"/);
 }
 
 describe("Compiled workflow journeys", { concurrency: 3 }, () => {
 
-test("CLI: support resolves and the authorized client closes the request without a internal ticket", { timeout: 180_000 }, async (t) => {
+test("CLI: support resolves and the authorized client closes the request without an issue", { timeout: 180_000 }, async (t) => {
   const f = await workflowFixture(t);
   await f.command(["--help"]); await f.command(["--version"]);
   assert.equal((await f.command(["lang"])).trim(), "en");
@@ -52,7 +52,7 @@ test("CLI: support resolves and the authorized client closes the request without
   assert.equal(f.git("branch", "--show-current"), "main");
   assert.match(readFileSync(join(f.repo, "orqen/work/REQ-7/round-1/support.md"), "utf8"), /Export CSV/);
   // Initialization supports customer projects other than the default one; every command must resolve them too.
-  const cfg = leerConfig(f.repo); cfg.conectores!.externo.filtro = "project = HELP"; escribirConfig(f.repo, cfg);
+  const cfg = leerConfig(f.repo); cfg.conectores!.requests.filtro = "project = HELP"; escribirConfig(f.repo, cfg);
   f.jira.issues["HELP-8"] = { title: "Find the invoice export" }; f.jira.coms["HELP-8"] = [];
   await f.command(["support", "HELP-8", "--person", "Support Person"]);
   await f.command(["status", "help-8"]);
@@ -85,10 +85,10 @@ test("CLI: support to direct development, failed tests, swarm, PR rejection, cli
   f.state("ANALYSIS");
   f.failNextLink();
   await f.complete("REQ-7", analysis(), 1); f.state("ANALYSIS");
-  assert.equal(f.jira.created.length, 1, "A failed link must not duplicate the internal ticket on retry");
+  assert.equal(f.jira.created.length, 1, "A failed link must not duplicate the issue on retry");
   await f.complete("REQ-7", analysis()); f.state("DEVELOPMENT");
   assert.equal(f.jira.created.length, 1); assert.equal(f.jira.links.length, 1);
-  const sis = f.record().internal!;
+  const sis = f.record().issue!;
   await f.command(["take", sis]);
   await f.complete(sis, development); f.state("TESTING");
   const failed = f.context(await f.command(["take", sis]));
@@ -107,16 +107,16 @@ test("CLI: support to direct development, failed tests, swarm, PR rejection, cli
   await f.human("senior", "/approve"); f.state("DELIVERY");
   await f.command(["take", sis]); await f.complete(sis, delivery); f.state("ACCEPTANCE");
   await f.human("client", "/reject Please explicitly document empty exports"); f.state("ANALYSIS");
-  assert.equal(f.record().round, 2); assert.equal(f.record().internal, undefined);
+  assert.equal(f.record().round, 2); assert.equal(f.record().issue, undefined);
   await f.command(["take", sis], { exit: 1 });
   await f.command(["analyze", "REQ-7", "--analyst", "Analyst"]);
   await f.complete("REQ-7", analysis());
-  assert.notEqual(f.record().internal, sis); assert.equal(f.jira.created.length, 2);
-  await f.command(["take", f.record().internal!]);
+  assert.notEqual(f.record().issue, sis); assert.equal(f.jira.created.length, 2);
+  await f.command(["take", f.record().issue!]);
   f.file("README.md", readFileSync(join(f.repo, "README.md"), "utf8") + "\nEmpty exports contain only the CSV header.\n");
   await testAndReview(f); await f.human("senior", "/approve");
   await finish(f);
-  assert.deepEqual(f.record().artifacts.previous_internal, [sis]);
+  assert.deepEqual(f.record().artifacts.previous_issues, [sis]);
   assert.equal(f.git("status", "--porcelain", "--untracked-files=no"), "");
 });
 
@@ -138,7 +138,7 @@ for (const lane of ["light", "full"] as const) {
     f.file(`${dir}/tasks.md`, readFileSync(join(f.repo, dir, "tasks.md"), "utf8").replace("Implement CSV export", "Implement CSV export (1h)"));
     await f.complete("REQ-7", output); f.state("DEVELOPMENT");
     await implementWithSwarm(f);
-    await f.complete(f.record().internal!, development, 1); f.state("DEVELOPMENT");
+    await f.complete(f.record().issue!, development, 1); f.state("DEVELOPMENT");
     f.file(`${dir}/tasks.md`, readFileSync(join(f.repo, dir, "tasks.md"), "utf8").replaceAll("- [ ]", "- [x]"));
     await testAndReview(f);
     await f.human("senior", "/approve");
@@ -155,7 +155,7 @@ test("CLI: operational approval, rejected application, failed verification, retr
   const f = await workflowFixture(t);
   await supportEscalation(f);
   await f.complete("REQ-7", analysis({ route: "operational" })); f.state("EXECUTION");
-  const sis = f.record().internal!;
+  const sis = f.record().issue!;
   const proposal = { summary: "Correct the affected invoice status after checking its identifier.", system: "Fixture database", impact: "Only invoice 7 is affected by this proposed update.", estimated_rows: 1, sql_script: "UPDATE invoices SET status = 'ready' WHERE id = 7;", rollback: "UPDATE invoices SET status = 'pending' WHERE id = 7;", verification: "SELECT status FROM invoices WHERE id = 7;", risks: [] };
   await f.command(["take", sis]);
   await f.complete(sis, { ...proposal, sql_script: "DELETE FROM invoices;" }, 1); f.state("EXECUTION");
@@ -214,7 +214,7 @@ test("CLI: default GitHub gate ignores stale and unauthorized approvals, handles
   await f.command(["pending", "--json"]); f.state("CODE_REVIEW");
   review("reject", "senior", "CHANGES_REQUESTED", "current-head");
   await f.command(["pending", "--json"]); f.state("DEVELOPMENT");
-  await f.command(["take", f.record().internal!]); await testAndReview(f);
+  await f.command(["take", f.record().issue!]); await testAndReview(f);
   review("approved", "senior", "APPROVED", "current-head");
   await f.command(["pending", "--json"]); f.state("DELIVERY");
   await finish(f);

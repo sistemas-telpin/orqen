@@ -11,7 +11,7 @@ export interface PasoApp { bloques: Bloque[]; pantalla?: Pantalla }
 
 export function pasosApp(d: DatosTutorial, i: Idioma): Record<string, PasoApp> {
   const tx = (es: string, en: string) => (i === "es" ? es : en);
-  const recNum = d.externo, sisNum = d.interno, H = d.herramienta, HI = d.herramientaInterna;
+  const recNum = d.request, sisNum = d.issue, H = d.herramienta, HI = d.herramientaIssues;
   const aprobar = d.gate === "github"
     ? tx("El senior aprueba en el PR de GitHub (Approve o Request changes), igual que siempre.", "The senior approves on the GitHub PR (Approve or Request changes), as always.")
     : tx(`El senior aprueba comentando /approve o /reject motivo en ${H}, igual que siempre.`, `The senior approves by commenting /approve or /reject reason in ${H}, as always.`);
@@ -38,8 +38,8 @@ export function pasosApp(d: DatosTutorial, i: Idioma): Record<string, PasoApp> {
       bloques: [
         { t: "p", texto: tx("En la lista de Pendientes cada palabra tiene su lugar:", "In the Pending list each word has its place:") },
         { t: "ul", items: [
-          tx(`Ticket externo: la clave en azul de cada pedido (por ejemplo ${recNum}).`, `External ticket: the blue key of each request (for example ${recNum}).`),
-          ...(HI ? [tx(`Ticket interno: la etiqueta rosa al lado de la clave (por ejemplo ${sisNum}).`, `Internal ticket: the pink tag next to the key (for example ${sisNum}).`)] : []),
+          tx(`Request: la clave en azul de cada pedido (por ejemplo ${recNum}).`, `Request: the blue key of each request (for example ${recNum}).`),
+          ...(HI ? [tx(`Issue: la etiqueta rosa al lado de la clave (por ejemplo ${sisNum}).`, `Issue: the pink tag next to the key (for example ${sisNum}).`)] : []),
           tx("Etapa: los grupos de la lista, y la fila de etapas arriba del detalle del pedido.", "Stage: the groups of the list, and the row of stages above the request detail."),
           tx("Agente: cuando uno trabaja en un pedido, la fila dice \"Trabajando: <agente>\" con un punto azul que late.",
             "Agent: when one is working on a request, the row says \"Working: <agent>\" with a pulsing blue dot."),
@@ -87,8 +87,8 @@ export function pasosApp(d: DatosTutorial, i: Idioma): Record<string, PasoApp> {
             `When you pick one you see its stage, WHAT'S NEXT and the HISTORY: everything that happened (the same as orqen status ${recNum}).`),
           tx("Copiar clave copia la clave del pedido. La lista se actualiza sola cada pocos segundos.", "Copy key copies the request key. The list refreshes by itself every few seconds."),
         ] },
-        { t: "tip", texto: tx("Si la lista está vacía, todavía no entró ningún pedido en el ticket externo. Si dice que no pudo consultarlo, revisá los Conectores (engranaje, abajo).",
-          "If the list is empty, no request has arrived on the external ticket yet. If it says it could not query it, check the Connectors (gear, at the bottom).") },
+        { t: "tip", texto: tx("Si la lista está vacía, todavía no entró ningún pedido en el request. Si dice que no pudo consultarlo, revisá los Conectores (engranaje, abajo).",
+          "If the list is empty, no request has arrived on the request yet. If it says it could not query it, check the Connectors (gear, at the bottom).") },
       ],
     },
     analysis: {
@@ -99,8 +99,8 @@ export function pasosApp(d: DatosTutorial, i: Idioma): Record<string, PasoApp> {
           tx(`Elegilo y en QUÉ SIGUE hacé clic en "Analizar (analista, en Claude Code)": se copia /orqen:analyze ${recNum}.`,
             `Pick it and in WHAT'S NEXT click "Analyze (analyst, in Claude Code)": /orqen:analyze ${recNum} is copied.`),
           tx("Pegalo en Claude Code y seguí la conversación con el agente. No hace falta tu nombre: orqen lo toma de tu Git.", "Paste it in Claude Code and follow the conversation with the agent. No need for your name: orqen takes it from your Git."),
-          HI ? tx(`Cuando cierra el análisis, en la app el pedido pasa solo a Desarrollo y aparece la etiqueta rosa del ticket interno (${sisNum}).`,
-                  `When the analysis closes, the request moves to Development in the app by itself and the pink internal ticket tag (${sisNum}) shows up.`)
+          HI ? tx(`Cuando cierra el análisis, en la app el pedido pasa solo a Desarrollo y aparece la etiqueta rosa del issue (${sisNum}).`,
+                  `When the analysis closes, the request moves to Development in the app by itself and the pink issue tag (${sisNum}) shows up.`)
             : tx("Cuando cierra el análisis, en la app el pedido pasa solo a Desarrollo.", "When the analysis closes, the request moves to Development in the app by itself."),
         ] },
       ],
@@ -162,8 +162,8 @@ export function pasosApp(d: DatosTutorial, i: Idioma): Record<string, PasoApp> {
         { t: "ul", items: [
           tx("Un pedido en BLOCKED aparece en amarillo. En su RECORRIDO está el motivo, y QUÉ SIGUE te dice cómo destrabarlo.",
             "A BLOCKED request shows in yellow. Its HISTORY has the reason, and WHAT'S NEXT tells you how to unblock it."),
-          tx("Pendientes dice que no pudo consultar el ticket externo → engranaje → Conectores → Probar conexión.",
-            "Pending says it could not query the external ticket → gear → Connectors → Test connection."),
+          tx("Pendientes dice que no pudo consultar el request → engranaje → Conectores → Probar conexión.",
+            "Pending says it could not query the request → gear → Connectors → Test connection."),
           tx("Algo del entorno no prende → Entornos → ver log de ese proceso.", "Part of the environment does not start → Environments → view log of that process."),
           tx("Un proyecto sin orqen se abre con un asistente para inicializarlo (lo mismo que orqen init).", "A project without orqen opens with a wizard to set it up (the same as orqen init)."),
           tx("Las cuotas de IA (abajo a la derecha) te avisan antes de quedarte sin uso en Claude Code o Codex.", "The AI quotas (bottom right) warn you before you run out of usage in Claude Code or Codex."),
@@ -182,7 +182,7 @@ export function pasosApp(d: DatosTutorial, i: Idioma): Record<string, PasoApp> {
           tx("   QUÉ SIGUE             un clic copia el comando; pegalo en Claude Code", "   WHAT'S NEXT           one click copies the command; paste it in Claude Code"),
           "",
           tx(` DECIDIR (${H} / GitHub)`, ` DECIDE (${H} / GitHub)`),
-          tx("   /approve   /reject motivo     comentario en el ticket externo", "   /approve   /reject reason     comment on the external ticket"),
+          tx("   /approve   /reject motivo     comentario en el request", "   /approve   /reject reason     comment on the request"),
         ] },
       ],
     },

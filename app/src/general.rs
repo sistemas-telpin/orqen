@@ -27,7 +27,7 @@ impl GeneralSettings {
     pub fn new(cli: Cli, es: bool, cx: &mut Context<Self>) -> Self {
         let mut this = Self {
             cli, es, requirements: cx.new(|cx| TextInput::new(cx, "REQ", "", false)),
-            tickets: cx.new(|cx| TextInput::new(cx, "TKT", "", false)),
+            tickets: cx.new(|cx| TextInput::new(cx, "ISS", "", false)),
             loading: true, saving: false, has_history: false, error: None, saved: None,
         };
         for input in [&this.requirements, &this.tickets] {
@@ -48,8 +48,8 @@ impl GeneralSettings {
                 match result {
                     Ok(v) => {
                         this.has_history = v["hasHistory"].as_bool().unwrap_or(false);
-                        this.requirements.update(cx, |input, cx| input.set_text(v["general"]["prefijos"]["requerimientos"].as_str().unwrap_or("REQ").to_string(), cx));
-                        this.tickets.update(cx, |input, cx| input.set_text(v["general"]["prefijos"]["tickets"].as_str().unwrap_or("TKT").to_string(), cx));
+                        this.requirements.update(cx, |input, cx| input.set_text(v["general"]["prefijos"]["requests"].as_str().unwrap_or("REQ").to_string(), cx));
+                        this.tickets.update(cx, |input, cx| input.set_text(v["general"]["prefijos"]["issues"].as_str().unwrap_or("ISS").to_string(), cx));
                     }
                     Err(e) => this.error = Some(e.to_string()),
                 }
@@ -61,8 +61,8 @@ impl GeneralSettings {
     fn save(&mut self, cx: &mut Context<Self>) {
         if self.loading || self.saving { return; }
         let body = json!({ "prefijos": {
-            "requerimientos": self.requirements.read(cx).text().trim(),
-            "tickets": self.tickets.read(cx).text().trim(),
+            "requests": self.requirements.read(cx).text().trim(),
+            "issues": self.tickets.read(cx).text().trim(),
         } }).to_string();
         self.saving = true;
         self.saved = None;
@@ -74,8 +74,8 @@ impl GeneralSettings {
                 this.saving = false;
                 match result {
                     Ok(v) => {
-                        this.requirements.update(cx, |input, cx| input.set_text(v["general"]["prefijos"]["requerimientos"].as_str().unwrap_or("").to_string(), cx));
-                        this.tickets.update(cx, |input, cx| input.set_text(v["general"]["prefijos"]["tickets"].as_str().unwrap_or("").to_string(), cx));
+                        this.requirements.update(cx, |input, cx| input.set_text(v["general"]["prefijos"]["requests"].as_str().unwrap_or("").to_string(), cx));
+                        this.tickets.update(cx, |input, cx| input.set_text(v["general"]["prefijos"]["issues"].as_str().unwrap_or("").to_string(), cx));
                         this.saved = Some((this.requirements.read(cx).text(), this.tickets.read(cx).text()));
                         cx.emit(Saved);
                     }
@@ -97,11 +97,11 @@ impl Render for GeneralSettings {
                 .child(ui::h1("General")).child(div().flex_1())
                 .child(button("general-save", if self.saving { t(es, "Guardando...", "Saving...") } else { t(es, "Guardar", "Save") }, Kind::Primary, cx.listener(|this, _, _, cx| this.save(cx)))))
             .child(div().id("general-body").flex_1().overflow_y_scroll().p(px(22.)).flex().flex_col().gap(px(18.))
-                .child(div().max_w(px(640.)).text_size(px(12.5)).text_color(c(TEXT_2)).child(t(es, "Definí cómo se identifican los requerimientos del cliente y los tickets de desarrollo. Estos prefijos se usan con cualquier proveedor.", "Choose how customer requirements and development tickets are identified. These prefixes work with any provider.")))
+                .child(div().max_w(px(640.)).text_size(px(12.5)).text_color(c(TEXT_2)).child(t(es, "Definí cómo se identifican los requests del cliente y los issues de desarrollo. Estos prefijos se usan con cualquier proveedor.", "Choose how customer requests and development issues are identified. These prefixes work with any provider.")))
                 .when(self.loading, |d| d.child(ui::busy("general-loading", t(es, "Cargando configuración...", "Loading settings..."))))
                 .when(!self.loading, |d| d.children([
-                    (t(es, "Prefijo de requerimientos", "Requirement prefix"), t(es, "Lo que ve el cliente. Por ejemplo: REQ-123.", "What the customer sees. For example: REQ-123."), self.requirements.clone()),
-                    (t(es, "Prefijo de tickets", "Ticket prefix"), t(es, "Trabajo de desarrollo. Por ejemplo: TKT-123.", "Development work. For example: TKT-123."), self.tickets.clone()),
+                    (t(es, "Prefijo de requests", "Request prefix"), t(es, "Lo que ve el cliente. Por ejemplo: REQ-123.", "What the customer sees. For example: REQ-123."), self.requirements.clone()),
+                    (t(es, "Prefijo de issues", "Issue prefix"), t(es, "Trabajo de desarrollo. Por ejemplo: ISS-123.", "Development work. For example: ISS-123."), self.tickets.clone()),
                 ].into_iter().map(|(label, hint, input)| div().max_w(px(420.)).flex().flex_col().gap(px(6.))
                     .child(div().text_size(px(13.)).text_color(c(TEXT)).child(label)).child(input)
                     .child(div().text_size(px(11.5)).text_color(c(MUTED)).child(hint)))))

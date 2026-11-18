@@ -88,18 +88,18 @@ impl InitWizard {
         }
         if uses("github") { put("GITHUB_TOKEN", v("github.token")); }
         if uses("asana") { put("ASANA_TOKEN", v("asana.token")); }
-        let externo = match self.ext {
+        let requests = match self.ext {
             "jira" => { let k = v("ext.jira.key").to_uppercase(); json!({ "tipo": "jira", "filtro": if k.is_empty() { "labels = orqen AND statusCategory != Done".to_string() } else { format!("project = {k} AND labels = orqen AND statusCategory != Done") } }) }
             "github" => json!({ "tipo": "github", "repo": v("ext.github.repo"), "filtro": "is:open label:orqen" }),
             _ => json!({ "tipo": "asana", "proyecto": v("ext.asana.project"), "filtro": "orqen" }),
         };
-        let interno = match self.int {
+        let issues = match self.int {
             "jira" => json!({ "tipo": "jira", "proyecto": v("int.jira.key").to_uppercase(), "tipo_ticket": "Task", "vinculo": "Relates" }),
             "github" => { let mut o = json!({ "tipo": "github", "repo": v("int.github.repo"), "etiquetas": ["orqen"] }); if let Ok(n) = v("int.github.project").parse::<u64>() { o["proyecto"] = json!(n); } o }
             "asana" => json!({ "tipo": "asana", "proyecto": v("int.asana.project") }),
             _ => Value::Null,
         };
-        Some(json!({ "conectores": { "externo": externo, "interno": interno }, "env": env }))
+        Some(json!({ "conectores": { "requests": requests, "issues": issues }, "env": env }))
     }
 
     fn start(&mut self, cx: &mut Context<Self>) {

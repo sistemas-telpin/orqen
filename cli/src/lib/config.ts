@@ -12,7 +12,12 @@ import { ConectoresYaml } from "../connectors/config.ts";
 export const ARCHIVO_CONFIG = "orqen/config.yaml";
 
 const Prefijo = z.string().trim().regex(/^[A-Za-z][A-Za-z0-9_]{0,19}$/, "Usá letras, números o guion bajo; empezá con una letra (máximo 20 caracteres).").transform((v) => v.toUpperCase());
-export const General = z.object({ prefijos: z.object({ requerimientos: Prefijo, tickets: Prefijo }) });
+/** Key prefixes of requests and issues (`requerimientos`/`tickets`: names used by earlier versions). */
+export const General = z.object({ prefijos: z.preprocess((v) => {
+  if (!v || typeof v !== "object") return v;
+  const { requerimientos, tickets, ...rest } = v as Record<string, unknown>;
+  return { ...rest, requests: rest.requests ?? requerimientos, issues: rest.issues ?? tickets };
+}, z.object({ requests: Prefijo, issues: Prefijo })) });
 
 export const Config = z.object({
   version: z.literal(1),
@@ -26,7 +31,7 @@ export const Config = z.object({
     herramientas: z.array(z.string()).default(["claude"]),
   }),
   stack: Stack,
-  /** Where the tickets live (external = what the client sees, internal = optional team ticket). */
+  /** Where the tickets live (requests = what the client sees, issues = optional team issues). */
   conectores: ConectoresYaml.nullish(),
   entornos: z.object({
     /** How each part of the project starts (npm run dev, npm start, mvn spring-boot:run…), without Docker in between. */

@@ -38,23 +38,23 @@ export function datosDelRepo(repo: string, plataforma: NodeJS.Platform = process
   const env = leerEnv(repo) ?? {};
   const real = (v?: string) => (v && !/your-company|tu-empresa/.test(v) ? v : undefined);
   const c = cfg?.conectores
-    ? { external: connectorSettings(cfg.conectores.externo, env, cfg.general?.prefijos.requerimientos), internal: cfg.conectores.interno ? connectorSettings(cfg.conectores.interno, env, cfg.general?.prefijos.tickets) : undefined }
+    ? { requests: connectorSettings(cfg.conectores.requests, env, cfg.general?.prefijos.requests), issues: cfg.conectores.issues ? connectorSettings(cfg.conectores.issues, env, cfg.general?.prefijos.issues) : undefined }
     : legacyConnectors(env);
-  const externo = ejemploClave(c.external, 123);
+  const request = ejemploClave(c.requests, 123);
   return {
     proyecto: cfg?.proyecto.nombre ?? repo.split(/[\\/]/).pop() ?? "",
     procesos: (cfg?.entornos.procesos ?? []).map((x) => ({ nombre: x.nombre, comando: x.comando, puerto: x.puerto, url: x.url, cuando: x.cuando })),
     tests: Object.entries(cfg?.entornos.tests ?? {}).filter(([, v]) => !!v).map(([k]) => k),
-    externo,
-    interno: c.internal ? ejemploClave(c.internal, 456) : externo,
-    herramienta: nombreHerramienta(c.external.kind),
-    herramientaInterna: c.internal ? nombreHerramienta(c.internal.kind) : undefined,
+    request,
+    issue: c.issues ? ejemploClave(c.issues, 456) : request,
+    herramienta: nombreHerramienta(c.requests.kind),
+    herramientaIssues: c.issues ? nombreHerramienta(c.issues.kind) : undefined,
     soporte: (env.SUPPORT_STAGE ?? "").toLowerCase() === "on",
     gate: ["jira", "ticket"].includes((env.CODE_REVIEW_GATE ?? "").toLowerCase()) ? "ticket" : "github",
     ramaDevel: env.DEVEL_BRANCH || "desarrollo",
     windows: plataforma === "win32",
     db: existsSync(join(repo, "orqen", "tools", "db.mjs")),
-    conectado: c.external.kind === "jira" ? !!(real(c.external.url) && real(c.external.token)) : c.external.kind === "github" ? !!c.external.repo : !!(c.external.project && c.external.token),
+    conectado: c.requests.kind === "jira" ? !!(real(c.requests.url) && real(c.requests.token)) : c.requests.kind === "github" ? !!c.requests.repo : !!(c.requests.project && c.requests.token),
   };
 }
 
@@ -118,7 +118,7 @@ export async function tutorial(args: string[]) {
       app: appDe(paso) ? renderMarkdown({ ...paso, bloques: appDe(paso)!.bloques }, enc) : null,
       screen: appDe(paso)?.pantalla ?? null,
       // this project's data for the app illustrations (keys, tools, processes)
-      sample: { external: datos.externo, internal: datos.herramientaInterna ? datos.interno : null, tool: datos.herramienta, processes: datos.procesos.map((x) => x.nombre) },
+      sample: { requests: datos.request, issues: datos.herramientaIssues ? datos.issue : null, tool: datos.herramienta, processes: datos.procesos.map((x) => x.nombre) },
       labels: { next: ui.siguiente, previous: ui.anterior, try: ui.probar, menu: ui.menu, exit: ui.salir, question: ui.queHacer, pickTopic: ui.elegirTema, finished: ui.fin },
       topics: temas,
     }, null, 2));

@@ -6,9 +6,9 @@
  *  - lane():     records the chosen lane; for light/full it creates the branch + OpenSpec change.
  *  - take():     reserves a request at an agent stage, prepares branch/tests/OpenSpec and returns the context.
  *  - complete(): validates the output (schema + OpenSpec), publishes to the tickets/git/factory and moves the state.
- *                When closing ANALYSIS with the analyst's OK it creates the internal ticket (if configured) and links it to the external one.
+ *                When closing ANALYSIS with the analyst's OK it creates the issue (if there is an issues system) and links it to the request.
  *
- * The external ticket is what the client sees; the internal one (optional) is the team's. Both are reached through connectors/.
+ * The request is what the client sees (requests system); the issue (optional) is the team's (issues system). Both are reached through connectors/.
  */
 import { join } from "node:path";
 import { detectarIdioma } from "../lib/lang.ts";
@@ -36,22 +36,22 @@ export type CompleteResult = { ok: true; next: State } | { ok: false; errors: st
 export class Process {
   private fac: Factory;
   /** Where the client's ticket lives. */
-  private ext: Tracker;
+  private requests: Tracker;
   /** Where the team's ticket is created (optional). */
-  private int?: Tracker;
+  private issues?: Tracker;
   constructor(
     private cfg: Config, connectors: Connectors, private store: Store,
     private ws: Workspace, private os: OpenSpecApi,
   ) {
     this.fac = new Factory(cfg.factoryDir);
-    this.ext = connectors.external;
-    this.int = connectors.internal;
+    this.requests = connectors.requests;
+    this.issues = connectors.issues;
   }
 
   // ================================================================ review
   async review(): Promise<Pending[]> {
     const pending: Pending[] = [];
-    for (const key of await this.ext.pending()) {
+    for (const key of await this.requests.pending()) {
       try {
         const item = this.store.get(key) ?? newWorkItem(key);
         if (isGate(item.state)) await this.reviewGate(item as WorkItem & { state: keyof typeof GATES });
@@ -80,7 +80,7 @@ export class Process {
     this.assertClaimable(item, agent);
     if (item.state === "NEW") {
       item.supporter = person;
-      await this.ext.comment(key, `${person} (support) is handling this request.`);
+      await this.requests.comment(key, `${person} (support) is handling this request.`);
       await this.move(item, "SUPPORT", "taken by support", agent);
     }
     item.supporter = person;
@@ -100,7 +100,7 @@ export class Process {
     if (item.state === "NEW" || item.state === "SUPPORT") {
       const from = item.state;
       item.analyst = analyst;
-      await this.ext.comment(key, `${analyst} started analyzing this request.`);
+      await this.requests.comment(key, `${analyst} started analyzing this request.`);
       await this.move(item, "ANALYSIS", from === "SUPPORT" ? "taken by the analyst before support finished" : "registered by analyst", agent);
     }
     item.analyst = analyst;
@@ -120,11 +120,11 @@ export class Process {
       this.store.save(item);
       return { lane: item.lane, openspec: undefined as undefined | { change: string; dir: string }, branch: undefined as string | undefined };
     }
-    const issue = await this.ext.ticket(key);
+    const ticket = await this.requests.ticket(key);
     item.branch = this.ws.prepareBranch(key);
     if (!item.change || !this.os.exists(item.change)) {
-      item.change = changeName(key, issue.title, item.round);
-      this.os.newChange(item.change, `${key}: ${issue.title}`);
+      item.change = changeName(key, ticket.title, item.round);
+      this.os.newChange(item.change, `${key}: ${ticket.title}`);
     }
     this.store.save(item);
     return { lane: item.lane, branch: item.branch, openspec: { change: item.change, dir: `openspec/changes/${item.change}` } };
@@ -143,7 +143,7 @@ export class Process {
     item.lock = { agent, since: new Date().toISOString() };
     this.store.save(item);
 
-    const issue = await this.ext.ticket(key);
+    const ticket = await this.requests.ticket(key);
     const state = item.state;
 
     // ANALYSIS (light/full are created by `orqen lane`) and the fast lane (EXECUTION/VERIFICATION) do not prepare a branch here
@@ -167,7 +167,7 @@ export class Process {
     }
     this.store.save(item);
 
-    const comments = (await this.ext.comments(key)).map((c) => ({
+    const comments = (await this.requests.comments(key)).map((c) => ({
       author: c.authorName, date: c.created, text: c.body, is_agent: isBotComment(c.body),
     }));
     const openspec = item.change ? {
@@ -184,7 +184,7 @@ export class Process {
         // The person's language, from the operating system: talk to them in it (artifacts keep their own rules).
         language: detectarIdioma(),
         supporter: item.supporter, analyst: item.analyst, lane: item.lane, factory: `orqen/work/${key}/round-${item.round}`,
-        issue, internal: item.internal, comments, environment,
+        request: ticket, issue: item.issue, comments, environment,
         openspec,
         ...(["DEVELOPMENT", "TESTING"].includes(state) ? { tasks: this.tasksOf(item) } : {}),
         ...(state === "TESTING" ? { scenarios: this.scenariosOf(item) } : {}),
@@ -204,7 +204,7 @@ export class Process {
     if (!item.branch || !["TESTING", "QA_REVIEW", "CODE_REVIEW", "DELIVERY", "ACCEPTANCE", "CLOSED"].includes(item.state))
       throw new Error(`${key} is in ${item.state}: the PR to ${this.cfg.develBranch} is opened once development is done (TESTING or later).`);
     return {
-      key, state: item.state, branch: item.branch, base: this.cfg.develBranch, lane: item.lane, internal: item.internal,
+      key, state: item.state, branch: item.branch, base: this.cfg.develBranch, lane: item.lane, issue: item.issue,
       analysis: `orqen/work/${key}/round-${item.round}/analysis.md`,
       change: item.change ? `openspec/changes/${item.change}` : undefined,
       existing: item.artifacts.devel_pr as string | undefined,
@@ -228,10 +228,10 @@ export class Process {
     this.ws.commit(key, `PR explanation for ${info.base}`, { branch: item.branch });
     this.ws.push(item.branch);
     if (info.existing) return { url: info.existing, created: false, base: info.base };
-    const issue = await this.ext.ticket(key);
+    const ticket = await this.requests.ticket(key);
     const out = this.ws.openPr({
       key, branch: item.branch, base: info.base, body: bodyFile, change: item.change,
-      title: (title ?? item.artifacts.ANALYSIS?.summary ?? issue.title).slice(0, 80),
+      title: (title ?? item.artifacts.ANALYSIS?.summary ?? ticket.title).slice(0, 80),
     }, this.cfg.develPrCommand);
     const url = out.match(/https?:\/\/\S+/)?.[0];
     if (!url) throw new Error(`The PR was not opened. Output: ${out || "(none)"}`);
@@ -245,7 +245,7 @@ export class Process {
   // ================================================================ code review
   /**
    * Records the code review report (written by the agent for the senior) without moving the state: saves it in
-   * round-N/code-review-<n>.md, comments it on the internal ticket (or the external one) and logs it. With CODE_REVIEW_GATE=ticket the senior still gives /approve or /reject on the ticket.
+   * round-N/code-review-<n>.md, comments it on the issue (or the request) and logs it. With CODE_REVIEW_GATE=ticket the senior still gives /approve or /reject on the ticket.
    */
   async codeReview(key: string, body: string, verdict: string, agent = "agent") {
     const item = this.store.get(key);
@@ -269,10 +269,10 @@ export class Process {
     const label = VERDICTS[verdict as keyof typeof VERDICTS];
     const text = `*Code review #${n}* (round ${item.round}) — verdict: *${label}*\nPR: ${item.artifacts.devel_pr}\n\n${body.trim()}`;
     // the report is already saved: a connector failure must not abort (retrying would duplicate it as #n+1)
-    const onInternal = !!(item.internal && this.int);
-    let commentedOn: string | undefined = onInternal ? item.internal : key;
+    const onIssue = !!(item.issue && this.issues);
+    let commentedOn: string | undefined = onIssue ? item.issue : key;
     try {
-      await (onInternal ? this.int! : this.ext).comment(commentedOn!, text.length > COMMENT_MAX ? text.slice(0, COMMENT_MAX) + `\n\n… (truncated; full report in \`${path}\`)` : text);
+      await (onIssue ? this.issues! : this.requests).comment(commentedOn!, text.length > COMMENT_MAX ? text.slice(0, COMMENT_MAX) + `\n\n… (truncated; full report in \`${path}\`)` : text);
     } catch (e) {
       console.error(`[orqen] warning: could not comment the code review on ${commentedOn}: ${(e as Error).message}`);
       commentedOn = undefined;
@@ -285,7 +285,7 @@ export class Process {
   /**
    * QA decision in QA_REVIEW (full lane only): approve sends the request to the senior (CODE_REVIEW); reject sends it back to
    * DEVELOPMENT with the reason as feedback. The optional report is saved as round-N/qa-review-<n>.md and committed by the move.
-   * QA can also decide with /approve or /reject on the external ticket (APPROVERS_QA).
+   * QA can also decide with /approve or /reject on the request (APPROVERS_QA).
    */
   async qaReview(key: string, decision: string, reason = "", report = "", by = "qa") {
     const item = this.store.get(key);
@@ -350,9 +350,9 @@ export class Process {
     }
     item.artifacts[state] = s;
     const next = nextStateAfterStage(state, s, item);
-    if (state === "VERIFICATION" && next === "ANALYSIS") {  // escalation: the new analysis creates a development internal ticket
-      item.route = "development"; delete item.lane; delete item.artifacts.internal_linked;
-      if (item.internal) { (item.artifacts.previous_internal ??= []).push(item.internal); delete item.internal; }
+    if (state === "VERIFICATION" && next === "ANALYSIS") {  // escalation: the new analysis creates a development issue
+      item.route = "development"; delete item.lane; delete item.artifacts.issue_linked;
+      if (item.issue) { (item.artifacts.previous_issues ??= []).push(item.issue); delete item.issue; }
     }
     if (state === "VERIFICATION" && next !== "EXECUTION") item.testingAttempts = 0;
 
@@ -411,12 +411,12 @@ export class Process {
   }
 
   // ================================================================ analysis closing
-  /** With the analyst's OK: estimate, record in orqen/work/, spec commit (if any) and internal ticket linked to the external one. */
+  /** With the analyst's OK: estimate, record in orqen/work/, spec commit (if any) and issue linked to the request. */
   private async closeAnalysis(item: WorkItem, s: Record<string, any>) {
     item.artifacts.estimated_hours = item.change
       ? this.os.tasks(item.change).reduce((a, t) => a + (t.hours ?? 0), 0)
       : s.estimated_hours;
-    await this.createInternal(item);
+    await this.createIssue(item);
     this.recordAnalysis(item, s);
     if (item.change) this.ws.commit(item.key, `spec OpenSpec ${item.change}`);
   }
@@ -427,7 +427,7 @@ export class Process {
     this.fac.write(item, "analysis.md",
       `# ${item.key} — analysis (round ${item.round})\n\n` +
       `- **Analyst:** ${item.analyst ?? "?"}\n- **Route:** ${s.route}\n- **Lane:** ${s.lane}\n- **Lane rationale:** ${s.lane_rationale}\n` +
-      `- **Internal ticket:** ${item.internal ?? "—"}\n` + (item.change ? `- **OpenSpec change:** openspec/changes/${item.change}/\n` : "") +
+      `- **Issue:** ${item.issue ?? "—"}\n` + (item.change ? `- **OpenSpec change:** openspec/changes/${item.change}/\n` : "") +
       (item.artifacts.estimated_hours !== undefined ? `- **Estimate:** ${item.artifacts.estimated_hours} h\n` : "") +
       `\n## Summary\n\n${s.summary}\n\n` +
       md("Acceptance criteria", s.acceptance_criteria) +
@@ -450,9 +450,9 @@ export class Process {
           (s.client_response.trim() ? `## Reply to the client\n\n${s.client_response.trim()}\n\n` : "") +
           (s.escalation_summary.trim() ? `## Escalation\n\n${s.escalation_summary.trim()}\n` : ""));
         if (resolved)
-          return this.ext.comment(k, `${s.client_response.trim()}\n\n_Answered by support${item.supporter ? ` (${item.supporter})` : ""}._\n` +
+          return this.requests.comment(k, `${s.client_response.trim()}\n\n_Answered by support${item.supporter ? ` (${item.supporter})` : ""}._\n` +
             `To confirm the request is solved, comment */approve*. To report that it is not, comment */reject <reason>*.`);
-        return this.ext.comment(k, (s.client_response.trim() ? `${s.client_response.trim()}\n\n` : "") +
+        return this.requests.comment(k, (s.client_response.trim() ? `${s.client_response.trim()}\n\n` : "") +
           `*Support${item.supporter ? ` (${item.supporter})` : ""}*\n${s.summary}\n\n*Escalated to analysis:*\n${s.escalation_summary.trim()}\n\n*Checked:*\n${bullets(s.checked)}`);
       }
       case "ANALYSIS": {
@@ -464,11 +464,11 @@ export class Process {
             const sc = this.os.scenarios(item.change);
             t += `\n*Spec:* OpenSpec change \`${item.change}\` (branch \`${item.branch}\`), ${sc.length} scenario(s), ${item.artifacts.estimated_hours} estimated hours.`;
           } else if (s.route === "development") t += `\n*Plan:*\n${bullets(s.plan ?? [], true)}` + (s.estimated_hours !== undefined ? `\n*Estimate:* ${s.estimated_hours} h` : "");
-          if (item.internal) t += `\n*Internal ticket:* ${item.internal}`;
+          if (item.issue) t += `\n*Issue:* ${item.issue}`;
         }
         if (next === "WAITING_CLIENT") t += `\n\n*Please confirm the following so we can specify the request:*\n${bullets(s.open_questions, true)}`;
         if (next === "BLOCKED") t += "\n\nThe question limit has been reached. Human review is needed.";
-        return this.ext.comment(k, t);
+        return this.requests.comment(k, t);
       }
       case "DEVELOPMENT":
         if (s.completed) {
@@ -513,20 +513,20 @@ export class Process {
           return this.commentBoth(item, t + `${s.client_message}\n\n*How to verify:*\n${bullets(s.validation_steps, true)}\n\n` +
             `To accept the result, comment */approve*. To report a problem, comment */reject <reason>*.`);
         if (next === "ANALYSIS")
-          return this.ext.comment(k, t + "Verification shows that a code change is required. Returning to analysis to choose a development lane.");
-        return this.ext.comment(k, t + (next === "BLOCKED"
+          return this.requests.comment(k, t + "Verification shows that a code change is required. Returning to analysis to choose a development lane.");
+        return this.requests.comment(k, t + (next === "BLOCKED"
           ? "The issue persists and retries are exhausted. Human review is needed."
           : "The issue persists. Preparing a new proposal."));
       }
       case "DELIVERY":
-        return this.ext.comment(k, `${s.client_message}\n\n*How to verify:*\n${bullets(s.validation_steps, true)}\n\n` +
+        return this.requests.comment(k, `${s.client_message}\n\n*How to verify:*\n${bullets(s.validation_steps, true)}\n\n` +
           `To accept the result, comment */approve*. To report a problem, comment */reject <reason>*.`);
     }
   }
 
   // ================================================================ gates
   private async newHumanComments(item: WorkItem): Promise<Comment[]> {
-    const cs = await this.ext.comments(item.key);
+    const cs = await this.requests.comments(item.key);
     const i = cs.findIndex((c) => c.id === item.lastSeenComment);
     if (cs.length) item.lastSeenComment = cs[cs.length - 1].id;
     return cs.slice(i + 1).filter((c) => !isBotComment(c.body));
@@ -593,7 +593,7 @@ export class Process {
       const m = c.body.match(CMD);
       if (!m) { item.feedback.push({ from: c.authorName, text: c.body }); continue; }
       if (authorized.length && !authorized.includes(c.author)) {
-        await this.ext.comment(item.key, `${c.authorName}: you are not authorized to use /${m[1]} at this stage.`);
+        await this.requests.comment(item.key, `${c.authorName}: you are not authorized to use /${m[1]} at this stage.`);
         continue;
       }
       const action = m[1].toLowerCase() as "approve" | "reject", reason = m[2].trim();
@@ -602,12 +602,12 @@ export class Process {
         item.feedback.push({ from: c.authorName, text: reason });  // result of the application
       if ((item.state === "CODE_REVIEW" || item.state === "QA_REVIEW") && action === "reject") item.testingAttempts = 0;
       if (item.state === "EXECUTION_APPROVAL" && action === "approve")
-        await this.ext.comment(item.key, "Operational change approved. Apply the proposal as written and comment */approve <result>* on success or */reject <reason>* on failure.");
+        await this.requests.comment(item.key, "Operational change approved. Apply the proposal as written and comment */approve <result>* on success or */reject <reason>* on failure.");
       if (item.state === "ACCEPTANCE" && action === "reject") {
-        // new round: the previous change is already archived → the analyst re-analyzes (new lane, change and internal ticket)
+        // new round: the previous change is already archived → the analyst re-analyzes (new lane, change and issue)
         item.round++; item.change = ""; item.questionRounds = 0; item.testingAttempts = 0; delete item.lane;
-        delete item.artifacts.archive; delete item.artifacts.devel_pr; delete item.artifacts.internal_linked;
-        if (item.internal) { (item.artifacts.previous_internal ??= []).push(item.internal); delete item.internal; }  // the new round gets its own internal ticket
+        delete item.artifacts.archive; delete item.artifacts.devel_pr; delete item.artifacts.issue_linked;
+        if (item.issue) { (item.artifacts.previous_issues ??= []).push(item.issue); delete item.issue; }  // the new round gets its own issue
       }
       return this.move(item, gate[action === "approve" ? "approve" : "reject"], `/${action} by ${c.authorName} ${reason}`.trim());
     }
@@ -628,34 +628,34 @@ export class Process {
     this.store.save(item);
   }
 
-  // ================================================================ internal ticket
+  // ================================================================ issue
   /**
-   * When the analysis closes: creates the internal ticket (if there is an internal connector), links it to the external one
+   * When the analysis closes: creates the issue (if there is an issues system), links it to the request
    * and notifies both. Idempotent and resumable: if it fails halfway (e.g. the link), retrying `complete` picks up where it left off.
    */
-  private async createInternal(item: WorkItem) {
+  private async createIssue(item: WorkItem) {
     const a = item.artifacts.ANALYSIS ?? {};
     const operational = item.route === "operational";
     const lane = operational ? "operational" : a.lane;
-    if (!this.int) {
-      if (!item.artifacts.internal_linked) {
-        await this.ext.comment(item.key, `Analysis complete${item.analyst ? ` with ${item.analyst}` : ""} (${lane} lane). Milestones will be posted on this request.`);
-        item.artifacts.internal_linked = true;
+    if (!this.issues) {
+      if (!item.artifacts.issue_linked) {
+        await this.requests.comment(item.key, `Analysis complete${item.analyst ? ` with ${item.analyst}` : ""} (${lane} lane). Milestones will be posted on this request.`);
+        item.artifacts.issue_linked = true;
         this.store.save(item);
       }
       return;
     }
-    if (!item.internal) {
-      const issue = await this.ext.ticket(item.key);
+    if (!item.issue) {
+      const ticket = await this.requests.ticket(item.key);
       const tasks = operational ? [] : this.tasksOf(item);
       const sc = operational ? [] : this.scenariosOf(item);
-      item.internal = await this.int.create({
+      item.issue = await this.issues.create({
         route: operational ? "operational" : "development",
-        title: `[${item.key}] ${issue.title}`, labels: [`origin-${item.key.toLowerCase()}`, `lane-${lane}`],
+        title: `[${item.key}] ${ticket.title}`, labels: [`origin-${item.key.toLowerCase()}`, `lane-${lane}`],
         description: operational
-          ? `Operational resolution for request ${item.key} (no code changes).\n${this.ext.url(item.key)}\n\n*Summary:* ${a.summary}\n*Rationale:* ${a.lane_rationale}\n\n` +
+          ? `Operational resolution for request ${item.key} (no code changes).\n${this.requests.url(item.key)}\n\n*Summary:* ${a.summary}\n*Rationale:* ${a.lane_rationale}\n\n` +
             `*Acceptance criteria:*\n${bullets(a.acceptance_criteria ?? [])}\n\nThe execution stage prepares the script, rollback, and verification and posts them on the request.`
-          : `Development for request ${item.key}. *Lane:* ${a.lane} — ${a.lane_rationale}\n${this.ext.url(item.key)}\n\n` +
+          : `Development for request ${item.key}. *Lane:* ${a.lane} — ${a.lane_rationale}\n${this.requests.url(item.key)}\n\n` +
             `*Summary:* ${item.artifacts.ANALYSIS?.spec?.summary ?? a.summary}\n\n` +
             `*Branch:* ${item.branch || branchFor(item.key)}\n` + (item.change ? `*OpenSpec change:* openspec/changes/${item.change}/\n` : `*Direct-lane analysis:* orqen/work/${item.key}/round-${item.round}/analysis.md\n`) +
             `*Estimate:* ${item.artifacts.estimated_hours ?? "?"} h\n\n` +
@@ -664,28 +664,28 @@ export class Process {
       });
       this.store.save(item);
     }
-    if (!item.artifacts.internal_linked) {
-      const native = canLinkNatively(this.int, this.ext) && this.int.link;
-      if (native) await this.int.link!(item.internal, item.key);
-      const where = native ? item.internal : `${item.internal} (${this.int.url(item.internal)})`;
-      await this.ext.comment(item.key, `Analysis complete${item.analyst ? ` with ${item.analyst}` : ""}. Track implementation in ${where} (${lane} lane). Milestones will also be posted on this request.`);
-      await this.int.comment(item.internal, `Created from ${item.key}${native ? "" : ` (${this.ext.url(item.key)})`} after analysis. Request record: orqen/work/${item.key}/.`);
-      item.artifacts.internal_linked = true;
+    if (!item.artifacts.issue_linked) {
+      const native = canLinkNatively(this.issues, this.requests) && this.issues.link;
+      if (native) await this.issues.link!(item.issue, item.key);
+      const where = native ? item.issue : `${item.issue} (${this.issues.url(item.issue)})`;
+      await this.requests.comment(item.key, `Analysis complete${item.analyst ? ` with ${item.analyst}` : ""}. Track implementation in ${where} (${lane} lane). Milestones will also be posted on this request.`);
+      await this.issues.comment(item.issue, `Created from ${item.key}${native ? "" : ` (${this.requests.url(item.key)})`} after analysis. Request record: orqen/work/${item.key}/.`);
+      item.artifacts.issue_linked = true;
       this.store.save(item);
     }
   }
 
-  /** Comments on the external ticket and, if it exists, mirrors on the internal one. */
+  /** Comments on the request and, if it exists, mirrors on the issue. */
   private async commentBoth(item: WorkItem, text: string) {
-    await this.ext.comment(item.key, text);
-    if (item.internal && this.int) await this.attemptAsync(() => this.int!.comment(item.internal!, text));
+    await this.requests.comment(item.key, text);
+    if (item.issue && this.issues) await this.attemptAsync(() => this.issues!.comment(item.issue!, text));
   }
 
   // ================================================================ utilities
   async block(key: string, reason: string, agent = "agent") {
     const item = this.store.get(key) ?? newWorkItem(key);
     if (item.state === "BLOCKED") return;
-    await this.ext.comment(key, `Human intervention needed: ${reason}\nWhen resolved, comment /approve <instructions> to retry.`);
+    await this.requests.comment(key, `Human intervention needed: ${reason}\nWhen resolved, comment /approve <instructions> to retry.`);
     await this.move(item, "BLOCKED", reason, agent);
   }
 
@@ -719,7 +719,7 @@ export class Process {
     item.state = to;
     delete item.lock;
     if (isGate(to) || to === "BLOCKED") {  // when entering a gate, ignore earlier comments
-      const cs = await this.ext.comments(item.key);
+      const cs = await this.requests.comments(item.key);
       item.lastSeenComment = cs.at(-1)?.id ?? "";
     }
     this.store.save(item);
@@ -727,15 +727,15 @@ export class Process {
     this.fac.record(item, from, to, detail, agent);
     if (item.branch) this.attempt(() => this.ws.commit(item.key, `registro ${from} → ${to}`, { path: this.cfg.factoryDir, branch: item.branch }));
     try {
-      await this.ext.setStateLabel(item.key, to);
-      const t = this.cfg.connectors.external.transitions[to];
-      if (t) await this.ext.transition(item.key, t);
-      if (item.internal && this.int) {
-        const ts = this.cfg.connectors.internal?.transitions[to];
-        if (ts) await this.int.transition(item.internal, ts);
+      await this.requests.setStateLabel(item.key, to);
+      const t = this.cfg.connectors.requests.transitions[to];
+      if (t) await this.requests.transition(item.key, t);
+      if (item.issue && this.issues) {
+        const ts = this.cfg.connectors.issues?.transitions[to];
+        if (ts) await this.issues.transition(item.issue, ts);
       }
     } catch (e) {
-      console.error(`[orqen] could not update the state on ${this.ext.label}: ${(e as Error).message}`);
+      console.error(`[orqen] could not update the state on ${this.requests.label}: ${(e as Error).message}`);
     }
   }
 }

@@ -110,8 +110,8 @@ export async function workflowFixture(t: TestContext, deployment = "server") {
   const config = leerConfig(repo);
   config.entornos = { procesos: [], variables: {}, preparar: [], migrar: [], seed: [], tests: { unitarios: "node test.mjs" } };
   config.conectores = {
-    externo: { tipo: "jira", filtro: "project = REQ", transiciones: { CLOSED: "Done" } },
-    interno: { tipo: "jira", proyecto: "DEV", tipo_ticket: "Task", vinculo: "Relates", transiciones: { DEVELOPMENT: "In Progress", CLOSED: "Done" } },
+    requests: { tipo: "jira", filtro: "project = REQ", transiciones: { CLOSED: "Done" } },
+    issues: { tipo: "jira", proyecto: "DEV", tipo_ticket: "Task", vinculo: "Relates", transiciones: { DEVELOPMENT: "In Progress", CLOSED: "Done" } },
   };
   escribirConfig(repo, config);
   git("add", "."); git("commit", "-qm", "Initialize fixture with installed ORQEN kit");
@@ -143,7 +143,7 @@ export async function supportEscalation(f: WorkflowFixture) {
 }
 
 export async function implementWithSwarm(f: WorkflowFixture) {
-  const sis = f.record().internal!;
+  const sis = f.record().issue!;
   const ctx = f.context(await f.command(["take", sis]));
   assert.equal(ctx.state, "DEVELOPMENT");
   assert.equal(ctx.environment.ok, true);
@@ -159,7 +159,7 @@ export async function implementWithSwarm(f: WorkflowFixture) {
 }
 
 export async function testAndReview(f: WorkflowFixture, completeDevelopment = true) {
-  const sis = f.record().internal!;
+  const sis = f.record().issue!;
   const previousPr = f.record().artifacts.devel_pr;
   if (completeDevelopment) await f.complete(sis, development);
   f.state("TESTING");

@@ -209,7 +209,7 @@ export async function init(o: OpcionesInit) {
 }
 
 /**
- * Ask where the tickets live (external = what the client sees, internal = optional team ticket) and the approvers.
+ * Ask where the tickets live (requests = what the client sees, issues = optional team issues) and the approvers.
  * Keeps the previous `conectores` and orqen/.env when the person does not want to review them; with --yes nothing is asked.
  */
 async function pedirConectores(repo: string, yes: boolean): Promise<{ conectores?: ConectoresYaml; env?: Record<string, string> }> {
@@ -225,7 +225,7 @@ async function pedirConectores(repo: string, yes: boolean): Promise<{ conectores
   const r = await askConnectors(repo, previos, actual ?? {});
   const v: Record<string, string> = { ...r.env };
   if (await confirmar(`Configure stage approvers? ${gris("(otherwise anyone can approve)")}`, false, false)) {
-    const pedir = (k: string, quien: string) => texto(`${quien} ${gris("(comma-separated accounts of the external ticket tool, empty for anyone)")}`, previo(k), false);
+    const pedir = (k: string, quien: string) => texto(`${quien} ${gris("(comma-separated accounts of the requests system, empty for anyone)")}`, previo(k), false);
     v.APPROVERS_CODE = await pedir("APPROVERS_CODE", "Code review");
     v.APPROVERS_CLIENT = await pedir("APPROVERS_CLIENT", "Customer acceptance");
     v.APPROVERS_ANALYSIS = await pedir("APPROVERS_ANALYSIS", "Analysts who can unblock requests");

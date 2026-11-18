@@ -58,10 +58,10 @@ async function untilExecution() {
   return t;
 }
 
-test("full operational route: internal ticket when the analysis closes, no branch, with human approval and application", async () => {
+test("full operational route: issue when the analysis closes, no branch, with human approval and application", async () => {
   const { p, jira, est, branches, cfg } = await untilExecution();
   assert.equal(est().state, "EXECUTION");                     // the analyst's OK replaces the analysis gate
-  assert.equal(jira.created.length, 1);                       // the internal ticket is born when the analysis closes, here too
+  assert.equal(jira.created.length, 1);                       // the issue is born when the analysis closes, here too
   assert.deepEqual(jira.links, [["DEV-1", "REQ-1"]]);
 
   await p.take("REQ-1");
@@ -78,7 +78,7 @@ test("full operational route: internal ticket when the analysis closes, no branc
   jira.human("REQ-1", "dba", "/approve");
   await p.review();
   assert.equal(est().state, "APPLICATION");
-  assert.equal(jira.created.length, 1);                       // no second internal ticket when authorizing
+  assert.equal(jira.created.length, 1);                       // no second issue when authorizing
 
   jira.human("REQ-1", "dba", "/approve se borraron 12 filas");
   await p.review();
@@ -106,7 +106,7 @@ test("SQL guards: DROP, DELETE without WHERE, trivial WHERE, no rollback", async
   assert.deepEqual(reviewSql("-- DELETE FROM t\nSELECT 'DROP TABLE x'; UPDATE t SET a=1 WHERE id=3;"), []);
 });
 
-test("failed verification goes back to EXECUTION; requires_development goes back to ANALYSIS with a new internal ticket", async () => {
+test("failed verification goes back to EXECUTION; requires_development goes back to ANALYSIS with a new issue", async () => {
   const { p, jira, est } = await untilExecution();
   await p.take("REQ-1");
   await p.complete("REQ-1", EXEC());
@@ -125,17 +125,17 @@ test("failed verification goes back to EXECUTION; requires_development goes back
   assert.deepEqual(await p.complete("REQ-1", VERIF({ verified: false, requires_development: true, evidence: "Reaparecen: bug en el alta" })),
     { ok: true, next: "ANALYSIS" });
   assert.equal(est().route, "development");
-  assert.equal(est().internal, undefined);
-  assert.deepEqual(est().artifacts.previous_internal, ["DEV-1"]);
+  assert.equal(est().issue, undefined);
+  assert.deepEqual(est().artifacts.previous_issues, ["DEV-1"]);
 
-  // the analyst re-analyzes, now with a development lane → a development internal ticket is born
+  // the analyst re-analyzes, now with a development lane → a development issue is born
   await p.analyze("REQ-1", "analyst-bot", "Ana");
   assert.deepEqual(await p.complete("REQ-1", ANALYSIS("development", { analyst_ok: true }), "analyst-bot"), { ok: true, next: "DEVELOPMENT" });
-  assert.equal(est().internal, "DEV-2");
+  assert.equal(est().issue, "DEV-2");
   assert.equal(jira.created[1].route, "development");
 });
 
-test("the operational route only allows the direct lane and uses the operational internal ticket type", async () => {
+test("the operational route only allows the direct lane and uses the operational issue type", async () => {
   const t = setup();
   await t.p.analyze("REQ-1", "bot", "Ana");
   const r = await t.p.complete("REQ-1", ANALYSIS("operational", { lane: "light" }), "bot");
@@ -145,5 +145,5 @@ test("the operational route only allows the direct lane and uses the operational
   assert.equal(t.jira.created.length, 1);
   assert.equal(t.jira.created[0].route, "operational");
   assert.deepEqual((t.jira.created[0] as any).labels, ["origin-req-1", "lane-operational"]);
-  assert.equal(t.est().internal, "DEV-1");
+  assert.equal(t.est().issue, "DEV-1");
 });

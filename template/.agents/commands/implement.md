@@ -4,7 +4,7 @@ argument-hint: <KEY>
 allowed-tools: Bash(orqen:*), Bash(openspec:*), Bash(npm:*), Bash(npx:*), Read, Grep, Glob, Write, Edit, Skill, AskUserQuestion
 ---
 
-Implement the request identified by `$ARGUMENTS` from the repository root. It can be the internal ticket key or the external one; orqen resolves it to the request. Follow the development stage in `AGENTS.md`.
+Implement the request identified by `$ARGUMENTS` from the repository root. It can be the issue key or the request key; orqen resolves it to the request. Follow the development stage in `AGENTS.md`.
 
 ## Rules
 
@@ -18,7 +18,7 @@ Implement the request identified by `$ARGUMENTS` from the repository root. It ca
 
 ## Steps
 
-1. Check that the argument is a ticket key (internal or external). Ask for the key if it is missing.
+1. Check that the argument is a request or issue key. Ask for the key if it is missing.
 2. Run `orqen status <KEY>`. If it is unknown, explain that it is not a request of this repository and stop. Claim work only in `DEVELOPMENT` for a development request. Otherwise:
    - `ANALYSIS` or `WAITING_CLIENT`: Explain that analysis must finish first.
    - `EXECUTION` or `VERIFICATION`: Explain that the request follows the operational workflow.

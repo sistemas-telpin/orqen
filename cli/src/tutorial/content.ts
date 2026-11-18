@@ -27,16 +27,16 @@ export interface DatosTutorial {
   proyecto: string;
   procesos: ProcesoTutorial[];
   tests: string[];
-  externo: string;        // example key of an external ticket (what the client sees), e.g. SOP-123
-  interno: string;        // example key of an internal ticket; without internal connector, the external key
-  herramienta: string;    // where the external ticket lives: Jira, GitHub, Asana
-  herramientaInterna?: string; // where the internal ticket lives (absent: no internal ticket)
+  request: string;        // example key of a request (what the client sees), e.g. SOP-123
+  issue: string;          // example key of an issue; without an issues system, the request key
+  herramienta: string;    // where the requests live: Jira, GitHub, Asana
+  herramientaIssues?: string; // where the issues live (absent: no issues system)
   soporte: boolean;       // SUPPORT_STAGE=on
   gate: "github" | "ticket";
   ramaDevel: string;
   windows: boolean;
   db: boolean;            // orqen/tools/db.mjs exists
-  conectado: boolean;     // external connector configured
+  conectado: boolean;     // requests system configured
 }
 
 export const TEMAS = ["welcome", "words", "map", "next", "pending", "analysis", "implement", "review", "watch", "env", "problems", "cheatsheet"] as const;
@@ -73,7 +73,7 @@ export function pasosTutorial(d: DatosTutorial, i: Idioma): Paso[] {
   const seguirLog = d.windows
     ? `Get-Content orqen\\state\\logs\\${unLog}.log -Wait -Tail 50`
     : `tail -f orqen/state/logs/${unLog}.log`;
-  const recNum = d.externo, sisNum = d.interno, H = d.herramienta, HI = d.herramientaInterna;
+  const recNum = d.request, sisNum = d.issue, H = d.herramienta, HI = d.herramientaIssues;
 
   const pasos: Paso[] = [
     {
@@ -101,10 +101,10 @@ export function pasosTutorial(d: DatosTutorial, i: Idioma): Paso[] {
       titulo: tx("5 palabras que vas a escuchar", "5 words you will hear"),
       bloques: [
         { t: "ul", items: [
-          tx(`Ticket externo: el pedido del cliente en ${H} (por ejemplo ${recNum}). Es lo que ve el cliente y donde se habla con él.`,
-            `External ticket: the customer request in ${H} (for example ${recNum}). It is what the customer sees and where you talk to them.`),
-          ...(HI ? [tx(`Ticket interno: la tarea del equipo que nace cuando se analiza el pedido (por ejemplo ${sisNum}, en ${HI}). Ahí se sigue el trabajo técnico; el cliente no la ve.`,
-            `Internal ticket: the team's task created when the request is analyzed (for example ${sisNum}, in ${HI}). It tracks the technical work; the customer does not see it.`)] : []),
+          tx(`Request: el pedido del cliente en ${H} (por ejemplo ${recNum}). Es lo que ve el cliente y donde se habla con él.`,
+            `Request: the customer request in ${H} (for example ${recNum}). It is what the customer sees and where you talk to them.`),
+          ...(HI ? [tx(`Issue: la tarea del equipo que nace cuando se analiza el pedido (por ejemplo ${sisNum}, en ${HI}). Ahí se sigue el trabajo técnico; el cliente no la ve.`,
+            `Issue: the team's task created when the request is analyzed (for example ${sisNum}, in ${HI}). It tracks the technical work; the customer does not see it.`)] : []),
           tx("Etapa: dónde está el pedido ahora (análisis, desarrollo, testing…). Un pedido está en una sola etapa por vez.",
             "Stage: where the request is right now (analysis, development, testing…). A request is in one stage at a time."),
           tx("Agente: Claude trabajando en este repo. Propone, te pregunta y espera tu OK antes de cada paso importante.",
@@ -112,8 +112,8 @@ export function pasosTutorial(d: DatosTutorial, i: Idioma): Paso[] {
           tx("Carril: qué tan grande es el cambio. direct = chico, light = mediano, full = grande. Lo elige el analista.",
             "Lane: how big the change is. direct = small, light = medium, full = large. The analyst picks it."),
         ] },
-        ...(HI ? [{ t: "tip" as const, texto: tx("Casi todos los comandos aceptan la clave del ticket externo o la del interno: usá la que tengas a mano.",
-          "Almost every command accepts either the external or the internal ticket key: use whichever you have.") }] : []),
+        ...(HI ? [{ t: "tip" as const, texto: tx("Casi todos los comandos aceptan la clave del request o la del issue: usá la que tengas a mano.",
+          "Almost every command accepts either the request or the issue key: use whichever you have.") }] : []),
       ],
     },
     {
@@ -203,12 +203,12 @@ export function pasosTutorial(d: DatosTutorial, i: Idioma): Paso[] {
         { t: "cmd", lineas: [`/orqen:analyze ${recNum}`] },
         { t: "h", texto: tx("Qué va a pasar", "What will happen") },
         { t: "ol", items: [
-          tx("El agente toma el pedido y lee el ticket externo, sus comentarios y el código.", "The agent takes the request and reads the external ticket, its comments, and the code."),
+          tx("El agente toma el pedido y lee el request, sus comentarios y el código.", "The agent takes the request and reads the request, its comments, and the code."),
           tx("Te hace preguntas para entender bien qué hay que hacer. Contestá con tus palabras o elegí una opción.", "It asks you questions to understand what needs doing. Answer in your own words or pick an option."),
           tx("Te muestra un resumen: qué hay que hacer y cómo se va a probar. Si está bien, decile que sí.", "It shows you a summary: what needs doing and how it will be tested. If it is right, say yes."),
           tx("Te propone un carril (direct, light o full). Confirmalo o cambialo.", "It proposes a lane (direct, light, or full). Confirm it or change it."),
           tx("Si es light o full, escriben juntos la especificación: qué tiene que hacer el sistema.", "For light or full, you write the specification together: what the system must do."),
-          HI ? tx(`Con tu OK, cierra el análisis: orqen crea el ticket interno en ${HI} y lo vincula al pedido.`, `With your OK, it closes the analysis: orqen creates the internal ticket in ${HI} and links it to the request.`)
+          HI ? tx(`Con tu OK, cierra el análisis: orqen crea el issue en ${HI} y lo vincula al pedido.`, `With your OK, it closes the analysis: orqen creates the issue in ${HI} and links it to the request.`)
             : tx("Con tu OK, cierra el análisis y se lo cuenta al cliente en el ticket.", "With your OK, it closes the analysis and tells the customer on the ticket."),
         ] },
         { t: "h", texto: LISTO },
@@ -364,7 +364,7 @@ export function pasosTutorial(d: DatosTutorial, i: Idioma): Paso[] {
           tx(`   /orqen:code-review ${sisNum.padEnd(10)} senior`, `   /orqen:code-review ${sisNum.padEnd(10)} senior`),
           "",
           tx(` DECIDIR (${H} / GitHub)`, ` DECIDE (${H} / GitHub)`),
-          tx("   /approve   /reject motivo     comentario en el ticket externo", "   /approve   /reject reason     comment on the external ticket"),
+          tx("   /approve   /reject motivo     comentario en el request", "   /approve   /reject reason     comment on the request"),
           ...(d.gate === "github" ? [tx("   Approve / Request changes     review en el PR de GitHub (senior)", "   Approve / Request changes     review on the GitHub PR (senior)")] : []),
           "",
           tx(" ENTORNO (terminal)", " ENVIRONMENT (terminal)"),

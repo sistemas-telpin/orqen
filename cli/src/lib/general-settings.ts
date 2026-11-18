@@ -1,4 +1,4 @@
-/** Project-wide naming, independent of the providers used for requirements and development tickets. */
+/** Project-wide naming, independent of the providers used for requests and issues. */
 import { General, type Config } from "./config.ts";
 import { connectorSettings, type ConectorYaml } from "../connectors/config.ts";
 import { ejemploClave } from "../connectors/describe.ts";
@@ -8,8 +8,8 @@ export function generalSettings(config: Config) {
   const prefix = (connector: ConectorYaml | null | undefined, fallback: string) => connector
     ? ejemploClave(connectorSettings(connector, {}), 1).replace(/-\d+$/, "") : fallback;
   return { prefijos: {
-    requerimientos: prefix(config.conectores?.externo, "REQ"),
-    tickets: prefix(config.conectores?.interno, "TKT"),
+    requests: prefix(config.conectores?.requests, "REQ"),
+    issues: prefix(config.conectores?.issues, "ISS"),
   } };
 }
 
@@ -18,15 +18,15 @@ export function updateGeneral(config: Config, input: unknown, hasHistory: boolea
   if (!parsed.success) throw new Error(parsed.error.issues.map((i) => i.message).join("; "));
   const general = parsed.data;
   const previous = generalSettings(config).prefijos;
-  if (hasHistory && (previous.requerimientos !== general.prefijos.requerimientos || previous.tickets !== general.prefijos.tickets)) {
-    throw new Error("Este proyecto ya tiene requerimientos registrados. Cambiar los prefijos necesita migrar sus claves e historial; se conservó la configuración actual.");
+  if (hasHistory && (previous.requests !== general.prefijos.requests || previous.issues !== general.prefijos.issues)) {
+    throw new Error("Este proyecto ya tiene requests registrados. Cambiar los prefijos necesita migrar sus claves e historial; se conservó la configuración actual.");
   }
-  if (config.conectores?.interno && general.prefijos.requerimientos === general.prefijos.tickets) throw new Error("Usá prefijos diferentes para requerimientos y tickets.");
-  for (const connector of [config.conectores?.externo, config.conectores?.interno]) {
+  if (config.conectores?.issues && general.prefijos.requests === general.prefijos.issues) throw new Error("Usá prefijos diferentes para requests e issues.");
+  for (const connector of [config.conectores?.requests, config.conectores?.issues]) {
     if (connector?.tipo === "jira" && !connector.proyecto) throw new Error("Seleccioná el proyecto de Jira en Conectores antes de guardar los prefijos generales.");
   }
   const result = structuredClone(config);
   result.general = general;
-  for (const connector of [result.conectores?.externo, result.conectores?.interno]) if (connector) delete connector.prefijo;
+  for (const connector of [result.conectores?.requests, result.conectores?.issues]) if (connector) delete connector.prefijo;
   return result;
 }

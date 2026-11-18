@@ -49,14 +49,14 @@ test("the .env of earlier versions still works and can be moved to config.yaml",
   const env = { JIRA_URL: "https://x", REC_JQL: "project = SOPL", SIS_PROJECT: "DEV", SIS_TRANSITIONS: "CLOSED=Done", JIRA_TRANSITIONS: "CLOSED=Resuelto" };
   const c = legacyConnectors(env);
   assert.deepEqual(c.legacy, ["REC_JQL", "JIRA_TRANSITIONS", "SIS_PROJECT", "SIS_TRANSITIONS"]);
-  assert.equal(c.external.kind === "jira" && c.external.query, "project = SOPL");
-  assert.equal(c.internal?.kind === "jira" && c.internal.project, "DEV");
+  assert.equal(c.requests.kind === "jira" && c.requests.query, "project = SOPL");
+  assert.equal(c.issues?.kind === "jira" && c.issues.project, "DEV");
   assert.deepEqual(legacyToYaml(env), {
-    externo: { tipo: "jira", filtro: "project = SOPL", transiciones: { CLOSED: "Resuelto" } },
-    interno: { tipo: "jira", proyecto: "DEV", tipo_ticket: "Task", tipo_operativo: "Task", vinculo: "Relates", transiciones: { CLOSED: "Done" } },
+    requests: { tipo: "jira", filtro: "project = SOPL", transiciones: { CLOSED: "Resuelto" } },
+    issues: { tipo: "jira", proyecto: "DEV", tipo_ticket: "Task", tipo_operativo: "Task", vinculo: "Relates", transiciones: { CLOSED: "Done" } },
   });
-  // a new .env has no internal ticket unless config.yaml says so
-  assert.equal(legacyConnectors({ JIRA_URL: "https://x" }).internal, undefined);
+  // a new .env has no issue unless config.yaml says so
+  assert.equal(legacyConnectors({ JIRA_URL: "https://x" }).issues, undefined);
   assert.ok(isBotComment("[orqen] hi") && isBotComment("[rec-agente] hi") && !isBotComment("hi"));
 });
 

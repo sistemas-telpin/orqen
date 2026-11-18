@@ -15,8 +15,8 @@ Both test scripts build the CLI first. The dedicated E2E script runs the workflo
 | Journey | Checks |
 | --- | --- |
 | Support resolves | Initialization, bootstrap, update, help, version, language, tutorial, search, status, schemas, locks, output validation, client authorization, configurable customer project prefixes, closure without a internal ticket |
-| Direct development | Support escalation, client questions, release, block/unblock, analyst approval and readiness validation, failed ticket link and idempotent retry, internal ticket resolution, failing tests returning to development, swarm planning and application, all environment commands, PR creation and update, review rejection, client rejection, a new internal ticket for round two, final closure |
-| Light development | Real OpenSpec change creation, invalid artifacts and missing estimates rejected before creating a internal ticket, implementation, incomplete tasks rejected, tests, PR, review, archiving and closure |
+| Direct development | Support escalation, client questions, release, block/unblock, analyst approval and readiness validation, failed ticket link and idempotent retry, issue key resolution, failing tests returning to development, swarm planning and application, all environment commands, PR creation and update, review rejection, client rejection, a new internal ticket for round two, final closure |
+| Light development | Real OpenSpec change creation, invalid artifacts and missing estimates rejected before creating an issue, implementation, incomplete tasks rejected, tests, PR, review, archiving and closure |
 | Full development | Full planning artifacts, the same validation gates, implementation, tests, PR, review, archived specs and closure |
 | Operational work | Unsafe SQL rejection, authorization, rejected application, failed read-only verification, a new proposal and successful closure; no SQL execution or development branch |
 | Unattended cycle | A configured agent takes and completes development, receives `human_present: false`, releases the lock, and the remaining workflow closes normally |

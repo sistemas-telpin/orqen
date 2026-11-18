@@ -4,7 +4,7 @@ argument-hint: <KEY>
 allowed-tools: Bash(orqen:*), Read, Grep, Glob, Write, Skill, AskUserQuestion
 ---
 
-Handle the customer request in `$ARGUMENTS` with the support person who invoked this command. The argument is the issue key. Do not ask for the person's name: orqen takes it from this machine (`git config user.name`). Only if the person asks to sign with another name, add `--person "<name>"` to `orqen support`. Work from the repository root and follow the customer request workflow in `AGENTS.md`.
+Handle the customer request in `$ARGUMENTS` with the support person who invoked this command. The argument is the request key. Do not ask for the person's name: orqen takes it from this machine (`git config user.name`). Only if the person asks to sign with another name, add `--person "<name>"` to `orqen support`. Work from the repository root and follow the customer request workflow in `AGENTS.md`.
 
 ## Rules
 
@@ -16,13 +16,13 @@ Handle the customer request in `$ARGUMENTS` with the support person who invoked 
 
 ## Steps
 
-1. Check that the argument is the key of the external ticket (the client's request). If it is missing, ask for it and stop.
+1. Check that the argument is the request key (the client's ticket). If it is missing, ask for it and stop.
 2. Claim the request and load the stage instructions, context, and output schema:
    ```sh
    orqen support <KEY> --agent support
    ```
    If this fails, explain the reason to the person and stop.
-3. Read the issue and comments, then look for the answer: similar requests, the documented behavior in `openspec/specs/`, and the code when needed. Report what you found.
+3. Read the request and comments, then look for the answer: similar requests, the documented behavior in `openspec/specs/`, and the code when needed. Report what you found.
 4. Agree the outcome with the person: `resolved` (the customer can be answered without changes) or `escalate` (the analyst must take it). When unsure, recommend `escalate`.
 5. Draft the reply to the customer (or the escalation summary for the analyst), show it, and adjust it until the person approves it.
 6. Write the JSON output with `support_ok: true` and submit it:

@@ -1,6 +1,6 @@
 /**
- * Compatibility with the orqen/.env of earlier versions, where the external ticket was always read from Jira
- * with REC_JQL and the internal one was always created in SIS_PROJECT. Used only when config.yaml has no
+ * Compatibility with the orqen/.env of earlier versions, where the requests were always read from Jira
+ * with REC_JQL and the issue was always created in SIS_PROJECT. Used only when config.yaml has no
  * `conectores`. `orqen update` offers to move these values to config.yaml.
  */
 import { type ConnectorsSettings, type JiraSettings, DEFAULT_LABEL } from "./config.ts";
@@ -9,13 +9,13 @@ type Env = Record<string, string | undefined>;
 
 /** Variables from earlier versions and what replaces them. */
 export const LEGACY_VARS: Record<string, string> = {
-  REC_JQL: "conectores.externo.filtro",
-  JIRA_TRANSITIONS: "conectores.externo.transiciones",
-  SIS_PROJECT: "conectores.interno.proyecto",
-  SIS_TYPE: "conectores.interno.tipo_ticket",
-  SIS_TYPE_OPERATIONAL: "conectores.interno.tipo_operativo",
-  SIS_LINK: "conectores.interno.vinculo",
-  SIS_TRANSITIONS: "conectores.interno.transiciones",
+  REC_JQL: "conectores.requests.filtro",
+  JIRA_TRANSITIONS: "conectores.requests.transiciones",
+  SIS_PROJECT: "conectores.issues.proyecto",
+  SIS_TYPE: "conectores.issues.tipo_ticket",
+  SIS_TYPE_OPERATIONAL: "conectores.issues.tipo_operativo",
+  SIS_LINK: "conectores.issues.vinculo",
+  SIS_TRANSITIONS: "conectores.issues.transiciones",
   REC_AGENT: "ORQEN_AGENT", REC_ANALYST: "ORQEN_ANALYST", REC_SUPPORT: "ORQEN_SUPPORT",
   REC_LOCK_MIN: "ORQEN_LOCK_MIN", REC_STATE_DIR: "ORQEN_STATE_DIR", REC_INTERVAL_SEC: "ORQEN_INTERVAL_SEC",
 };
@@ -37,30 +37,30 @@ export function legacyConnectors(env: Env): ConnectorsSettings {
     url: env.JIRA_URL ?? "", user: env.JIRA_USER ?? "", token: env.JIRA_TOKEN ?? "",
     deployment: (env.JIRA_DEPLOYMENT ?? "cloud") === "server" ? "server" as const : "cloud" as const,
   };
-  const external: JiraSettings = {
+  const requests: JiraSettings = {
     kind: "jira", ...base,
     query: env.REC_JQL || `labels = ${DEFAULT_LABEL} AND statusCategory != Done`,
     project: "", issueType: "Task", operationalType: "Task", linkType: "Relates",
     transitions: kv(env.JIRA_TRANSITIONS),
   };
-  // Before, the internal ticket always existed: keep it when the .env comes from that version.
-  const hadInternal = used.some((k) => k.startsWith("SIS_") || k === "REC_JQL");
-  const internal: JiraSettings | undefined = hadInternal ? {
+  // Before, the issue always existed: keep it when the .env comes from that version.
+  const hadIssues = used.some((k) => k.startsWith("SIS_") || k === "REC_JQL");
+  const issues: JiraSettings | undefined = hadIssues ? {
     kind: "jira", ...base, query: "",
     project: env.SIS_PROJECT || "SIS", issueType: env.SIS_TYPE || "Task",
     operationalType: env.SIS_TYPE_OPERATIONAL || env.SIS_TYPE || "Task", linkType: env.SIS_LINK || "Relates",
     transitions: kv(env.SIS_TRANSITIONS),
   } : undefined;
-  return { external, internal, legacy: used };
+  return { requests, issues, legacy: used };
 }
 
 /** The `conectores` block equivalent to the old variables (for `orqen update`). */
 export function legacyToYaml(env: Env) {
   const s = legacyConnectors(env);
-  const ext = s.external as JiraSettings, int = s.internal as JiraSettings | undefined;
+  const ext = s.requests as JiraSettings, int = s.issues as JiraSettings | undefined;
   return {
-    externo: { tipo: "jira", filtro: ext.query, ...(Object.keys(ext.transitions).length ? { transiciones: ext.transitions } : {}) },
-    ...(int ? { interno: {
+    requests: { tipo: "jira", filtro: ext.query, ...(Object.keys(ext.transitions).length ? { transiciones: ext.transitions } : {}) },
+    ...(int ? { issues: {
       tipo: "jira", proyecto: int.project, tipo_ticket: int.issueType, tipo_operativo: int.operationalType, vinculo: int.linkType,
       ...(Object.keys(int.transitions).length ? { transiciones: int.transitions } : {}),
     } } : {}),

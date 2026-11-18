@@ -30,7 +30,7 @@ export const WORKFLOW_HELP = `Customer request workflow:
   schema <STAGE> · block <KEY> <reason> · release <KEY> · search <query>
   status [KEY] [--json] · cycle [--loop]
   connectors [setup|get|check <json>|set <json>] [--json] Show/check the connectors, or set them up (get/check/set: used by the app)
-  connectors github-choices <json|-> <external|internal> <repositories|projects> List GitHub choices for a draft`;
+  connectors github-choices <json|-> <requests|issues> <repositories|projects> List GitHub choices for a draft`;
 
 /** The person at this machine: Git's user.name for this repository, otherwise the system user. */
 export function quienSoy(repo: string): string | undefined {
@@ -56,11 +56,11 @@ export async function runWorkflow(cmd: string, rest: string[]) {
   const analyst = flag("analyst") || envWithLegacy(process.env, "ORQEN_ANALYST", "REC_ANALYST") || quienSoy(cfg.repoPath);
   const person = flag("person") || envWithLegacy(process.env, "ORQEN_SUPPORT", "REC_SUPPORT") || quienSoy(cfg.repoPath);
 
-  /** Accepts the external key or the current internal key of a known request, and always returns the external key. */
+  /** Accepts the request key or the current issue key of a known request, and always returns the request key. */
   function toKey(key?: string): string {
     if (!key || store.get(key)) return key as string;
-    const item = store.all().find((r) => r.key.toUpperCase() === key.toUpperCase() || r.internal?.toUpperCase() === key.toUpperCase());
-    // unknown key: it is taken as a new external ticket (the connector says whether it exists)
+    const item = store.all().find((r) => r.key.toUpperCase() === key.toUpperCase() || r.issue?.toUpperCase() === key.toUpperCase());
+    // unknown key: it is taken as a new request (the connector says whether it exists)
     return item?.key ?? key;
   }
 
@@ -266,9 +266,9 @@ export async function runWorkflow(cmd: string, rest: string[]) {
       case "block": await flow.block(toKey(rest[0]), rest.slice(1).join(" "), agent); return console.log("✔ blocked");
       case "release": flow.release(toKey(rest[0])); return console.log("✔ released");
       case "search": {
-        const keys = (await connectors.external.search(rest.join(" "))).slice(0, 20);
+        const keys = (await connectors.requests.search(rest.join(" "))).slice(0, 20);
         const out = await Promise.all(keys.map(async (k: string) => {
-          const i = await connectors.external.ticket(k);
+          const i = await connectors.requests.ticket(k);
           return { key: k, title: i.title, status: i.status, url: i.url, description: i.description.slice(0, 500) };
         }));
         return console.log(JSON.stringify(out, null, 2));
@@ -280,7 +280,7 @@ export async function runWorkflow(cmd: string, rest: string[]) {
             return console.log(JSON.stringify(item ? { ...item, events: store.events(item.key) } : null, null, 2));
           }
           return console.log(JSON.stringify(store.all().map((r) => ({
-            key: r.key, state: r.state, internal: r.internal, lane: r.lane, route: r.route, round: r.round, branch: r.branch || undefined,
+            key: r.key, state: r.state, issue: r.issue, lane: r.lane, route: r.route, round: r.round, branch: r.branch || undefined,
             change: r.change || undefined, analyst: r.analyst, supporter: r.supporter, lock: r.lock, devel_pr: r.artifacts.devel_pr,
             updated: store.events(r.key).at(-1)?.ts,
           })), null, 2));
@@ -290,7 +290,7 @@ export async function runWorkflow(cmd: string, rest: string[]) {
           const item = store.get(key);
           console.log(item ? JSON.stringify({ ...item, artifacts: Object.keys(item.artifacts) }, null, 2) : "unknown");
           for (const ev of store.events(key)) console.log(`  ${ev.ts}  ${ev.from} → ${ev.to}  ${ev.detail}`);
-        } else for (const r of store.all()) console.log(`${r.key.padEnd(12)} ${r.state.padEnd(15)} ${(r.internal ?? "").padEnd(12)} ${r.change ?? ""}`);
+        } else for (const r of store.all()) console.log(`${r.key.padEnd(12)} ${r.state.padEnd(15)} ${(r.issue ?? "").padEnd(12)} ${r.change ?? ""}`);
         return;
       }
       case "connectors": {
@@ -360,17 +360,17 @@ export async function runWorkflow(cmd: string, rest: string[]) {
           console.log(`✔ Saved in orqen/config.yaml (conectores) and ${RUTA_ENV}. Check them with: orqen connectors`);
           return;
         }
-        const show = async (role: "external" | "internal") => {
+        const show = async (role: "requests" | "issues") => {
           const t = connectors[role];
           if (!t) return { role, configured: false };
           const s = cfg.connectors[role]!;
           return { role, configured: true, kind: t.kind, label: t.label, transitions: s.transitions, ...(await t.check()) };
         };
-        const out = [await show("external"), await show("internal")];
+        const out = [await show("requests"), await show("issues")];
         if (has("json")) return console.log(JSON.stringify({ connectors: out, legacy: cfg.connectors.legacy ?? [] }, null, 2));
         for (const c of out) {
-          const name = c.role === "external" ? "Requirements (what the client sees)" : "Tickets (development work)";
-          if (!c.configured) { console.log(`${name}: not configured — the team works only on the external ticket.`); continue; }
+          const name = c.role === "requests" ? "Requests (what the client sees)" : "Issues (development work)";
+          if (!c.configured) { console.log(`${name}: not configured — the team works only on the requests.`); continue; }
           console.log(`${name}: ${"label" in c ? c.label : ""}\n  ${"ok" in c && c.ok ? "✔" : "✘"} ${"detail" in c ? c.detail : ""}`);
         }
         if (out.some((c) => "ok" in c && !c.ok)) process.exitCode = 1;

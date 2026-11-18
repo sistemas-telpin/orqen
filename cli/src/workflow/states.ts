@@ -1,14 +1,14 @@
 /**
- * State machine of a request (the external ticket). This code decides the FLOW; the agent (any one:
+ * State machine of a request (the client's ticket in the requests system). This code decides the FLOW; the agent (any one:
  * Claude Code, Codex, Cursor, Copilot...) only produces content at each stage.
  *
  * SUPPORT (optional: `SUPPORT_STAGE=on` routes new requests to it, `orqen support` always works) and ANALYSIS are the stretches driven by a person (support via `/orqen:support`,
- * the analyst via `/orqen:analyze`). Once ANALYSIS closes with the analyst's OK, the lane, the spec (if any) and the internal ticket are decided.
+ * the analyst via `/orqen:analyze`). Once ANALYSIS closes with the analyst's OK, the lane, the spec (if any) and the issue are decided.
  */
 export const State = {
   NEW: "NEW",
   SUPPORT: "SUPPORT",                 // support person + agent: tries to answer the client; resolves (→ ACCEPTANCE) or escalates (→ ANALYSIS)
-  ANALYSIS: "ANALYSIS",               // analyst + agent (grilling): understand, pick lane, spec if needed, create the internal ticket
+  ANALYSIS: "ANALYSIS",               // analyst + agent (grilling): understand, pick lane, spec if needed, create the issue
   WAITING_CLIENT: "WAITING_CLIENT",   // gate: the client answers questions
   DEVELOPMENT: "DEVELOPMENT",         // agent: implements (openspec apply, or the plan of the direct lane)
   TESTING: "TESTING",                 // script runs tests; agent verifies scenarios/criteria
@@ -34,7 +34,7 @@ export type Route = "development" | "operational";
 
 /**
  * How much specification a development request carries (proposed by the agent, confirmed by the analyst):
- *  - direct: no OpenSpec. The plan and acceptance criteria live in the analysis and in the internal ticket.
+ *  - direct: no OpenSpec. The plan and acceptance criteria live in the analysis and in the issue.
  *  - light:  compact OpenSpec change (proposal + deltas + tasks; minimal design).
  *  - full:   full OpenSpec change (proposal + specs + design + tasks).
  */
@@ -65,7 +65,7 @@ export function nextStateAfterStage(
 ): State {
   switch (state) {
     case "SUPPORT":
-      // resolved: the client confirms in ACCEPTANCE (no internal ticket is created); escalated: the analyst continues with what support found
+      // resolved: the client confirms in ACCEPTANCE (no issue is created); escalated: the analyst continues with what support found
       return output.outcome === "resolved" ? "ACCEPTANCE" : "ANALYSIS";
     case "ANALYSIS":
       if (output.open_questions?.length && !output.ready)

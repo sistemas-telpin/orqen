@@ -35,7 +35,7 @@ export interface ConnectorsView {
 /** What the app needs to fill the editor. Never returns a secret in clear. */
 export function connectorsView(conectores: ConectoresYaml | null | undefined, env: Env): ConnectorsView {
   const prefixes = new Set(["JIRA", "JIRA_INTERNAL", "GITHUB", "ASANA"]);
-  for (const c of [conectores?.externo, conectores?.interno]) if (c) prefixes.add(credentialsPrefix(c));
+  for (const c of [conectores?.requests, conectores?.issues]) if (c) prefixes.add(credentialsPrefix(c));
   const out: ConnectorsView = { conectores: conectores ?? null, env: {}, secrets: {} };
   for (const [k, v] of Object.entries(env)) {
     if (!v || PLACEHOLDER.test(v)) continue;
@@ -57,13 +57,14 @@ export function parseDraft(input: unknown): Draft {
   return { conectores: parsed.data, env };
 }
 
-export interface CheckResult { role: "external" | "internal"; configured: boolean; kind?: string; label?: string; ok?: boolean; detail?: string }
+export interface CheckResult { role: "requests" | "issues"; configured: boolean; kind?: string; label?: string; ok?: boolean; detail?: string }
 
 /** Lists choices using draft credentials, without requiring a repository or saving the draft. */
 export async function githubChoices(draft: Draft, current: Env, role: string, resource: string) {
-  if (role !== "external" && role !== "internal") throw new Error("Expected external or internal connector role");
+  role = role === "external" ? "requests" : role === "internal" ? "issues" : role;   // names used by earlier versions of the app
+  if (role !== "requests" && role !== "issues") throw new Error("Expected requests or issues connector role");
   if (resource !== "repositories" && resource !== "projects") throw new Error("Expected repositories or projects");
-  const c = role === "external" ? draft.conectores.externo : draft.conectores.interno;
+  const c = role === "requests" ? draft.conectores.requests : draft.conectores.issues;
   if (c?.tipo !== "github") throw new Error("Select a GitHub connector first");
   const settings = connectorSettings(c, { ...current, ...draft.env });
   if (settings.kind !== "github") throw new Error("Expected GitHub settings");
@@ -77,10 +78,10 @@ export async function githubChoices(draft: Draft, current: Env, role: string, re
 /** Checks each connector of the draft against the tool, with the draft secrets over the current ones. Saves nothing. */
 export async function checkDraft(draft: Draft, current: Env): Promise<CheckResult[]> {
   const env = { ...current, ...draft.env };
-  const one = async (role: "external" | "internal", c: ConectorYaml | null | undefined): Promise<CheckResult> => {
+  const one = async (role: "requests" | "issues", c: ConectorYaml | null | undefined): Promise<CheckResult> => {
     if (!c) return { role, configured: false };
     const t = trackerFor(connectorSettings(c, env));
     return { role, configured: true, kind: t.kind, label: t.label, ...(await t.check()) };
   };
-  return [await one("external", draft.conectores.externo), await one("internal", draft.conectores.interno)];
+  return [await one("requests", draft.conectores.requests), await one("issues", draft.conectores.issues)];
 }

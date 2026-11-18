@@ -251,7 +251,7 @@ impl ProjectView {
         cx.notify();
     }
 
-    /// Opens the connectors editor (Configure, Edit, Add internal ticket).
+    /// Opens the connectors editor (Configure, Edit, Add issues system).
     fn open_conn_editor(&mut self, focus_internal: bool, cx: &mut Context<Self>) {
         let editor = cx.new(|cx| crate::connectors::ConnectorsEditor::new(self.cli.clone(), self.es, focus_internal, cx));
         cx.subscribe(&editor, |this, _, _: &crate::connectors::Saved, cx| {
@@ -369,7 +369,7 @@ impl ProjectView {
                     .when(!on, |d| d.border_color(gpui::transparent_black()).hover(|h| h.bg(c(HOVER))))
                     .child(div().flex().items_center().gap(px(8.))
                         .child(mono(key.clone()).text_size(px(11.5)).text_color(c(BLUE_TEXT)))
-                        .children(it["internal"].as_str().map(|k| chip(k.to_string(), 0x4A1E3D, 0xFFB3D9)))
+                        .children(it["issue"].as_str().map(|k| chip(k.to_string(), 0x4A1E3D, 0xFFB3D9)))
                         .children(it["lane"].as_str().map(|l| chip(l.to_string(), BORDER_2, MUTED)))
                         .child(div().flex_1())
                         .children(lock.as_ref().map(|_| live_dot(SharedString::from(format!("rs-{key}")), BLUE_TEXT))))
@@ -383,9 +383,9 @@ impl ProjectView {
         let list = div().w(px(360.)).flex_none().h_full().flex().flex_col().border_r_1().border_color(c(BORDER))
             .child(div().p(px(16.)).pb(px(8.)).flex().items_baseline().gap(px(8.)).child(ui::h1(t(es, "Pendientes", "Pending"))).child(mono("orqen pending").text_size(px(11.)).text_color(c(DIM)))
                 .child(div().flex_1()).children(self.pending.loading().then(|| progress_slice("pend-load", 48.))))
-            .children(match &self.pending { Load::Failed(e) => Some(div().mx(px(16.)).mb(px(6.)).p(px(8.)).rounded(px(8.)).bg(c(0x1D1810)).text_size(px(11.5)).text_color(c(AMBER)).child(format!("{} {}", t(es, "No se pudieron consultar los requerimientos:", "Could not query requirements:"), e))), _ => None })
+            .children(match &self.pending { Load::Failed(e) => Some(div().mx(px(16.)).mb(px(6.)).p(px(8.)).rounded(px(8.)).bg(c(0x1D1810)).text_size(px(11.5)).text_color(c(AMBER)).child(format!("{} {}", t(es, "No se pudieron consultar los requests:", "Could not query the requests:"), e))), _ => None })
             .child(div().id("list").flex_1().overflow_y_scroll().px(px(8.)).pb(px(14.)).children(groups)
-                .when(all.iter().all(|i| s(i, "state") == "CLOSED"), |d| d.child(div().p(px(16.)).text_size(px(12.5)).text_color(c(MUTED)).child(t(es, "No hay requerimientos abiertos. Los nuevos aparecen acá.", "No open requirements. New ones show up here."))))
+                .when(all.iter().all(|i| s(i, "state") == "CLOSED"), |d| d.child(div().p(px(16.)).text_size(px(12.5)).text_color(c(MUTED)).child(t(es, "No hay requests abiertos. Los nuevos aparecen acá.", "No open requests. New ones show up here."))))
                 .when(closed > 0, |d| d.child(div().px(px(8.)).pt(px(12.)).text_size(px(11.)).text_color(c(DIM)).child(format!("{closed} {}", t(es, "cerrados", "closed"))))));
         div().size_full().flex().child(list).child(self.detail_pane(cx)).into_any_element()
     }
@@ -401,7 +401,7 @@ impl ProjectView {
             _ => return detail_skeleton(),
         };
         let state = s(&d, "state");
-        let internal = d["internal"].as_str().map(str::to_string);
+        let internal = d["issue"].as_str().map(str::to_string);
         let ik = internal.clone().unwrap_or_else(|| key.clone());
         let flow = ["ANALYSIS", "DEVELOPMENT", "TESTING", "CODE_REVIEW", "DELIVERY", "ACCEPTANCE", "CLOSED"];
         let idx = flow.iter().position(|x| *x == state);
@@ -425,7 +425,7 @@ impl ProjectView {
             "QA_REVIEW" => vec![(t(es, "Revisión de QA (solo carril completo)", "QA review (full lane only)"), format!("/orqen:review {ik}"))],
             "CODE_REVIEW" => vec![(t(es, "Abrir el PR", "Open the PR"), format!("/orqen:pr {ik}")), (t(es, "Code review (senior)", "Code review (senior)"), format!("/orqen:code-review {ik}"))],
             "BLOCKED" => vec![(t(es, "Destrabar: comentar en el ticket", "Unblock: comment on the ticket"), "/approve <qué hacer>".into())],
-            "WAITING_CLIENT" | "ACCEPTANCE" => vec![(t(es, "Espera al cliente en el requerimiento", "Waiting for the client on the requirement"), format!("orqen status {key}"))],
+            "WAITING_CLIENT" | "ACCEPTANCE" => vec![(t(es, "Espera al cliente en el request", "Waiting for the client on the request"), format!("orqen status {key}"))],
             _ => vec![(t(es, "Ver el detalle", "See the detail"), format!("orqen status {key}"))],
         };
         let actions = next.into_iter().enumerate().map(|(i, (what, cmd))| {
@@ -456,7 +456,7 @@ impl ProjectView {
             .child(div().p(px(18.)).pb(px(14.)).border_b_1().border_color(c(BORDER)).flex().flex_col().gap(px(12.))
                 .child(div().flex().items_center().gap(px(10.))
                     .child(mono(key.clone()).text_size(px(15.)).font_weight(FontWeight::SEMIBOLD).text_color(c(BLUE_TEXT)))
-                    .children(internal.map(|k| chip(format!("{} {k}", t(es, "interno", "internal")), 0x4A1E3D, 0xFFB3D9)))
+                    .children(internal.map(|k| chip(format!("{} {k}", t(es, "issue", "issue")), 0x4A1E3D, 0xFFB3D9)))
                     .children(d["lane"].as_str().map(|l| chip(format!("{} {l}", t(es, "carril", "lane")), BORDER_2, TEXT_2)))
                     .children(d["branch"].as_str().filter(|b| !b.is_empty()).map(|b| div().flex().items_center().gap(px(5.)).child(icon("branch", 12., DIM)).child(mono(b.to_string()).text_size(px(11.)).text_color(c(MUTED)))))
                     .child(div().flex_1())
@@ -464,7 +464,7 @@ impl ProjectView {
                 .child(div().flex().flex_wrap().gap(px(4.)).children(pipeline)))
             .child(div().id("detail-scroll").flex_1().overflow_y_scroll().p(px(18.)).flex().flex_col().gap(px(18.))
                 .child(div().flex().flex_col().gap(px(8.)).child(ui::label(t(es, "QUÉ SIGUE", "WHAT'S NEXT"))).children(actions))
-                .children(self.implementation(&key, d["internal"].as_str()))
+                .children(self.implementation(&key, d["issue"].as_str()))
                 .child(div().flex().flex_col().child(ui::label(t(es, "RECORRIDO", "HISTORY"))).child(div().mt(px(6.)).children(feed))
                     .when(events.is_empty(), |d| d.child(div().mt(px(6.)).text_size(px(12.)).text_color(c(MUTED)).child(t(es, "Todavía nadie lo tomó.", "Nobody has taken it yet."))))))
             .into_any_element()
@@ -540,7 +540,7 @@ impl ProjectView {
                 let list = v["connectors"].as_array().cloned().unwrap_or_default();
                 let legacy = v["legacy"].as_array().map(|a| a.iter().filter_map(|x| x.as_str()).collect::<Vec<_>>().join(", ")).unwrap_or_default();
                 let cards = list.iter().enumerate().map(|(i, cn)| {
-                    let ext = s(cn, "role") == "external";
+                    let ext = s(cn, "role") == "requests";
                     let configured = cn["configured"].as_bool() == Some(true);
                     let ok = cn["ok"].as_bool() == Some(true);
                     let trans = cn["transitions"].as_object().cloned().unwrap_or_default();
@@ -549,7 +549,7 @@ impl ProjectView {
                     appear(("conn", i), i as u64 * 80, card().w(px(470.)).flex().flex_col().overflow_hidden()
                         .child(div().p(px(16.)).flex().flex_col().gap(px(4.)).border_b_1().border_color(c(0x161D2D))
                             .child(div().flex().items_center().gap(px(8.)).child(dot(if ext { BLUE } else { MAGENTA }))
-                                .child(div().text_size(px(14.)).font_weight(FontWeight::SEMIBOLD).text_color(c(TEXT)).child(if ext { t(es, "Requerimientos", "Requirements") } else { t(es, "Tickets", "Tickets") }))
+                                .child(div().text_size(px(14.)).font_weight(FontWeight::SEMIBOLD).text_color(c(TEXT)).child(if ext { t(es, "Requests", "Requests") } else { t(es, "Issues", "Issues") }))
                                 .child(div().flex_1())
                                 .children(configured.then(|| if ok { chip(t(es, "conectado", "connected"), 0x1F4D3A, GREEN) } else { chip(t(es, "con error", "failing"), 0x5A1E2A, RED) }))
                                 .when(configured, |d| d.child(div().id(("conn-edit", i)).px(px(8.)).h(px(22.)).flex().items_center().rounded(px(6.)).cursor_pointer().text_size(px(11.5)).text_color(c(BLUE_TEXT))
@@ -558,7 +558,7 @@ impl ProjectView {
                             .child(div().text_size(px(12.)).text_color(c(MUTED)).child(if ext { t(es, "Lo que ve el cliente: ahí entra el pedido, se le responde y aprueba.", "What the client sees: the request arrives there, gets answered and approved.") } else { t(es, "Opcional. Trabajo de desarrollo: se crea al cerrar el análisis.", "Optional. Development work: created when analysis closes.") })))
                         .child(div().p(px(16.)).flex().flex_col().gap(px(12.))
                             .when(!configured, |d| d.child(div().flex().items_center().gap(px(12.)).p(px(12.)).rounded(px(10.)).border_1().border_dashed().border_color(c(BORDER_2))
-                                .child(div().flex_1().min_w(px(0.)).text_size(px(12.5)).text_color(c(MUTED)).child(t(es, "Sin tickets separados: el desarrollo se sigue en el requerimiento.", "Without separate tickets, development is tracked in the requirement.")))
+                                .child(div().flex_1().min_w(px(0.)).text_size(px(12.5)).text_color(c(MUTED)).child(t(es, "Sin sistema de issues: el desarrollo se sigue en el request.", "Without an issues system, development is tracked in the requirement.")))
                                 .child(button(("conn-add", i), t(es, "Agregar", "Add"), Kind::Accent, cx.listener(|this, _, _, cx| this.open_conn_editor(true, cx))))))
                             .when(configured, |d| d
                                 .child(div().flex().items_center().gap(px(10.))
@@ -576,8 +576,8 @@ impl ProjectView {
                 }).collect::<Vec<_>>();
                 div().id("conn-scroll").size_full().overflow_y_scroll().p(px(22.)).flex().flex_col().gap(px(16.))
                     .child(div().max_w(px(760.)).text_size(px(13.)).text_color(c(TEXT_2)).child(t(es,
-                        "Los requerimientos son lo que ve el cliente. Los tickets son el trabajo de desarrollo. Cada uno puede estar en Jira, GitHub o Asana.",
-                        "Requirements are what the customer sees. Tickets track development work. Each can live in Jira, GitHub or Asana.")))
+                        "Los requests son lo que ve el cliente. Los issues son el trabajo de desarrollo. Cada sistema puede estar en Jira, GitHub o Asana.",
+                        "Requests are what the customer sees. Issues track development work. Each system can live in Jira, GitHub or Asana.")))
                     .when(!legacy.is_empty(), |d| d.child(div().p(px(12.)).rounded(px(10.)).bg(c(0x1D1810)).border_1().border_color(c(0x4A3A1C)).text_size(px(12.)).text_color(c(0xF5C77A))
                         .child(format!("{} {legacy}. {}", t(es, "orqen/.env usa variables de una versión anterior:", "orqen/.env uses variables from an earlier version:"), t(es, "Corré `orqen update` para pasarlas a conectores.", "Run `orqen update` to move them to connectors.")))))
                     .child(div().flex().flex_wrap().gap(px(16.)).children(cards))
@@ -623,8 +623,8 @@ impl ProjectView {
                 let fig = show_app.then(|| {
                     let sm = &v["sample"];
                     let sample = crate::figures::Sample {
-                        ext: sm["external"].as_str().unwrap_or("SOP-123").to_string(),
-                        int: sm["internal"].as_str().map(str::to_string),
+                        ext: sm["requests"].as_str().unwrap_or("SOP-123").to_string(),
+                        int: sm["issues"].as_str().map(str::to_string),
                         tool: sm["tool"].as_str().unwrap_or("Jira").to_string(),
                         procs: sm["processes"].as_array().map(|a| a.iter().filter_map(|x| x.as_str().map(str::to_string)).collect()).unwrap_or_default(),
                     };

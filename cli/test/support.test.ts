@@ -65,7 +65,7 @@ test("support on: NEW is for support, the person leads, an agent cannot take it"
   assert.deepEqual((await p.review()).map((x) => [x.state, x.for, x.takenBy]), [["SUPPORT", "support", "codex"]]);
 });
 
-test("support resolves: needs the person's OK and the reply; goes to ACCEPTANCE with no internal ticket; the client confirms", async () => {
+test("support resolves: needs the person's OK and the reply; goes to ACCEPTANCE with no issue; the client confirms", async () => {
   const { p, jira, est, dir, cfg } = setup();
   await p.support("REQ-1", "codex", "Sofi");
 
@@ -82,7 +82,7 @@ test("support resolves: needs the person's OK and the reply; goes to ACCEPTANCE 
 
   const r = await p.complete("REQ-1", RESOLVED(), "codex");
   assert.deepEqual(r, { ok: true, next: "ACCEPTANCE" });
-  assert.equal(est().internal, undefined);
+  assert.equal(est().issue, undefined);
   assert.equal(jira.created.length, 0);
   assert.match(jira.last("REQ-1"), /Reportes > Exportar/);
   assert.match(jira.last("REQ-1"), /Answered by support \(Sofi\)/);

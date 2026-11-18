@@ -14,12 +14,12 @@ Opcionalmente, una persona de **soporte** atiende primero el reclamo con el agen
 | ------------------ | ---------------------------------------------------------------------------------------------------------------- |
 | Persona nueva      | `/orqen:tutorial` (o `orqen tutorial` en la terminal): 12 pasos cortos, en el idioma del sistema, con qué correr en cada etapa, cómo avanza un pedido y cómo mirar al agente y los entornos |
 | Soporte (opcional) | `/orqen:support SOP-1234`: busca la respuesta, la redacta para el cliente y, si no se puede resolver, escala al analista con un resumen |
-| Analista           | `/orqen:analyze SOP-1234`: analiza el pedido, elige el carril, escribe la spec si hace falta y crea el ticket interno (si hay)|
+| Analista           | `/orqen:analyze SOP-1234`: analiza el pedido, elige el carril, escribe la spec si hace falta y crea el issue (si hay)|
 | Agente             | `/orqen:implement DEV-442`: implementa la spec o el plan aprobado · `/orqen:pr DEV-442`: abre el PR a desarrollo |
 | QA                 | `/orqen:review DEV-442`: solo carril completo; revisa en pantalla los e2e del cambio y aprueba o pide cambios     |
 | Senior             | `/orqen:code-review DEV-442`: revisa el PR con el agente y después aprueba o pide cambios en GitHub               |
 | Modo desatendido   | `orqen cycle --loop`: avanza los gates y lanza las etapas de agente pendientes                                   |
-| Aprobadores        | `/approve` o `/reject <motivo>` en el issue (conformidad del cliente, carril operativo, destrabar un BLOCKED)    |
+| Aprobadores        | `/approve` o `/reject <motivo>` en el request (conformidad del cliente, carril operativo, destrabar un BLOCKED)    |
 
 ## Componentes
 
@@ -83,7 +83,7 @@ el texto exacto que le llegará al cliente. No hay una lista de personas de sopo
 
 | Resultado  | Cuándo                                                                                                                       | Qué pasa                                                                                                                                                       |
 | ---------- | ---------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `resolved` | Se responde sin tocar código, datos ni configuración: una consulta de uso, una causa y solución conocidas, algo ya documentado | `orqen` publica la respuesta y el pedido pasa a **ACCEPTANCE**. **No se crea ticket interno.** Si el cliente hace `/reject <motivo>`, abre la ronda 2 y lo toma el analista |
+| `resolved` | Se responde sin tocar código, datos ni configuración: una consulta de uso, una causa y solución conocidas, algo ya documentado | `orqen` publica la respuesta y el pedido pasa a **ACCEPTANCE**. **No se crea issue.** Si el cliente hace `/reject <motivo>`, abre la ronda 2 y lo toma el analista |
 | `escalate` | Pide algo nuevo, es un defecto que requiere código, una corrección de datos o de configuración, o no hay certeza de la respuesta | El pedido pasa a **ANALYSIS** con el `escalation_summary` (qué se sabe, qué se probó, qué falta). Se puede mandar además un acuse breve al cliente (opcional)    |
 
 Ante la duda, **escalar**: una respuesta equivocada le cuesta una ronda al cliente; una escalación de más le cuesta unos minutos al
@@ -114,17 +114,17 @@ flowchart TD
     D -->|"directo<br/>sin spec"| G
     D -->|"liviano / completo"| E["orqen lane: rama + change de OpenSpec<br/>→ el agente escribe la spec con el analista"] --> G
     D -->|"operativa<br/>(sin código)"| G
-    G["orqen complete: valida · crea el ticket interno · lo vincula al pedido<br/>· registra en orqen/work/ · commit de la spec"] --> H(["DEVELOPMENT · o EXECUTION si es operativa"])
+    G["orqen complete: valida · crea el issue · lo vincula al pedido<br/>· registra en orqen/work/ · commit de la spec"] --> H(["DEVELOPMENT · o EXECUTION si es operativa"])
 ```
 
-El agente **no escribe en el ticket** (el MCP es solo lectura): la creación del ticket interno, el vínculo entre el interno y el externo, los comentarios y los
+El agente **no escribe en el ticket** (el MCP es solo lectura): la creación del issue, el vínculo entre el issue y el request, los comentarios y los
 labels los hace `orqen` en `complete`, solo si el análisis tiene el OK del analista y la spec (si hay) valida.
 
 ### Carriles
 
 | Carril                           | Cuándo (guía; ajustable en `orqen/stages/analysis.md`)                                 | Qué se genera                                                                                            |
 | -------------------------------- | -------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| `direct`                         | Un componente, ≲ 4 h, sin cambio de contrato, bajo riesgo                              | **Sin OpenSpec.** `plan` + criterios de aceptación en el análisis y el ticket interno. Testing contra los criterios |
+| `direct`                         | Un componente, ≲ 4 h, sin cambio de contrato, bajo riesgo                              | **Sin OpenSpec.** `plan` + criterios de aceptación en el análisis y el issue. Testing contra los criterios |
 | `light`                          | Comportamiento observable acotado, 1–2 capacidades, ≲ 2 días                           | Change de OpenSpec compacto: proposal + deltas + tasks (design mínimo)                                   |
 | `full`                           | Varias capacidades, datos/integraciones, seguridad/facturación, > 2 días, arquitectura | Change completo: proposal + specs + design + tasks                                                       |
 | operativa (`route: operational`) | Se resuelve sin cambiar código (SQL, datos, reinicio, config)                          | Sin spec ni rama; flujo EXECUTION → aprobación → aplicación → verificación                               |
@@ -133,12 +133,12 @@ labels los hace `orqen` en `complete`, solo si el análisis tiene el OK del anal
 
 ```
 orqen/work/SOP-1234/
-├── state.json             proyección del estado (state, lane, sis, branch, change, analyst)
+├── state.json             proyección del estado (state, lane, issue, branch, change, analyst)
 ├── log.md                 una línea por transición
 └── round-1/
     ├── support.md         (solo con soporte) resultado, qué se revisó, respuesta al cliente y escalación
     ├── support.json       la salida validada de soporte
-    ├── analysis.md        resumen, criterios, decisiones del grilling, carril y justificación, ticket interno, estimación
+    ├── analysis.md        resumen, criterios, decisiones del grilling, carril y justificación, issue, estimación
     ├── analysis.json      la salida validada de la etapa
     ├── devel-pr.md        explicación del PR a desarrollo (orqen pr)
     ├── qa-review-1.md     decisiones de QA con su informe (orqen review; solo carril completo)
@@ -152,13 +152,13 @@ trazabilidad viaja con el código y la spec. La **fuente de verdad operativa** e
 
 ## Implementación: `/orqen:implement DEV-442`
 
-Toma el ticket interno que creó el análisis y ejecuta la etapa **DEVELOPMENT**: aplica la spec de OpenSpec si el carril la tiene
-(`light` / `full`) o sigue el `plan` del análisis (`direct`). Acepta la clave del ticket interno o la del externo; `orqen` resuelve a qué pedido
-pertenece (el ticket interno vigente de la ronda actual).
+Toma el issue que creó el análisis y ejecuta la etapa **DEVELOPMENT**: aplica la spec de OpenSpec si el carril la tiene
+(`light` / `full`) o sigue el `plan` del análisis (`direct`). Acepta la clave del issue o la del request; `orqen` resuelve a qué pedido
+pertenece (el issue vigente de la ronda actual).
 
 ```mermaid
 flowchart TD
-    A["/orqen:implement DEV-442"] --> B["orqen status DEV-442<br/>(resuelve interno → pedido y mira el estado)"]
+    A["/orqen:implement DEV-442"] --> B["orqen status DEV-442<br/>(resuelve issue → request y mira el estado)"]
     B -->|"no es DEVELOPMENT,<br/>o es vía operativa"| X(["Se explica qué etapa sigue<br/>y se corta sin reservar el pedido"])
     B -->|"DEVELOPMENT"| C["orqen take DEV-442: reserva el pedido, prepara la rama,<br/>levanta el entorno e imprime contexto + esquema"]
     C --> D{"Carril"}
@@ -211,14 +211,14 @@ flowchart TD
 
 El agente **no edita los tests**: señala observaciones (escenarios sin e2e, tests que no verifican el THEN, esperas fijas) y QA
 decide. La decisión la registra `orqen review <KEY> approve|reject [--reason "<qué corregir>"] [--report <informe.md>]`: guarda
-`qa-review-<n>.md`, la comenta en el ticket externo y en el interno (si hay) y mueve el pedido. QA también puede comentar `/approve` o `/reject <motivo>` en el ticket externo
+`qa-review-<n>.md`, la comenta en el request y en su issue (si hay) y mueve el pedido. QA también puede comentar `/approve` o `/reject <motivo>` en el request
 (lo limita `APPROVERS_QA`). Si QA ajustó tests, los cambios quedan sin commitear en la rama: hay que correr `/orqen:pr` antes de
 aprobar para que lleguen al PR que revisa el senior.
 
 ## PR a desarrollo: `/orqen:pr DEV-32`
 
 Manda la rama del pedido a la rama de integración (`DEVEL_BRANCH`, por defecto `desarrollo`) con un pull request cuya
-descripción explica los cambios. Acepta la clave del ticket interno o la del externo y se corre con el pedido en `TESTING` o después (no en carril operativo).
+descripción explica los cambios. Acepta la clave del issue o la del request y se corre con el pedido en `TESTING` o después (no en carril operativo).
 Es el **único PR** del proceso: el senior hace el code review (CODE_REVIEW) sobre este PR.
 
 ```mermaid
@@ -230,7 +230,7 @@ flowchart TD
     R -->|"sí"| C["El agente lee el diff contra la base,<br/>el análisis y la spec/plan"]
     C --> D["Escribe la explicación (.md):<br/>resumen · cambios · desvíos · tests · cómo verificar · riesgos"]
     D --> E["orqen pr DEV-32 explicación.md<br/>guarda devel-pr.md · commitea lo pendiente · push · abre el PR"]
-    E --> F(["URL del PR, comentada en el pedido y el ticket interno"])
+    E --> F(["URL del PR, comentada en el pedido y el issue"])
 ```
 
 El agente solo redacta: el commit, el push y el PR los hace `orqen` (`DEVEL_PR_COMMAND`, con `{base}`, `{branch}`, `{key}`, `{title}`, `{body}`).
@@ -251,7 +251,7 @@ flowchart TD
     B -->|"sí"| C["Lee el diff del PR (origin/base...origin/rama)<br/>contra análisis, spec/plan y criterios"]
     C --> D["Verifica cada hallazgo<br/>(escenario concreto que falla)"]
     D --> E["Informe: veredicto · hallazgos con severidad, archivo:línea,<br/>qué pasa, por qué importa y posibles soluciones"]
-    E --> R["orqen code-review DEV-32 informe.md --verdict …<br/>guarda code-review-n.md · lo comenta en el ticket interno"]
+    E --> R["orqen code-review DEV-32 informe.md --verdict …<br/>guarda code-review-n.md · lo comenta en el issue"]
     R --> F{"Senior"}
     F -->|"Approve en el PR de GitHub"| G(["DELIVERY"])
     F -->|"Request changes con el texto que dejó listo el agente"| H(["DEVELOPMENT<br/>(los hallazgos llegan como feedback)"])
@@ -263,22 +263,22 @@ Si el veredicto no es aprobable, el agente deja redactado el texto del pedido de
 
 Cuando el senior da el informe por cerrado, el agente lo registra con `orqen code-review <KEY> <informe.md> --verdict <approve|minor|reject>`
 (solo en `CODE_REVIEW` y con el PR abierto). Queda en `orqen/work/<KEY>/round-N/code-review-<n>.md` (numerado: un segundo review después
-de un pedido de cambios no pisa al primero), se commitea si el repo está en la rama del pedido (viaja con el próximo push) y se comenta en el ticket interno.
+de un pedido de cambios no pisa al primero), se commitea si el repo está en la rama del pedido (viaja con el próximo push) y se comenta en el issue.
 
 ### Cómo se decide el gate: review en GitHub
 
 Con `CODE_REVIEW_GATE=github` (el valor por defecto) el senior **no necesita comentar nada en el ticket**: aprueba o pide cambios con un review en el PR,
 y `orqen` lo lee con `gh` en cada `orqen pending` / `orqen cycle`:
 
-- **Approve** → el pedido pasa a DELIVERY y se comenta en el pedido y el ticket interno.
+- **Approve** → el pedido pasa a DELIVERY y se comenta en el pedido y el issue.
 - **Request changes** → vuelve a DEVELOPMENT y el texto del review llega al agente como feedback (si no tiene texto, se le indica el PR).
 - Si hay un approve y un request changes a la vez, **gana el pedido de cambios**.
 - Solo cuentan los reviews hechos sobre el **commit actual del PR**: si después del review alguien empuja (por ejemplo `/orqen:pr` con ajustes de e2e), hace falta un review nuevo. Es lo mismo que "dismiss stale approvals" de GitHub, y conviene activarlo también en la protección de rama.
 - Cada review se aplica **una sola vez**, así que un pedido de cambios viejo no devuelve el pedido a DEVELOPMENT por segunda vez.
-- Con `GITHUB_REVIEWERS` definido (usuarios de GitHub, separados por coma), solo cuentan los reviews de esos usuarios; vacío = cualquiera. Para que además nadie más pueda mergear, usá la protección de rama de GitHub. `APPROVERS_CODE` (cuentas del ticket externo) sigue sirviendo para destrabar un pedido BLOCKED.
+- Con `GITHUB_REVIEWERS` definido (usuarios de GitHub, separados por coma), solo cuentan los reviews de esos usuarios; vacío = cualquiera. Para que además nadie más pueda mergear, usá la protección de rama de GitHub. `APPROVERS_CODE` (cuentas del request) sigue sirviendo para destrabar un pedido BLOCKED.
 - Sin PR todavía, el pedido espera. Si `gh` falla o no hay red, también espera (no se bloquea).
 
-Con `CODE_REVIEW_GATE=jira` el senior decide con `/approve` o `/reject <motivo>` en el issue, como antes (ahí `APPROVERS_CODE` limita quién puede decidir).
+Con `CODE_REVIEW_GATE=jira` el senior decide con `/approve` o `/reject <motivo>` en el request, como antes (ahí `APPROVERS_CODE` limita quién puede decidir).
 
 ## Flujo completo
 
@@ -304,7 +304,7 @@ flowchart LR
     SUPPORT -->|"escala con resumen"| ANALYSIS
     SUPPORT -->|"resuelto: respuesta al cliente"| CONF
     ANALYSIS <-->|preguntas / respuestas| ESPERA
-    ANALYSIS -->|"OK analista: carril + ticket interno"| DESA
+    ANALYSIS -->|"OK analista: carril + issue"| DESA
     DESA <-->|tests fallan / pasan| TEST
     TEST -->|"directo / liviano"| REV
     TEST -->|"completo"| QA
@@ -325,15 +325,15 @@ Tickets, git, PR y `openspec archive` los ejecuta solo `orqen`; el agente produc
 
 | Estado         | Quién             | Qué pasa                                                                                                      | OpenSpec                                                                                                                                                      |
 | -------------- | ----------------- | ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| SUPPORT        | soporte + agente  | opcional: busca la respuesta y la redacta con la persona. **Resuelto** → ACCEPTANCE (sin ticket interno); **escalar** → ANALYSIS con el resumen | —                                                                                                                                                             |
-| ANALYSIS       | analista + agente | grilling → OK → carril → spec (si corresponde) → ticket interno vinculado                                      | lee `openspec/specs`; liviano/completo: `orqen lane` crea el change y `orqen complete` exige `validate --strict`, artefactos completos y `(Nh)` en cada tarea |
+| SUPPORT        | soporte + agente  | opcional: busca la respuesta y la redacta con la persona. **Resuelto** → ACCEPTANCE (sin issue); **escalar** → ANALYSIS con el resumen | —                                                                                                                                                             |
+| ANALYSIS       | analista + agente | grilling → OK → carril → spec (si corresponde) → issue vinculado                                      | lee `openspec/specs`; liviano/completo: `orqen lane` crea el change y `orqen complete` exige `validate --strict`, artefactos completos y `(Nh)` en cada tarea |
 | WAITING_CLIENT | cliente           | responde en el ticket (máx. 3 rondas)                                                                              | —                                                                                                                                                             |
 | DEVELOPMENT    | agente            | implementa con el entorno levantado; con spec tilda `tasks.md`, en directo sigue el `plan`                    | flujo _apply_; `orqen` rechaza si queda alguna tarea sin tildar                                                                                               |
 | TESTING        | `orqen` + agente  | `orqen` corre la suite y el agente mapea test ↔ **cada Scenario** (directo: cada **criterio de aceptación**). No abre PR | si falta alguno, se rechaza                                                                                                                         |
 | QA_REVIEW      | QA                | solo carril completo: revisa en pantalla los e2e del cambio (`/orqen:review`) y aprueba (→ CODE_REVIEW) o pide cambios (→ DEVELOPMENT) | — |
 | CODE_REVIEW    | senior            | revisa el PR a desarrollo (`/orqen:pr`) con el informe de `/orqen:code-review` y decide con un review en GitHub | —                                                                                                                                                             |
 | DELIVERY       | `orqen` + agente  | `orqen` archiva (si hubo spec) y el agente escribe notas y mensaje al cliente                                 | `openspec archive` fusiona los deltas en `openspec/specs` y se empuja a la rama del PR                                                                       |
-| ACCEPTANCE     | cliente           | `/approve` cierra; `/reject` abre la ronda 2 (vuelve a ANALYSIS: nuevo carril, change y ticket interno)                  | nuevo change `…-r2`                                                                                                                                           |
+| ACCEPTANCE     | cliente           | `/approve` cierra; `/reject` abre la ronda 2 (vuelve a ANALYSIS: nuevo carril, change y issue)                  | nuevo change `…-r2`                                                                                                                                           |
 
 Si se agotan los reintentos o hay un error, el pedido pasa a **BLOCKED**. Una persona destraba con `/approve <indicaciones>`
 (`APPROVERS_ANALYSIS` + `APPROVERS_CODE`): el pedido vuelve a la etapa en la que se bloqueó, con los contadores de reintentos en cero
@@ -342,7 +342,7 @@ y las indicaciones como feedback para el agente.
 **Carril operativo.** Si el pedido se resuelve sin cambiar código, el flujo es
 `ANALYSIS → EXECUTION → EXECUTION_APPROVAL → APPLICATION → VERIFICATION → ACCEPTANCE → CLOSED`: el agente propone el script, el rollback
 y la verificación; una persona de `APPROVERS_EXECUTION` autoriza y aplica, y el agente verifica en solo lectura. Si la verificación muestra
-que la causa es de código, el pedido vuelve a ANALYSIS y nace un ticket interno de desarrollo.
+que la causa es de código, el pedido vuelve a ANALYSIS y nace un issue de desarrollo.
 
 
 ## Crear un proyecto nuevo: `orqen bootstrap`
@@ -393,7 +393,7 @@ orqen init
    si hay un agente de IA instalado, le pide que revise un resumen del repo (`--deep` para que lo explore entero, `--no-ai` para solo detección automática).
 3. Te deja confirmar o editar componentes, el comando que levanta cada parte (`npm run dev`, `npm start`…), tests, migraciones y seeds.
 4. Instala OpenSpec (2.x) si hace falta y corre `openspec init` para las herramientas elegidas.
-5. Pregunta dónde viven los tickets (**conectores**: externo e interno, ver más abajo) y los aprobadores. Lo que es configuración va a `conectores` en `orqen/config.yaml`; los tokens, a `orqen/.env` (ignorado por git).
+5. Pregunta dónde viven los tickets (**conectores**: sistema de requests y de issues, ver más abajo) y los aprobadores. Lo que es configuración va a `conectores` en `orqen/config.yaml`; los tokens, a `orqen/.env` (ignorado por git).
 6. Escribe la configuración del entorno (sin Docker de por medio), `AGENTS.md` / `CLAUDE.md`, el plugin, las guías de etapa y el manifiesto,
    y fusiona las reglas del proceso con el `openspec/config.yaml` existente.
 
@@ -434,7 +434,7 @@ actualizan solos; para los editados elegís conservar, reemplazar o dejar una co
 | `GITHUB_TOKEN`                                               | GitHub Issues/Projects (vacío = la sesión de `gh`)                                         |
 | `ASANA_TOKEN`                                                | Asana (token personal)                                                                     |
 | `SUPPORT_STAGE`                                              | `on`: `orqen pending` manda los pedidos nuevos primero a soporte. Por defecto `off`; `/orqen:support` funciona con cualquiera de los dos valores. No hay lista de personas de soporte: puede tomarlo cualquiera |
-| `APPROVERS_ANALYSIS`, `APPROVERS_QA`, `APPROVERS_CODE`, `APPROVERS_CLIENT`, `APPROVERS_EXECUTION` | Quién puede decidir en cada gate, con cuentas de la herramienta del ticket externo (vacío = cualquiera). `APPROVERS_CODE` también destraba un BLOCKED |
+| `APPROVERS_ANALYSIS`, `APPROVERS_QA`, `APPROVERS_CODE`, `APPROVERS_CLIENT`, `APPROVERS_EXECUTION` | Quién puede decidir en cada gate, con cuentas del sistema de requests (vacío = cualquiera). `APPROVERS_CODE` también destraba un BLOCKED |
 | `CODE_REVIEW_GATE`, `GITHUB_REVIEWERS`                       | Quién decide en CODE_REVIEW: `github` (review en el PR, por defecto) o `ticket` (`/approve` y `/reject` en el ticket; `jira` sigue funcionando). `GITHUB_REVIEWERS`: usuarios de GitHub cuyos reviews cuentan (vacío = cualquiera) |
 | `BASE_BRANCH`, `TEST_COMMAND`                                | Rama base de las ramas de pedidos y suite por defecto (si `config.yaml` no define tests)       |
 | `DEVEL_BRANCH`, `DEVEL_PR_COMMAND`                           | Rama de integración y comando que abre el PR (`orqen pr`)                                  |
@@ -445,35 +445,35 @@ actualizan solos; para los editados elegís conservar, reemplazar o dejar una co
 `app/` es la app de ORQEN (Rust + GPUI, el framework de Zed) para Windows, macOS y Linux: pendientes, entornos, enjambre, conectores y tutorial, con la animación del logo al abrir. No tiene lógica propia: muestra lo que devuelve la CLI con `--json`.
 Se abre con `orqen` (sin argumentos) en la carpeta de un proyecto: la primera vez la CLI la baja ya compilada para tu sistema (Windows, macOS o Linux) y la abre; no hace falta instalar Rust ni nada más. GitHub Actions la compila y la publica en cada release (`v*`). Ver `app/README.md`.
 
-## Conectores: dónde viven los tickets
+## Conectores: sistema de requests y sistema de issues
 
-En **Configuración → General** se definen el **prefijo de requerimientos** (lo que ve el cliente) y el **prefijo de tickets** (desarrollo), independientemente de Jira, GitHub o Asana:
+En **Configuración → General** se definen el **prefijo de requests** (lo que ve el cliente) y el **prefijo de issues** (desarrollo), independientemente de Jira, GitHub o Asana:
 
 ```yaml
 general:
   prefijos:
-    requerimientos: REQ
-    tickets: TKT
+    requests: REQ
+    issues: ISS
 ```
 
 Los proveedores se eligen en **Configuración → Conectores**. Sus etiquetas y filtros no son prefijos. Los proyectos existentes conservan sus claves hasta guardar explícitamente General; si ya hay historial, cambiar los prefijos requiere migrar las claves registradas. En Jira hay que seleccionar un proyecto por conector: ORQEN traduce el prefijo general a la clave nativa para las consultas y los enlaces.
 
 
-orqen trabaja con dos tickets por pedido:
+orqen es agnóstico a la herramienta de tickets y separa dos sistemas:
 
-- **Externo**: lo que ve el cliente. Ahí entra el pedido, ahí orqen responde y ahí el cliente aprueba o rechaza (`/approve`, `/reject <motivo>`).
-- **Interno** (opcional): el ticket del equipo. Nace cuando cierra el análisis, queda vinculado al externo y ahí se sigue el trabajo técnico. Sin conector interno, todo se trabaja sobre el externo.
+- **Sistema de requests**: lo que ve el cliente. Ahí entra el pedido (el **request**), ahí orqen responde y ahí el cliente aprueba o rechaza (`/approve`, `/reject <motivo>`).
+- **Sistema de issues** (opcional): el del equipo. Cuando cierra el análisis nace un **issue** vinculado al request y ahí se sigue el trabajo técnico. Sin sistema de issues, todo se trabaja sobre el request.
 
-Cada uno puede estar en **Jira**, **GitHub** (Issues, opcionalmente en un GitHub Project) o **Asana**, y se pueden mezclar
-(por ejemplo, el Jira del cliente como externo y un GitHub Project del equipo como interno). Se configuran en `orqen/config.yaml`:
+Cada sistema puede estar en **Jira**, **GitHub** (Issues, opcionalmente en un GitHub Project) o **Asana**, y se pueden mezclar
+(por ejemplo, el Jira del cliente para los requests y un GitHub Project del equipo para los issues). Se configuran en `orqen/config.yaml`:
 
 ```yaml
 conectores:
-  externo:
+  requests:
     tipo: jira                 # jira | github | asana
     filtro: project = SOP AND labels = orqen AND statusCategory != Done
     transiciones: { ACCEPTANCE: "Esperando cliente", CLOSED: "Resuelto" }
-  interno:                     # opcional
+  issues:                      # opcional
     tipo: github
     repo: mi-org/mi-repo
     proyecto: 7                # número del GitHub Project (opcional); mueve el campo Status
@@ -483,16 +483,18 @@ conectores:
 | Campo | Jira | GitHub | Asana |
 | ----- | ---- | ------ | ----- |
 | `filtro` | JQL de los pedidos que maneja orqen | calificadores de búsqueda (`is:open label:orqen` por defecto) | tag de las tareas (`orqen` por defecto) |
-| `proyecto` | clave del proyecto donde se crea el interno | número del GitHub Project | id del proyecto |
+| `proyecto` | clave del proyecto donde se crea el issue | número del GitHub Project | id del proyecto |
 | `transiciones` | estado de orqen → transición del workflow | estado → opción del campo `campo` (Status) | estado → sección (`completed` la cierra) |
 | Claves | las de Jira (`SOP-123`) | `GH-42` (`prefijo` configurable) | `AS-<id>` |
 | Extras | `credenciales`, `tipo_ticket`, `tipo_operativo`, `vinculo` | `repo`, `duenio_proyecto`, `campo`, `etiquetas` | `prefijo` |
 
-Los tokens van en `orqen/.env` (`JIRA_*`, `GITHUB_TOKEN`, `ASANA_TOKEN`). `orqen connectors` muestra los dos conectores y prueba las credenciales;
-`orqen connectors setup` los configura con preguntas. Los comandos aceptan la clave del externo o la del interno.
+Los tokens van en `orqen/.env` (`JIRA_*`, `GITHUB_TOKEN`, `ASANA_TOKEN`). `orqen connectors` muestra los dos sistemas y prueba las credenciales;
+`orqen connectors setup` los configura con preguntas. Los comandos aceptan la clave del request o la de su issue.
 
-**Si venías de una versión anterior** (`REC_JQL`, `SIS_PROJECT`, `SIS_*` en `orqen/.env`): siguen funcionando como Jira externo + Jira interno, con un aviso.
-`orqen update` ofrece pasarlas a `conectores`. Las ramas `rec/<key>` de pedidos en curso se siguen usando; las nuevas son `orqen/<key>`.
+**Si venías de una versión anterior**, todo se sigue leyendo: `externo`/`interno` en `conectores` y `requerimientos`/`tickets` en `prefijos`
+equivalen a `requests`/`issues` (al guardar desde la app o `orqen connectors setup` se escriben con los nombres nuevos), y las variables
+`REC_JQL`, `SIS_PROJECT`, `SIS_*` de `orqen/.env` funcionan como Jira de requests + Jira de issues, con un aviso; `orqen update` ofrece pasarlas a
+`conectores`. Las ramas `rec/<key>` de pedidos en curso se siguen usando; las nuevas son `orqen/<key>`.
 
 ## Entornos y tests
 
@@ -636,17 +638,17 @@ orqen status [KEY]                     Estado actual y log
 orqen schema <ETAPA>                   JSON Schema de la salida de una etapa
 orqen block <KEY> <motivo>             Escala a una persona
 orqen release <KEY>                    Libera la reserva de un pedido
-orqen connectors [setup] [--json]      Muestra y prueba los conectores (externo e interno), o los configura
+orqen connectors [setup] [--json]      Muestra y prueba los conectores (requests e issues), o los configura
 orqen search <JQL>                     Busca issues (antecedentes / relacionados)
 orqen cycle [--loop]                   Modo desatendido
 ```
 
-`take`, `complete`, `status`, `block`, `release`, `pr` y `review` aceptan la clave del ticket externo o la de su interno.
+`take`, `complete`, `status`, `block`, `release`, `pr` y `review` aceptan la clave del request o la de su issue.
 
 ## Garantías y límites
 
 - Las salidas se validan con zod y con OpenSpec. Si algo no cumple, el agente recibe la lista de errores y reintenta. Nada avanza a medias:
-  el ticket interno no se crea hasta que el análisis (y la spec) están validados, y si el conector falla a mitad de camino, repetir `complete` retoma sin duplicar.
+  el issue no se crea hasta que el análisis (y la spec) están validados, y si el conector falla a mitad de camino, repetir `complete` retoma sin duplicar.
 - El OK del analista es un campo obligatorio de la salida (`analyst_ok`), pero **lo declara el agente**: `orqen` no puede comprobar que la persona
   lo haya dado. Lo mismo pasa con la aprobación del diseñador de e2e. Son barreras de proceso, no de seguridad.
 - Hay un lock por pedido (vence a los `ORQEN_LOCK_MIN`, pero el mismo agente puede completar igual si nadie más lo tomó, porque el grilling puede ser largo).

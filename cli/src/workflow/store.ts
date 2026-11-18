@@ -4,7 +4,7 @@ import { join } from "node:path";
 import type { Lane, Route, State } from "./states.ts";
 
 export interface WorkItem {
-  /** Key of the external ticket (the client's). */
+  /** Key of the request (the client's ticket, in the requests system). */
   key: string;
   state: State;
   round: number;                 // 1 + number of times the client rejected the acceptance
@@ -17,7 +17,7 @@ export interface WorkItem {
   lane?: Lane;                   // direct | light | full (development route only); set by the analyst in the analysis
   supporter?: string;            // who handled the request in SUPPORT
   analyst?: string;              // who drove the analysis
-  internal?: string;             // key of the internal ticket created when the analysis closed (internal connector)
+  issue?: string;                // key of the issue created when the analysis closed (issues system)
   artifacts: Record<string, any>;
   feedback: Array<{ from: string; text?: string; rejection?: string }>;
   lock?: { agent: string; since: string };
@@ -53,11 +53,11 @@ export class Store {
   }
 }
 
-/** Items saved by earlier versions used `sis` for the internal ticket. */
-function migrate(item: WorkItem & { sis?: string }): WorkItem {
-  if (item.sis !== undefined) { item.internal ??= item.sis; delete item.sis; }
+/** Items saved by earlier versions used `sis` and then `internal` for the issue. */
+function migrate(item: WorkItem & { sis?: string; internal?: string }): WorkItem {
+  for (const old of ["sis", "internal"] as const) if (item[old] !== undefined) { item.issue ??= item[old]; delete item[old]; }
   const a = item.artifacts ?? {};
-  if (a.sis_linked !== undefined) { a.internal_linked ??= a.sis_linked; delete a.sis_linked; }
-  if (a.previous_sis !== undefined) { a.previous_internal ??= a.previous_sis; delete a.previous_sis; }
+  for (const old of ["sis_linked", "internal_linked"]) if (a[old] !== undefined) { a.issue_linked ??= a[old]; delete a[old]; }
+  for (const old of ["previous_sis", "previous_internal"]) if (a[old] !== undefined) { a.previous_issues ??= a[old]; delete a[old]; }
   return item;
 }

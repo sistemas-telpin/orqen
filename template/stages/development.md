@@ -2,7 +2,7 @@
 
 > If `human_present` is `true`, tell the person what you are about to do, wait for their OK at each important step, and ask them about any doubt (see "Working with the person" in AGENTS.md). If it is `false`, run `orqen block` for any doubt that changes the outcome.
 
-The analysis is approved. The context includes the branch (`branch`), lane (`lane`), linked implementation issue (`sis`), and tasks (`tasks`).
+The analysis is approved. The context includes the branch (`branch`), lane (`lane`), linked issue (`issue`), and tasks (`tasks`).
 
 1. Read `previous_stages.ANALYSIS` and consult `orqen/work/<KEY>/` for details.
 2. For `light` or `full`, follow OpenSpec's apply workflow using `openspec-apply-change`, `/opsx:apply`, or `openspec instructions apply --change <change> --json`. Read the proposal, design, specs, and tasks, and check off each completed task in `tasks.md`. `orqen complete` rejects incomplete tasks.

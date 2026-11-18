@@ -101,12 +101,12 @@ test("full request with real OpenSpec", { skip: !existsSync(OPENSPEC) && "opensp
   assert.match(readFileSync(join(dir, "orqen", "work", "REQ-7", "round-1", "analysis.md"), "utf8"), /Excel queda fuera/);
   assert.equal(JSON.parse(readFileSync(join(dir, "orqen", "work", "REQ-7", "state.json"), "utf8")).state, "DEVELOPMENT");
 
-  // ---- when the analysis closes the internal ticket is born, linked to the request
+  // ---- when the analysis closes the issue is born, linked to the request
   assert.equal(jira.created.length, 1);
   assert.equal(jira.created[0].key, "DEV-1");
   assert.match(jira.created[0].title, /^\[REQ-7\]/);
   assert.deepEqual(jira.links, [["DEV-1", "REQ-7"]]);
-  assert.equal(new Store(cfg.stateDir).get("REQ-7")!.internal, "DEV-1");
+  assert.equal(new Store(cfg.stateDir).get("REQ-7")!.issue, "DEV-1");
   assert.match(jira.coms["REQ-7"].map((c) => c.body).join("\n"), /Track implementation in DEV-1/);
 
   // ---- DEVELOPMENT
@@ -118,7 +118,7 @@ test("full request with real OpenSpec", { skip: !existsSync(OPENSPEC) && "opensp
   writeFileSync(join(cdir, "tasks.md"), readFileSync(join(cdir, "tasks.md"), "utf8").replaceAll("- [ ]", "- [x]"));
   r = await p.complete("REQ-7", dev);
   assert.deepEqual(r, { ok: true, next: "TESTING" });
-  assert.match(jira.last("DEV-1"), /Development complete/);   // the technical milestone is mirrored on the internal ticket
+  assert.match(jira.last("DEV-1"), /Development complete/);   // the technical milestone is mirrored on the issue
 
   // ---- TESTING (real tests pass)
   const t = await p.take("REQ-7");
@@ -153,7 +153,7 @@ test("full request with real OpenSpec", { skip: !existsSync(OPENSPEC) && "opensp
   assert.equal(rec.state, "ANALYSIS");
   assert.equal(rec.round, 2);
   assert.equal(rec.change, "");
-  assert.equal(rec.internal, undefined);                          // round 2 will get a new internal ticket
-  assert.deepEqual(rec.artifacts.previous_internal, ["DEV-1"]);
+  assert.equal(rec.issue, undefined);                          // round 2 will get a new issue
+  assert.deepEqual(rec.artifacts.previous_issues, ["DEV-1"]);
   assert.deepEqual(rec.feedback, [{ from: "client", rejection: "falta el total" }]);
 });

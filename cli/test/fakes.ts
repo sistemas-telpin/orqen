@@ -3,7 +3,7 @@ import { BOT_MARK, type Comment, type Connectors, type NewTicket, type Ticket, t
 
 let id = 0;
 
-/** In-memory connector. One instance can play both roles (external and internal), like a single Jira. */
+/** In-memory connector. One instance can play both systems (requests and issues), like a single Jira. */
 export class FakeTracker implements Tracker {
   readonly kind = "jira" as const;
   readonly label = "fake";
@@ -39,12 +39,12 @@ export class FakeTracker implements Tracker {
   }
 }
 
-/** The same fake as external and internal connector (or only external with internal=false). */
-export const both = (t: FakeTracker, internal = true): Connectors => ({ external: t, internal: internal ? t : undefined });
+/** The same fake as requests and issues system (or only requests with issues=false). */
+export const both = (t: FakeTracker, issues = true): Connectors => ({ requests: t, issues: issues ? t : undefined });
 
 const jira = (over: Partial<JiraSettings> = {}): JiraSettings => ({
   kind: "jira", url: "", user: "", token: "", deployment: "cloud", query: "x", project: "DEV",
   issueType: "Task", operationalType: "Task", linkType: "Relates", transitions: {}, ...over,
 });
 /** Connector settings for loadConfig in the tests. */
-export const testConnectors = (internal = true): ConnectorsSettings => ({ external: jira({ project: "" }), internal: internal ? jira() : undefined });
+export const testConnectors = (issues = true): ConnectorsSettings => ({ requests: jira({ project: "" }), issues: issues ? jira() : undefined });

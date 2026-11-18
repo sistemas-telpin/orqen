@@ -17,7 +17,7 @@ Run the QA review of `$ARGUMENTS` with the QA person who invoked this command. O
 
 ## Steps
 
-1. Validate the key (external or internal ticket) and run `orqen status <KEY>`. Continue only for a request in `QA_REVIEW`. If it is in another state, report it and stop: the direct and light lanes skip QA, and a full-lane request reaches QA after `TESTING`. Record the branch, lane, change, and round.
+1. Validate the key (request or issue) and run `orqen status <KEY>`. Continue only for a request in `QA_REVIEW`. If it is in another state, report it and stop: the direct and light lanes skip QA, and a full-lane request reaches QA after `TESTING`. Record the branch, lane, change, and round.
 2. Check that the current branch matches the request branch. If it differs, ask QA to switch and stop. Report pending changes unrelated to the end-to-end tests.
 3. List the OpenSpec scenarios of the change and read the `TESTING` result in the work record (`orqen/work/<KEY>/`).
 4. Detect the project's test runner and find the end-to-end tests this change added or modified. Match each scenario to a test by file and name, and check its assertions against the expected behavior (the THEN).
@@ -28,4 +28,4 @@ Run the QA review of `$ARGUMENTS` with the QA person who invoked this command. O
    - Approve (only with a passing run): `orqen review <KEY> approve --report <report.md> --person "<QA name>" --agent qa`. The request moves to `CODE_REVIEW`, where the senior reviews the PR.
    - Request changes: `orqen review <KEY> reject --reason "<what development must fix>" --report <report.md> --person "<QA name>" --agent qa`. The request returns to `DEVELOPMENT` with the reason as feedback.
 
-   orqen saves the report as `orqen/work/<KEY>/round-<N>/qa-review-<n>.md` and comments the decision on the external ticket and the internal one (when there is one). QA can also decide by commenting `/approve` or `/reject <reason>` on the external ticket (limited to `APPROVERS_QA`).
+   orqen saves the report as `orqen/work/<KEY>/round-<N>/qa-review-<n>.md` and comments the decision on the request and on its issue (when there is one). QA can also decide by commenting `/approve` or `/reject <reason>` on the request (limited to `APPROVERS_QA`).

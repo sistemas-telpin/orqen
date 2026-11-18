@@ -1,4 +1,4 @@
-/** Analysis with analyst, lanes, internal ticket, orqen/work/, gates, permissions, locks and blocks, with everything simulated. */
+/** Analysis with analyst, lanes, issue, orqen/work/, gates, permissions, locks and blocks, with everything simulated. */
 import assert from "node:assert/strict";
 import { existsSync, mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -46,7 +46,7 @@ const ANALYSIS_OK = (over: Record<string, unknown> = {}) => ({
   decisions: [{ question: "¿Qué formato?", answer: "CSV" }], ...over,
 });
 
-test("analyst: client questions, mandatory OK, direct lane, internal ticket and orqen/work/", async () => {
+test("analyst: client questions, mandatory OK, direct lane, issue and orqen/work/", async () => {
   const { p, jira, est, cfg } = setup();
   const pend = await p.review();
   assert.deepEqual(pend.map((x) => [x.key, x.state, x.for]), [["REQ-1", "NEW", "analyst"]]);
@@ -90,7 +90,7 @@ test("analyst: client questions, mandatory OK, direct lane, internal ticket and 
   assert.deepEqual(await p.lane("REQ-1", "direct", "codex"), { lane: "direct", openspec: undefined, branch: undefined });
   assert.deepEqual(await p.complete("REQ-1", ANALYSIS_OK(), "codex"), { ok: true, next: "DEVELOPMENT" });
 
-  // internal ticket created when closing, linked to the request, with the lane
+  // issue created when closing, linked to the request, with the lane
   assert.equal(est().state, "DEVELOPMENT");
   assert.equal(est().lane, "direct");
   assert.equal(jira.created.length, 1);
@@ -99,7 +99,7 @@ test("analyst: client questions, mandatory OK, direct lane, internal ticket and 
   assert.match(jira.created[0].description, /Lane:\* direct/);
   assert.deepEqual((jira.created[0] as any).labels, ["origin-req-1", "lane-direct"]);
   assert.deepEqual(jira.links, [["DEV-1", "REQ-1"]]);
-  assert.equal(est().internal, "DEV-1");
+  assert.equal(est().issue, "DEV-1");
   assert.match(jira.coms["REQ-1"].map((c) => c.body).join("\n"), /Track implementation in DEV-1/);
 
   // record in orqen/work/REQ-1
@@ -107,11 +107,11 @@ test("analyst: client questions, mandatory OK, direct lane, internal ticket and 
   const md = readFileSync(join(f, "round-1", "analysis.md"), "utf8");
   assert.match(md, /Analyst:\*\* Ana/);
   assert.match(md, /Lane:\*\* direct/);
-  assert.match(md, /Internal ticket:\*\* DEV-1/);
+  assert.match(md, /Issue:\*\* DEV-1/);
   assert.match(md, /¿Qué formato\?\*\* → CSV/);
   assert.ok(existsSync(join(f, "round-1", "analysis.json")));
   const state = JSON.parse(readFileSync(join(f, "state.json"), "utf8"));
-  assert.deepEqual([state.state, state.lane, state.internal, state.analyst], ["DEVELOPMENT", "direct", "DEV-1", "Ana"]);
+  assert.deepEqual([state.state, state.lane, state.issue, state.analyst], ["DEVELOPMENT", "direct", "DEV-1", "Ana"]);
   assert.match(readFileSync(join(f, "log.md"), "utf8"), /ANALYSIS → DEVELOPMENT/);
 });
 
@@ -161,7 +161,7 @@ test("testing that fails 3 times blocks; /approve retries (direct lane: criteria
   assert.equal(est().testingAttempts, 0);
 });
 
-test("testing requires evaluating each criterion and milestones are mirrored on the internal ticket", async () => {
+test("testing requires evaluating each criterion and milestones are mirrored on the issue", async () => {
   const { p, jira, est } = setup();
   await p.analyze("REQ-1", "codex", "Ana");
   await p.complete("REQ-1", ANALYSIS_OK(), "codex");
@@ -171,7 +171,7 @@ test("testing requires evaluating each criterion and milestones are mirrored on 
   const r = await p.complete("REQ-1", { scenarios: [], failure_diagnosis: "", suggestions: [], coverage_ok: true });
   assert.match((r as any).errors.join(), /Scenarios still to evaluate/);
   assert.equal(est().state, "TESTING");
-  assert.ok(jira.coms["DEV-1"].length >= 1);   // technical milestones are mirrored on the internal ticket
+  assert.ok(jira.coms["DEV-1"].length >= 1);   // technical milestones are mirrored on the issue
 });
 
 test("change name", () => {
@@ -234,7 +234,7 @@ test("QA_REVIEW: only the full lane goes through QA; QA approves to CODE_REVIEW 
   assert.equal(readFileSync(join(cfg.factoryDir, "REQ-1", "round-1", "qa-review-2.md"), "utf8").trim(), "All e2e of the change reviewed on screen.");
   await assert.rejects(flow.qaReview("REQ-1", "approve"), /not waiting for QA/);
 
-  // QA can also decide on the external ticket, limited to APPROVERS_QA
+  // QA can also decide on the request, limited to APPROVERS_QA
   store.save({ ...store.get("REQ-1")!, state: "QA_REVIEW", lastSeenComment: "" });
   jira.coms["REQ-1"] = [];
   jira.human("REQ-1", "intruder", "/approve");
@@ -245,7 +245,7 @@ test("QA_REVIEW: only the full lane goes through QA; QA approves to CODE_REVIEW 
   assert.equal(store.get("REQ-1")!.state, "DEVELOPMENT");
 });
 
-test("review: records the code review in CODE_REVIEW with an open PR, numbered per round, commented on the internal ticket", async () => {
+test("review: records the code review in CODE_REVIEW with an open PR, numbered per round, commented on the issue", async () => {
   const { jira, cfg } = setup();
   jira.coms["DEV-9"] = [];
   const commits: unknown[] = [];
@@ -253,7 +253,7 @@ test("review: records the code review in CODE_REVIEW with an open PR, numbered p
   const store = new Store(cfg.stateDir);
   const flow = new Process(cfg, both(jira), store, ws, fakeOs);
   const report = "## Veredicto\nRechazar: falta validar el rango de fechas.\n\n## Hallazgos\n#1 bloqueante · src/export.ts:42 · Solución: validar antes de consultar.";
-  const rec = { ...newWorkItem("REQ-1"), branch: "orqen/req-1", internal: "DEV-9" };
+  const rec = { ...newWorkItem("REQ-1"), branch: "orqen/req-1", issue: "DEV-9" };
 
   store.save({ ...rec, state: "TESTING" });
   await assert.rejects(flow.codeReview("REQ-1", report, "reject"), /recorded in CODE_REVIEW/);
@@ -278,13 +278,13 @@ test("review: records the code review in CODE_REVIEW with an open PR, numbered p
 test("CODE_REVIEW decided by the review on the GitHub PR: stale, unauthorized and handled reviews do not count", async () => {
   const { jira, cfg } = setup();
   assert.equal(cfg.codeReviewGate, "github");   // default
-  jira.issues["DEV-9"] = { title: "internal ticket" }; jira.coms["DEV-9"] = [];
+  jira.issues["DEV-9"] = { title: "issue" }; jira.coms["DEV-9"] = [];
   let snap: { head: string; reviews: Array<{ id: string; author: string; state: string; commit: string; body: string }> } = { head: "h1", reviews: [] };
   let fail = false;
   const ws: Workspace = { ...failingTests, prReviews: () => { if (fail) throw new Error("gh down"); return snap; } };
   const store = new Store(cfg.stateDir);
   const flow = new Process({ ...cfg, githubReviewers: ["senior"] }, both(jira), store, ws, fakeOs);
-  const rec = { ...newWorkItem("REQ-1"), state: "CODE_REVIEW" as const, branch: "orqen/req-1", internal: "DEV-9" };
+  const rec = { ...newWorkItem("REQ-1"), state: "CODE_REVIEW" as const, branch: "orqen/req-1", issue: "DEV-9" };
   const state = () => store.get("REQ-1")!.state;
   const rv = (id: string, author: string, state: string, commit = "h1", body = "") => ({ id, author, state, commit, body });
 
@@ -315,7 +315,7 @@ test("CODE_REVIEW decided by the review on the GitHub PR: stale, unauthorized an
 
 test("CODE_REVIEW: changes requested win over approvals and an empty APPROVERS_CODE accepts any reviewer", async () => {
   const { jira, cfg } = setup();
-  jira.issues["DEV-9"] = { title: "internal ticket" }; jira.coms["DEV-9"] = [];
+  jira.issues["DEV-9"] = { title: "issue" }; jira.coms["DEV-9"] = [];
   const reviews = [
     { id: "1", author: "ana", state: "APPROVED", commit: "h", body: "" },
     { id: "2", author: "beto", state: "CHANGES_REQUESTED", commit: "h", body: "" },
@@ -323,7 +323,7 @@ test("CODE_REVIEW: changes requested win over approvals and an empty APPROVERS_C
   const ws: Workspace = { ...failingTests, prReviews: () => ({ head: "h", reviews }) };
   const store = new Store(cfg.stateDir);
   const flow = new Process({ ...cfg, githubReviewers: [] }, both(jira), store, ws, fakeOs);
-  store.save({ ...newWorkItem("REQ-1"), state: "CODE_REVIEW", branch: "orqen/req-1", internal: "DEV-9", artifacts: { devel_pr: "https://example.test/pr/7" } });
+  store.save({ ...newWorkItem("REQ-1"), state: "CODE_REVIEW", branch: "orqen/req-1", issue: "DEV-9", artifacts: { devel_pr: "https://example.test/pr/7" } });
   await flow.review();
   assert.equal(store.get("REQ-1")!.state, "DEVELOPMENT");
   assert.match(store.get("REQ-1")!.feedback[0].rejection!, /Changes requested on the PR/);   // empty body: points to the PR
@@ -331,7 +331,7 @@ test("CODE_REVIEW: changes requested win over approvals and an empty APPROVERS_C
 
 test("pr: sends the branch to the devel branch, records the explanation and is idempotent", async () => {
   const { p, jira, cfg } = setup();
-  jira.issues["DEV-9"] = { title: "internal ticket" };
+  jira.issues["DEV-9"] = { title: "issue" };
   jira.coms["DEV-9"] = [];
   const calls: string[] = [];
   let cmd = "", branch = "main";
@@ -345,7 +345,7 @@ test("pr: sends the branch to the devel branch, records the explanation and is i
   const rec = newWorkItem("REQ-1");
   store.save({ ...rec, state: "DEVELOPMENT", branch: "orqen/req-1" });
   assert.throws(() => flow.prInfo("REQ-1"), /once development is done/);
-  store.save({ ...rec, state: "CODE_REVIEW", branch: "orqen/req-1", internal: "DEV-9" });
+  store.save({ ...rec, state: "CODE_REVIEW", branch: "orqen/req-1", issue: "DEV-9" });
   assert.equal(flow.prInfo("REQ-1").base, "desarrollo");
   await assert.rejects(flow.pr("REQ-1", "corto"), /too short/);
 

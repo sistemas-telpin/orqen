@@ -2,14 +2,15 @@
  * Connector settings: `conectores` in orqen/config.yaml (what and where) + secrets in orqen/.env (tokens).
  *
  *   conectores:
- *     externo:                     # the ticket the client sees
+ *     requests:                    # where the client's requests arrive (what the client sees)
  *       tipo: jira                 # jira | github | asana
  *       filtro: project = SOP AND labels = orqen AND statusCategory != Done
- *     interno:                     # optional: the team's ticket, created when the analysis closes
+ *     issues:                      # optional: the team's issues, one created per request when the analysis closes
  *       tipo: github
  *       repo: my-org/my-repo
  *       proyecto: 7                # GitHub Projects number (optional)
  *
+ * `externo`/`interno` (earlier names of requests/issues) are still accepted.
  * Without `conectores`, the variables used by earlier versions of orqen/.env are still read (see legacy.ts).
  */
 import { z } from "zod";
@@ -25,9 +26,9 @@ export const ConectorYaml = z.object({
   url: z.string().nullish(),
   /** Which tickets orqen handles: JQL (Jira), GitHub search qualifiers, or an Asana tag. */
   filtro: z.string().nullish(),
-  /** Jira: project key where the internal ticket is created. GitHub: Projects (v2) number. Asana: project gid. */
+  /** Jira: project key where the issue is created. GitHub: Projects (v2) number. Asana: project gid. */
   proyecto: z.union([z.string(), z.number()]).nullish(),
-  /** Jira: issue types for the internal ticket and the link type between both. */
+  /** Jira: issue types for the issue and the link type between both. */
   tipo_ticket: z.string().nullish(),
   tipo_operativo: z.string().nullish(),
   vinculo: z.string().nullish(),
@@ -45,7 +46,12 @@ export const ConectorYaml = z.object({
 });
 export type ConectorYaml = z.infer<typeof ConectorYaml>;
 
-export const ConectoresYaml = z.object({ externo: ConectorYaml, interno: ConectorYaml.nullish() });
+/** `requests` and `issues`; `externo`/`interno` are the names used by earlier versions. */
+export const ConectoresYaml = z.preprocess((v) => {
+  if (!v || typeof v !== "object") return v;
+  const { externo, interno, ...rest } = v as Record<string, unknown>;
+  return { ...rest, requests: rest.requests ?? externo, issues: rest.issues ?? interno };
+}, z.object({ requests: ConectorYaml, issues: ConectorYaml.nullish() }));
 export type ConectoresYaml = z.infer<typeof ConectoresYaml>;
 
 interface Base { transitions: Record<string, string> }
@@ -62,7 +68,7 @@ export interface AsanaSettings extends Base {
   kind: "asana"; token: string; project: string; tag: string; prefix: string;
 }
 export type ConnectorSettings = JiraSettings | GithubSettings | AsanaSettings;
-export interface ConnectorsSettings { external: ConnectorSettings; internal?: ConnectorSettings; legacy?: string[] }
+export interface ConnectorsSettings { requests: ConnectorSettings; issues?: ConnectorSettings; legacy?: string[] }
 
 export const DEFAULT_LABEL = "orqen";
 

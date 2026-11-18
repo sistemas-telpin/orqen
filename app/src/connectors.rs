@@ -32,7 +32,7 @@ pub struct ConnectorsEditor {
     current: Load<Value>,
     ext: &'static str,
     int: &'static str,
-    /// Internal ticket in Jira with its own account (JIRA_INTERNAL_*) instead of the external one's.
+    /// Issues in Jira with their own account (JIRA_INTERNAL_*) instead of the requests one.
     int_own_account: bool,
     deploy: [&'static str; 2],
     inputs: Vec<(&'static str, Entity<TextInput>)>,
@@ -42,7 +42,7 @@ pub struct ConnectorsEditor {
     saving: bool,
     error: Option<String>,
     scroll: ScrollHandle,
-    /// Opened from "Add" on the internal ticket: show that section.
+    /// Opened from "Add" on the issues system: show that section.
     focus_internal: bool,
     choices: [ConnectorChoices; 4],
 }
@@ -65,7 +65,7 @@ const FIELDS: &[(&str, &str, &str, &str, &str, &str, bool)] = &[
     ("jirai.token", "API token del equipo", "Team API token", "", "", "", true),
     ("ext.jira.project", "Proyecto donde entran los pedidos", "Project where requests arrive", "SOP", "La clave del proyecto (SOP, SUP…).", "The project key (SOP, SUP…).", false),
     ("ext.jira.filter", "Qué pedidos toma orqen (JQL)", "Which requests orqen takes (JQL)", "project = SOP AND labels = orqen AND statusCategory != Done", "Vacío: los del proyecto con la etiqueta orqen.", "Empty: the project's issues labeled orqen.", false),
-    ("int.jira.project", "Proyecto del equipo", "Team project", "DEV", "Ahí se crea el ticket de desarrollo al cerrar el análisis.", "The development ticket is created there when analysis closes.", false),
+    ("int.jira.project", "Proyecto del equipo", "Team project", "DEV", "Ahí se crea el issue al cerrar el análisis.", "The issue is created there when analysis closes.", false),
     ("int.jira.type", "Tipo de ticket", "Issue type", "Task", "", "", false),
     ("ext.github.repo", "Repositorio (dueño/nombre)", "Repository (owner/name)", "mi-org/soporte", "", "", false),
     ("ext.github.project", "Número de GitHub Project (opcional)", "GitHub Project number (optional)", "7", "Para mover la tarjeta de columna según la etapa.", "To move the card between columns by stage.", false),
@@ -124,7 +124,7 @@ impl ConnectorsEditor {
     fn refresh_choices(&mut self, cx: &mut Context<Self>) {
         if !matches!(self.current, Load::Ready(_)) { return; }
         let draft = self.draft(cx);
-        for (i, kind, role, yaml_role, editor_role) in [(0, self.ext, "external", "externo", Role::Ext), (2, self.int, "internal", "interno", Role::Int)] {
+        for (i, kind, role, yaml_role, editor_role) in [(0, self.ext, "requests", "requests", Role::Ext), (2, self.int, "issues", "issues", Role::Int)] {
             let visible = kind == "github";
             let parent = "repositories";
             let connector = &draft["conectores"][yaml_role];
@@ -167,7 +167,7 @@ impl ConnectorsEditor {
         let r = if role == Role::Ext { "ext" } else { "int" };
         let value = s(&option, "value");
         let draft = self.draft(cx);
-        let y = &draft["conectores"][if role == Role::Ext { "externo" } else { "interno" }];
+        let y = &draft["conectores"][if role == Role::Ext { "requests" } else { "issues" }];
         let selected = if project { s(y, "proyecto") } else { s(y, "repo") };
         if value == selected { return; }
         if project { self.set_input(&format!("{r}.{kind}.project"), value, cx); }
@@ -175,7 +175,7 @@ impl ConnectorsEditor {
             self.set_input(&format!("{r}.github.repo"), value.clone(), cx);
             self.set_input(&format!("{r}.{kind}.project"), String::new(), cx);
             if let Load::Ready(v) = &mut self.current {
-                let y = &mut v["conectores"][if role == Role::Ext { "externo" } else { "interno" }];
+                let y = &mut v["conectores"][if role == Role::Ext { "requests" } else { "issues" }];
                 if y["tipo"].as_str() != Some(kind) { *y = json!({ "tipo": kind }); }
                 if let Some(c) = y.as_object_mut() {
                     if kind == "github" { c.remove("duenio_proyecto"); }
@@ -188,7 +188,7 @@ impl ConnectorsEditor {
     }
 
     fn yaml(&self, role: Role) -> Value {
-        let k = if role == Role::Ext { "externo" } else { "interno" };
+        let k = if role == Role::Ext { "requests" } else { "issues" };
         match &self.current { Load::Ready(v) => v["conectores"][k].clone(), _ => Value::Null }
     }
 
@@ -205,8 +205,8 @@ impl ConnectorsEditor {
 
     /// Puts the saved values in the fields; secrets only say they are saved.
     fn fill(&mut self, v: &Value, cx: &mut Context<Self>) {
-        let ext = &v["conectores"]["externo"];
-        let int = &v["conectores"]["interno"];
+        let ext = &v["conectores"]["requests"];
+        let int = &v["conectores"]["issues"];
         let kind = |x: &Value| match x["tipo"].as_str() { Some("jira") => "jira", Some("github") => "github", Some("asana") => "asana", _ => "none" };
         if kind(ext) != "none" { self.ext = kind(ext); }
         self.int = kind(int);
@@ -218,7 +218,7 @@ impl ConnectorsEditor {
         let mut hints: Vec<(&str, String)> = vec![];
         let es = self.es;
         let saved_hint = |m: String| format!("{} {m} · {}", t(es, "Guardado", "Saved"), t(es, "vacío = mantener", "empty = keep"));
-        // Jira credentials (external, and the internal one when it has its own account)
+        // Jira credentials (requests, and issues when they have their own account)
         for (role, url, user, token) in [(Role::Ext, "jira.url", "jira.user", "jira.token"), (Role::Int, "jirai.url", "jirai.user", "jirai.token")] {
             let y = if role == Role::Ext { ext } else { int };
             if kind(y) != "jira" && !(role == Role::Ext) { continue; }
@@ -332,7 +332,7 @@ impl ConnectorsEditor {
             }
             Value::Object(m)
         };
-        json!({ "conectores": { "externo": Value::Object(ext), "interno": int }, "env": env })
+        json!({ "conectores": { "requests": Value::Object(ext), "issues": int }, "env": env })
     }
 
     /// What is clearly missing, before asking the tool.
@@ -416,7 +416,7 @@ impl ConnectorsEditor {
     fn github_fields(&self, role: Role, cx: &mut Context<Self>) -> AnyElement {
         let external = role == Role::Ext;
         let index = if external { 0 } else { 2 };
-        let y = &self.draft(cx)["conectores"][if external { "externo" } else { "interno" }];
+        let y = &self.draft(cx)["conectores"][if external { "requests" } else { "issues" }];
         let parent = s(y, "repo");
         let selected_project = s(y, "proyecto");
         div().flex().flex_wrap().gap(px(12.)).children([false, true].into_iter().map(|project| {
@@ -498,7 +498,7 @@ impl ConnectorsEditor {
     /// Result of the last test for this role.
     fn result(&self, role: Role) -> Option<AnyElement> {
         let es = self.es;
-        let key = if role == Role::Ext { "external" } else { "internal" };
+        let key = if role == Role::Ext { "requests" } else { "issues" };
         if self.checking { return Some(div().pt(px(2.)).child(ui::progress_slice(if role == Role::Ext { "chk-e" } else { "chk-i" }, 140.)).into_any_element()); }
         let r = self.results.as_ref()?.iter().find(|x| x["role"].as_str() == Some(key))?;
         if r["configured"].as_bool() != Some(true) { return None; }
@@ -528,7 +528,7 @@ impl ConnectorsEditor {
             (Role::Ext, _) => { body.push(self.row(&["ext.asana.project", "ext.asana.tag"])); body.push(self.row(&["ext.asana.token"])); }
             (Role::Int, "jira") => {
                 if self.ext == "jira" {
-                    body.push(self.toggle(self.int_own_account, t(es, "Otro Jira u otra cuenta", "Another Jira or account"), t(es, "Por defecto usa el mismo Jira y la misma cuenta que los requerimientos.", "By default it uses the same Jira and account as requirements."), cx).into_any_element());
+                    body.push(self.toggle(self.int_own_account, t(es, "Otro Jira u otra cuenta", "Another Jira or account"), t(es, "Por defecto usa el mismo Jira y la misma cuenta que los requests.", "By default it uses the same Jira and account as the requests."), cx).into_any_element());
                 }
                 if self.ext != "jira" || self.int_own_account {
                     body.push(self.row(&["jirai.url"]));
@@ -547,12 +547,12 @@ impl ConnectorsEditor {
                 if self.ext != "asana" { body.push(self.row(&["int.asana.token"])); }
             }
             _ => body.push(div().p(px(12.)).rounded(px(10.)).border_1().border_dashed().border_color(c(BORDER_2)).text_size(px(12.5)).text_color(c(MUTED))
-                .child(t(es, "Sin tickets separados: el desarrollo se sigue en el requerimiento.", "Without separate tickets, development is tracked in the requirement.")).into_any_element()),
+                .child(t(es, "Sin sistema de issues: el desarrollo se sigue en el request.", "Without an issues system, development is tracked in the request.")).into_any_element()),
         }
         ui::card().flex_1().min_w(px(420.)).flex().flex_col().overflow_hidden()
             .child(div().p(px(16.)).flex().flex_col().gap(px(4.)).border_b_1().border_color(c(0x161D2D))
                 .child(div().flex().items_center().gap(px(8.)).child(dot(if ext { BLUE } else { MAGENTA }))
-                    .child(div().text_size(px(14.)).font_weight(FontWeight::SEMIBOLD).text_color(c(TEXT)).child(if ext { t(es, "Requerimientos", "Requirements") } else { t(es, "Tickets", "Tickets") }))
+                    .child(div().text_size(px(14.)).font_weight(FontWeight::SEMIBOLD).text_color(c(TEXT)).child(if ext { t(es, "Requests", "Requests") } else { t(es, "Issues", "Issues") }))
                     .child(div().flex_1())
                     .when(!ext, |d| d.child(chip(t(es, "opcional", "optional"), BORDER_2, MUTED))))
                 .child(div().text_size(px(12.)).text_color(c(MUTED)).child(if ext { t(es, "Lo que ve el cliente: ahí entra el pedido, se le responde y aprueba.", "What the client sees: the request arrives there, gets answered and approved.") } else { t(es, "Trabajo de desarrollo: se crea al cerrar el análisis.", "Development work: created when analysis closes.") })))
@@ -597,13 +597,13 @@ impl Render for ConnectorsEditor {
                 let legacy = v["legacy"].as_array().map(|a| !a.is_empty()).unwrap_or(false);
                 div().flex().flex_col().gap(px(16.))
                     .child(div().max_w(px(720.)).text_size(px(12.5)).text_color(c(TEXT_2)).child(t(es,
-                        "Dónde viven los requerimientos y tickets, y con qué cuenta entra orqen. Los tokens se guardan en orqen/.env (Git lo ignora) y nunca se muestran completos. «Probar» verifica la conexión sin guardar.",
+                        "Dónde viven los requests y los issues, y con qué cuenta entra orqen. Los tokens se guardan en orqen/.env (Git lo ignora) y nunca se muestran completos. «Probar» verifica la conexión sin guardar.",
                         "Where the tickets live and which account orqen uses. Tokens go to orqen/.env (ignored by Git) and are never shown in full. «Test» checks the connection without saving.")))
                     .when(legacy, |d| d.child(div().max_w(px(720.)).p(px(12.)).rounded(px(10.)).bg(c(0x1D1810)).border_1().border_color(c(0x4A3A1C)).text_size(px(12.)).text_color(c(0xF5C77A))
                         .child(t(es, "Tenés una configuración anterior. Al guardar se actualizará automáticamente.", "You have an older configuration. Saving updates it automatically."))))
                     .children(self.error.clone().map(|e| div().max_w(px(720.)).flex().items_start().gap(px(8.)).p(px(10.)).rounded(px(9.)).bg(c(0x1F0F14))
                         .child(icon("alert", 13., RED)).child(div().flex_1().text_size(px(12.)).text_color(c(0xFECACA)).child(SharedString::from(e)))))
-                    // external and internal side by side; when the window is narrow the second one wraps below
+                    // requests and issues side by side; when the window is narrow the second one wraps below
                     .child(div().flex().flex_wrap().items_start().gap(px(16.))
                         .child(self.section(Role::Ext, cx))
                         .child(self.section(Role::Int, cx)))

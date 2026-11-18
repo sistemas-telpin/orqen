@@ -15,7 +15,7 @@ Prepare the integration PR for `$ARGUMENTS` from the repository root. `orqen pr`
 
 ## Steps
 
-1. Validate the key (external or internal ticket). Run `orqen pr <KEY>` to read the branch, base, lane, internal ticket, analysis path, spec change, and any existing PR. If the request is ineligible, report the reason and stop.
+1. Validate the key (request or issue). Run `orqen pr <KEY>` to read the branch, base, lane, issue, analysis path, spec change, and any existing PR. If the request is ineligible, report the reason and stop.
 2. Check the current branch with `git branch --show-current`. If it differs from the request branch, ask the user to switch and stop. Mention pending changes that `orqen pr` will commit.
 3. Read the log and diff against the target base (or its remote-tracking branch), review the analysis and OpenSpec artifacts or direct plan, and inspect the tests. Run tests when needed to substantiate a result.
 4. Write a temporary Markdown explanation with the ticket keys, a summary, changes by capability, decisions and deviations, tests mapped to the acceptance criteria, verification steps, and risks or pending work.

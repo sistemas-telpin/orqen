@@ -9,7 +9,7 @@ The analyst makes the decisions. Ask questions that uncover ambiguities affectin
 
 ## Method
 
-1. Before asking questions, read the issue and comments, similar or linked requests, the relevant `openspec/specs`, and the existing implementation.
+1. Before asking questions, read the request and comments, similar or linked requests, the relevant `openspec/specs`, and the existing implementation.
 2. Ask one question at a time, or up to three if inseparable. Wait for an answer before proceeding.
 3. Include your recommended answer, why you recommend it, and what changes if the analyst chooses differently.
 4. Resolve follow-up questions before moving to the next topic. Cover:
@@ -22,7 +22,7 @@ The analyst makes the decisions. Ask questions that uncover ambiguities affectin
    - Whether an operational change can resolve the issue, plus risks and rollback.
 5. Record up to five design-blocking questions only the customer can answer. Do not invent answers.
 6. Record decisions as question-and-answer pairs in `decisions` for `orqen/work/<KEY>/`.
-7. Summarize the scope, exclusions, risks, assumptions, and Given/When/Then acceptance criteria. Ask for explicit approval before proposing a lane or creating the internal ticket.
+7. Summarize the scope, exclusions, risks, assumptions, and Given/When/Then acceptance criteria. Ask for explicit approval before proposing a lane or creating the issue.
 
 Use clear, direct English and closed questions where possible. If the analyst delegates a decision, record the recommended answer as an assumption. Resolve open design decisions before proposing the lane.
 

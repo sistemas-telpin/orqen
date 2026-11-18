@@ -3,8 +3,12 @@
 ```text
 [SUPPORT] → ANALYSIS ⇄ WAITING_CLIENT → DEVELOPMENT ⇄ TESTING
   → [QA_REVIEW, full lane only] → CODE_REVIEW → DELIVERY → ACCEPTANCE → CLOSED
-  Issues that require intervention → BLOCKED
+  Requests that need human intervention → BLOCKED
 ```
+
+A **request** is the client's ticket in the requests system; its **issue** is the team's ticket that orqen creates in the
+issues system when the analysis closes (optional). Each system can be any supported tool (Jira, GitHub, or Asana, set in
+`conectores` in `orqen/config.yaml`). Commands accept either key.
 
 ### Working with the person
 
@@ -27,12 +31,12 @@ orqen works alongside the person; it does not replace them. While someone is on 
 With `SUPPORT_STAGE=on`, `orqen pending` sends a new request to a support person before the analyst. `orqen support` also works with it off, to pass a particular request through support.
 
 1. Start with `/orqen:support <KEY>` or `orqen support <KEY>`. A person from support leads this stage; orqen records them by their Git name (`--person "<name>"` overrides it).
-2. Read the issue, comments, similar requests, and the documented behavior. Look for the answer before asking the person, and ask them only what you cannot find.
+2. Read the request, comments, similar requests, and the documented behavior. Look for the answer before asking the person, and ask them only what you cannot find.
 3. Agree the outcome with the person and obtain their explicit approval of the exact reply to the customer:
 
    | Outcome | When | Next |
    | --- | --- | --- |
-   | `resolved` | The answer needs no change in code, data, or configuration | `ACCEPTANCE`: orqen comments the reply and the customer confirms with `/approve` or `/reject <reason>`. No internal ticket is created |
+   | `resolved` | The answer needs no change in code, data, or configuration | `ACCEPTANCE`: orqen comments the reply and the customer confirms with `/approve` or `/reject <reason>`. No issue is created |
    | `escalate` | A new feature, a defect, a data or configuration change, or anything you cannot answer with confidence | `ANALYSIS`: the analyst starts from `previous_stages.SUPPORT` instead of from zero |
 
 4. Run `orqen complete <KEY> <output.json>`. Never promise dates, scope, or changes to the customer. When unsure, escalate.
@@ -42,7 +46,7 @@ The analyst can still take a `NEW` request directly with `orqen analyze`, and ca
 ### Analysis
 
 1. Start with `/orqen:analyze <KEY>` or `orqen analyze <KEY>`. A human analyst leads the analysis; orqen records them by their Git name (`--analyst "<name>"` overrides it).
-2. Read the issue, comments, and repository, then interview the analyst using the `orqen:grilling` skill. Read the ticket read-only (an MCP for the ticket tool, or `orqen search`). Record questions only the customer can answer and wait for their response.
+2. Read the request, comments, and repository, then interview the analyst using the `orqen:grilling` skill. Read the ticket read-only (an MCP for the ticket tool, or `orqen search`). Record questions only the customer can answer and wait for their response.
 3. Summarize the scope, acceptance criteria, and risks. Obtain the analyst's explicit approval and ask them to confirm the lane.
 
    | Lane | When | Output |
@@ -52,7 +56,7 @@ The analyst can still take a `NEW` request directly with `orqen analyze`, and ca
    | `full` | Broader changes involving architecture, data, integrations, security, or billing | Full OpenSpec proposal, specs, design, and tasks |
 
    With `light` or `full`, `orqen lane <KEY> <lane>` prepares a branch and change. Write the spec with the analyst under `openspec/changes/`.
-4. Run `orqen complete <KEY> <output.json>`. Once validation passes, orqen creates the internal ticket (when `conectores.interno` is configured), links it to the external one, and writes the record under `orqen/work/<KEY>/`. The external ticket is the conversation with the customer; the internal one tracks implementation (`conectores.interno.transiciones`). Rejected customer acceptance starts a new analysis round and a new internal ticket.
+4. Run `orqen complete <KEY> <output.json>`. Once validation passes, orqen creates the issue (when `conectores.issues` is configured), links it to the request, and writes the record under `orqen/work/<KEY>/`. The request is the conversation with the customer; the internal one tracks implementation (`conectores.interno.transiciones`). Rejected customer acceptance starts a new analysis round and a new issue.
 
 ### Operational work
 
@@ -62,12 +66,12 @@ For a data correction, restart, configuration change, or other work without code
 ANALYSIS → EXECUTION → EXECUTION_APPROVAL → APPLICATION → VERIFICATION → ACCEPTANCE → CLOSED
 ```
 
-Propose the steps, rollback, and read-only verification. A person authorized by `APPROVERS_EXECUTION` approves and applies the change. Never execute SQL that modifies data or change services yourself. If verification identifies a code defect, the request returns to analysis. Operational work still creates an internal ticket (when configured); it skips the spec, branch, tests, and PR.
+Propose the steps, rollback, and read-only verification. A person authorized by `APPROVERS_EXECUTION` approves and applies the change. Never execute SQL that modifies data or change services yourself. If verification identifies a code defect, the request returns to analysis. Operational work still creates an issue (when configured); it skips the spec, branch, tests, and PR.
 
 ### Work on a stage
 
 - `orqen pending` lists work for support, analysts, and agents.
-- `orqen take <KEY>` claims an agent stage and prints its instructions, issue context, feedback, and JSON output schema. Use `orqen support` for support and `orqen analyze` for analysis.
+- `orqen take <KEY>` claims an agent stage and prints its instructions, request context, feedback, and JSON output schema. Use `orqen support` for support and `orqen analyze` for analysis.
 - Run `orqen complete <KEY> <output.json>` when the output is ready. Correct validation errors and retry until the command reports success. Stop after completing the stage.
 - If you cannot proceed, run `orqen block <KEY> "<specific reason>"`. Human reviewers use `/approve` or `/reject <reason>` on the ticket.
 - orqen writes `state.json`, `log.md`, and `round-N/analysis.md` and `.json` under `orqen/work/<KEY>/`. Operational rounds also record execution details under `execution/`. The authoritative workflow state is stored under `orqen/state/` or `cli/.state/`, depending on how the project is configured.

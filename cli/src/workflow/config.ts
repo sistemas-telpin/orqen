@@ -23,19 +23,19 @@ function repoRoot(): string {
 }
 
 export interface Config {
-  /** Where the tickets live: external (what the client sees) and optional internal (the team's). See connectors/. */
+  /** Where the tickets live: requests (what the client sees) and optional issues (the team's). See connectors/. */
   connectors: ConnectorsSettings;
   /** SUPPORT_STAGE=on: `orqen pending` sends new requests to the support person first. `orqen support` works either way, and the analyst can still take a NEW one directly. */
   supportStage: boolean;
-  /** analysis = analysts (they also unblock BLOCKED together with code). qa = who decides QA_REVIEW (full lane). Accounts of the external connector. */
+  /** analysis = analysts (they also unblock BLOCKED together with code). qa = who decides QA_REVIEW (full lane). Accounts of the requests system. */
   approvers: { analysis?: string[]; qa?: string[]; code: string[]; client: string[]; execution?: string[] };
   factoryDir: string;       // record and state of each request: orqen/work/<KEY>/ (committed with the branch)
   repoPath: string; baseBranch: string; testCommand: string;
   /** `orqen pr`: integration branch ("desarrollo"/"devel") the request branch is sent to, and the command that opens that PR. */
   develBranch: string; develPrCommand: string;
-  /** Who decides in CODE_REVIEW: the review on the PR in GitHub or `/approve`/`/reject` on the external ticket. */
+  /** Who decides in CODE_REVIEW: the review on the PR in GitHub or `/approve`/`/reject` on the request. */
   codeReviewGate: "github" | "ticket";
-  /** GitHub logins whose reviews count in CODE_REVIEW when codeReviewGate is github (empty = any reviewer). Separate from approvers.code, which are accounts of the external connector. */
+  /** GitHub logins whose reviews count in CODE_REVIEW when codeReviewGate is github (empty = any reviewer). Separate from approvers.code, which are accounts of the requests system. */
   githubReviewers: string[];
   openspecCmd: string;
   stateDir: string; lockMinutes: number; stagesDir: string;
@@ -54,7 +54,7 @@ export function loadConfig(over: Partial<Config> = {}): Config {
   const baseBranch = env("BASE_BRANCH", project?.proyecto.rama_base ?? "main");
   return {
     connectors: project?.conectores
-      ? { external: connectorSettings(project.conectores.externo, process.env, project.general?.prefijos.requerimientos), internal: project.conectores.interno ? connectorSettings(project.conectores.interno, process.env, project.general?.prefijos.tickets) : undefined }
+      ? { requests: connectorSettings(project.conectores.requests, process.env, project.general?.prefijos.requests), issues: project.conectores.issues ? connectorSettings(project.conectores.issues, process.env, project.general?.prefijos.issues) : undefined }
       : legacyConnectors(process.env),
     supportStage: ["on", "true", "1", "yes"].includes(env("SUPPORT_STAGE").toLowerCase()),
     approvers: {

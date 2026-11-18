@@ -1,6 +1,6 @@
 /**
- * `orqen init` / `orqen connectors setup`: asks where the external ticket (what the client sees) and the optional
- * internal ticket (the team's) live. Returns the `conectores` block for config.yaml and the secrets for orqen/.env.
+ * `orqen init` / `orqen connectors setup`: asks where the requests (what the client sees) and the optional
+ * issues (the team's) live. Returns the `conectores` block for config.yaml and the secrets for orqen/.env.
  */
 import { execFileSync } from "node:child_process";
 import type { ConectorYaml, ConectoresYaml } from "../connectors/config.ts";
@@ -26,7 +26,7 @@ function originRepo(repo: string): string {
 /** Secrets that each connector needs and are still missing in orqen/.env. */
 export function missingSecrets(c: ConectoresYaml | null | undefined, env: Record<string, string | undefined>): string[] {
   const out = new Set<string>();
-  for (const x of [c?.externo, c?.interno]) {
+  for (const x of [c?.requests, c?.issues]) {
     if (!x) continue;
     const p = x.credenciales || (x.tipo === "jira" ? "JIRA" : x.tipo === "github" ? "GITHUB" : "ASANA");
     const need = x.tipo === "jira" ? [...(x.url ? [] : [`${p}_URL`]), `${p}_USER`, `${p}_TOKEN`] : x.tipo === "github" ? [] : [`${p}_TOKEN`];
@@ -52,23 +52,23 @@ export async function askConnectors(repo: string, prev: ConectoresYaml | null | 
     if (token) out[`${prefix}_TOKEN`] = token;
   }
 
-  async function ask(role: "externo" | "interno", kind: Kind, before?: ConectorYaml | null, other?: ConectorYaml): Promise<ConectorYaml> {
+  async function ask(role: "requests" | "issues", kind: Kind, before?: ConectorYaml | null, other?: ConectorYaml): Promise<ConectorYaml> {
     const same = (k: Kind) => before?.tipo === k ? before : undefined;
     if (kind === "jira") {
       const b = same("jira");
       let credenciales = b?.credenciales ?? undefined;
-      if (role === "interno" && other?.tipo === "jira") {
-        if (!(await confirmar("Same Jira and account as requirements?", true, false))) credenciales = "JIRA_INTERNAL";
-      } else if (role === "interno") credenciales = undefined;
+      if (role === "issues" && other?.tipo === "jira") {
+        if (!(await confirmar("Same Jira and account as requests?", true, false))) credenciales = "JIRA_INTERNAL";
+      } else if (role === "issues") credenciales = undefined;
       const p = credenciales || "JIRA";
-      if (role === "externo" || credenciales) await jiraCredentials(p);
-      if (role === "externo") {
+      if (role === "requests" || credenciales) await jiraCredentials(p);
+      if (role === "requests") {
         const key = (await texto("Jira project key where the client's requests arrive", String(b?.proyecto ?? ""), false, "SOP")).toUpperCase();
         const filtro = await texto(`Which requests does orqen handle? ${gris("(JQL)")}`,
           b?.filtro ?? `${key ? `project = ${key} AND ` : ""}labels = orqen AND statusCategory != Done`, false);
         return { tipo: "jira", ...(credenciales ? { credenciales } : {}), filtro, ...(b?.transiciones ? { transiciones: b.transiciones } : {}) };
       }
-      const proyecto = (await texto("Jira project key where the team's tickets are created", String(b?.proyecto ?? ""), false, "DEV")).toUpperCase();
+      const proyecto = (await texto("Jira project key where the team's issues are created", String(b?.proyecto ?? ""), false, "DEV")).toUpperCase();
       return { tipo: "jira", ...(credenciales ? { credenciales } : {}), proyecto, tipo_ticket: b?.tipo_ticket ?? "Task", vinculo: b?.vinculo ?? "Relates", ...(b?.transiciones ? { transiciones: b.transiciones } : {}) };
     }
     if (kind === "github") {
@@ -80,7 +80,7 @@ export async function askConnectors(repo: string, prev: ConectoresYaml | null | 
       if (token) out.GITHUB_TOKEN = token;
       return {
         tipo: "github", repo: repoGh, ...(proj ? { proyecto: Number(proj), campo: b?.campo ?? "Status" } : {}),
-        ...(role === "externo" ? { filtro: b?.filtro ?? "is:open label:orqen" } : { etiquetas: b?.etiquetas ?? ["orqen"] }),
+        ...(role === "requests" ? { filtro: b?.filtro ?? "is:open label:orqen" } : { etiquetas: b?.etiquetas ?? ["orqen"] }),
         ...(b?.transiciones ? { transiciones: b.transiciones } : {}),
       };
     }
@@ -89,14 +89,14 @@ export async function askConnectors(repo: string, prev: ConectoresYaml | null | 
       (x) => (/^\d+$/.test(x) ? undefined : "Use the numeric id, e.g. 1204567890123456"));
     const token = await secreto(`Asana personal access token ${gris(previo("ASANA_TOKEN") ? "(Enter to keep it)" : "(Enter to skip)")}`);
     if (token) out.ASANA_TOKEN = token;
-    return { tipo: "asana", proyecto, ...(role === "externo" ? { filtro: b?.filtro ?? "orqen" } : {}), ...(b?.transiciones ? { transiciones: b.transiciones } : {}) };
+    return { tipo: "asana", proyecto, ...(role === "requests" ? { filtro: b?.filtro ?? "orqen" } : {}), ...(b?.transiciones ? { transiciones: b.transiciones } : {}) };
   }
 
-  const extKind = await elegir("Where do customer requirements arrive?", TOOLS, prev?.externo.tipo ?? "jira", false);
-  const externo = await ask("externo", extKind, prev?.externo);
-  const intKind = await elegir("Where does the team track development tickets?", [
-    { value: "none" as const, label: "Nowhere else", hint: "work directly on requirements" }, ...TOOLS,
-  ], prev?.interno?.tipo ?? "none", false);
-  const interno = intKind === "none" ? undefined : await ask("interno", intKind, prev?.interno, externo);
-  return { conectores: { externo, ...(interno ? { interno } : {}) }, env: out };
+  const reqKind = await elegir("Requests system: where do customer requests arrive?", TOOLS, prev?.requests.tipo ?? "jira", false);
+  const requests = await ask("requests", reqKind, prev?.requests);
+  const issKind = await elegir("Issues system: where does the team track development issues?", [
+    { value: "none" as const, label: "Nowhere else", hint: "work directly on the requests" }, ...TOOLS,
+  ], prev?.issues?.tipo ?? "none", false);
+  const issues = issKind === "none" ? undefined : await ask("issues", issKind, prev?.issues, requests);
+  return { conectores: { requests, ...(issues ? { issues } : {}) }, env: out };
 }

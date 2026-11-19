@@ -942,6 +942,12 @@ export class Process {
         const ts = dest(this.cfg.connectors.issues?.transitions);
         if (ts) await this.issues.transition(item.issue, ts);
       }
+      // a finished request also closes its tickets where the column alone does not (GitHub issues in a project)
+      if (isFinal(to)) {
+        const reason = to === "CANCELLED" ? "not_planned" : "completed";
+        await this.requests.finish?.(item.key, reason);
+        if (item.issue) await this.issues?.finish?.(item.issue, reason);
+      }
     } catch (e) {
       console.error(`[orqen] could not update the state on ${this.requests.label}: ${(e as Error).message}`);
     }

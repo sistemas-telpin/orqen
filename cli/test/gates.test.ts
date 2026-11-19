@@ -457,6 +457,7 @@ test("orqen cancel: closes the open PR unmerged, comments both tickets, moves to
   assert.match(jira.last("REQ-1"), /Request cancelled by Ana: El cliente lo retiró\nThe PR was closed without merging/);
   assert.match(jira.last("DEV-9"), /Request cancelled by Ana/);
   assert.deepEqual(jira.transitions["REQ-1"], ["Done"]);   // no CANCELLED transition: falls back to CLOSED's
+  assert.deepEqual(jira.finished, [["REQ-1", "not_planned"], ["DEV-9", "not_planned"]]);   // and both tickets are closed where the column is not enough
   assert.equal(jira.labels["REQ-1"], "CANCELLED");
   await assert.rejects(flow.cancel("REQ-1", "otra vez más", "Ana"), /already CANCELLED/);
   assert.ok(!(await flow.board()).some((b) => b.key === "REQ-1"));

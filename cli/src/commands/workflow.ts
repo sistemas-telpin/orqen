@@ -459,6 +459,9 @@ export async function runWorkflow(cmd: string, rest: string[]) {
           const { existsSync } = await import("node:fs");
           const draft = parseDraft(draftInput());
           const config = leerConfig(cfg.repoPath);
+          const { withSuggestedTransitions } = await import("../lib/connectors-edit.ts");
+          const suggested = await withSuggestedTransitions(draft.conectores, { ...providerEnv(cfg.repoPath), ...draft.env });
+          draft.conectores = suggested.conectores;
           config.conectores = draft.conectores;
           if (config.general) {
             const { updateGeneral } = await import("../lib/general-settings.ts");
@@ -473,7 +476,9 @@ export async function runWorkflow(cmd: string, rest: string[]) {
             const file = join(cfg.repoPath, RUTA_ENV);
             escribirEnv(cfg.repoPath, readFileSync(file, "utf8"), clear);
           }
-          return console.log(`✔ Connectors saved in orqen/config.yaml. Provider accounts saved for this user in ${providerFile()}`);
+          console.log(`✔ Connectors saved in orqen/config.yaml. Provider accounts saved for this user in ${providerFile()}`);
+          if (suggested.added.length) console.log(`  Ticket moves proposed from the project columns for: ${suggested.added.join(", ")} (edit transitions in orqen/config.yaml).`);
+          return;
         }
         if (rest[0] === "setup") {
           const { askConnectors } = await import("../lib/connectors-setup.ts");

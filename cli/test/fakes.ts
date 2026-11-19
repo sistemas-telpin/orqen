@@ -31,6 +31,8 @@ export class FakeTracker implements Tracker {
     return key;
   }
   async link(a: string, b: string) { this.links.push([a, b]); }
+  finished: Array<[string, string]> = [];
+  async finish(key: string, reason: "completed" | "not_planned") { this.finished.push([key, reason]); }
   url(key: string) { return `https://tickets.example.test/${key}`; }
   async check() { return { ok: true, detail: "fake" }; }
   last(key: string) { return this.coms[key].at(-1)!.body; }

@@ -65,6 +65,7 @@ test("GitHub: issues as tickets, comments, labels, and the Status field of a pro
   const s = await server((req, body) => {
     const u = req.url!;
     if (u.startsWith("/search/issues")) return [200, { items: [{ number: 4 }, { number: 9 }] }];
+    if (u === "/repos/acme/app/issues/4" && req.method === "PATCH") return [200, {}];
     if (u === "/repos/acme/app/issues/4" && req.method === "GET") return [200, { number: 4, node_id: "I_4", title: "Export", body: "CSV", state: "open", user: { login: "client" }, labels: labels.map((name) => ({ name })), html_url: "https://github.com/acme/app/issues/4" }];
     if (u.startsWith("/repos/acme/app/issues/4/comments") && req.method === "GET") return [200, [{ id: 1, user: { login: "client" }, body: "/approve", created_at: "x" }]];
     if (u === "/repos/acme/app/issues/4/comments") return [201, {}];
@@ -97,6 +98,10 @@ test("GitHub: issues as tickets, comments, labels, and the Status field of a pro
   assert.deepEqual(s.calls.find((c) => c.path === "/repos/acme/app/issues" && c.method === "POST")!.body.labels, ["orqen", "lane-direct"]);
   assert.ok(s.calls.some((c) => c.body?.variables?.c === "I_12"), "the new issue goes to the project");
   await assert.rejects(gh.ticket("SOP-4"), /not a GH-<number> key/);
+  // a finished request closes the issue (the column alone leaves it open)
+  await gh.finish("GH-4", "not_planned");
+  const closing = s.calls.at(-1)!;
+  assert.deepEqual([closing.method, closing.path, closing.body], ["PATCH", "/repos/acme/app/issues/4", { state: "closed", state_reason: "not_planned" }]);
 });
 
 test("GitHub choices: token-visible repositories and owner projects are paginated without requiring a repo", async (t) => {

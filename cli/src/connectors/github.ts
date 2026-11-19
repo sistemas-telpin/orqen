@@ -178,6 +178,11 @@ export class GithubTracker implements Tracker {
     return true;
   }
 
+  /** Closes the issue (completed, or not planned when the request was cancelled). Idempotent. */
+  async finish(key: string, reason: "completed" | "not_planned") {
+    await this.req("PATCH", `/repos/{repo}/issues/${this.n(key)}`, { state: "closed", state_reason: reason });
+  }
+
   private async project() {
     if (this.projectCache) return this.projectCache;
     const { owner, number, field } = this.s.project!;

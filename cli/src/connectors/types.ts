@@ -53,6 +53,11 @@ export interface Tracker {
   transition(key: string, name: string): Promise<boolean>;
   /** Creates a ticket where this connector creates them (issues system) and returns its key. */
   create(t: NewTicket): Promise<string>;
+  /**
+   * The request is over (delivered or cancelled): closes the ticket where moving it to a column is not enough to close it
+   * (a GitHub issue in a project stays open). Optional: Jira and Asana close through their own transitions.
+   */
+  finish?(key: string, reason: "completed" | "not_planned"): Promise<void>;
   /** Native link between two tickets of this same connector, when the tool has one. */
   link?(from: string, to: string): Promise<void>;
   /** URL of a ticket (used to reference it from another tool). */

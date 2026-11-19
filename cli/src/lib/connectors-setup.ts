@@ -6,6 +6,7 @@ import { execFileSync } from "node:child_process";
 import { connectorSettings, type ConectorYaml, type ConectoresYaml } from "../connectors/config.ts";
 import { GithubTracker } from "../connectors/github.ts";
 import { checkDraft, type CheckResult, type Draft } from "./connectors-edit.ts";
+import { showTransitions, suggestTransitions } from "./transitions-suggest.ts";
 import { confirmar, elegir, gris, p, pc, secreto, texto, textoValidado } from "../ui/console.ts";
 
 type Kind = ConectorYaml["tipo"];
@@ -82,6 +83,7 @@ export async function askConnectors(repo: string, prev: ConectoresYaml | null | 
       const proj = await textoValidado(`GitHub Project number ${gris("(the number in the project URL; empty: issues only)")}`, b?.proyecto ? String(b.proyecto) : "",
         (x) => (!x || /^\d+$/.test(x) ? undefined : "Use the number of the project, e.g. 7 for github.com/orgs/my-org/projects/7"));
       let estado: string | undefined;
+      let transiciones = b?.transiciones;
       if (proj) {
         // Which column of the project holds the work for orqen; "any" takes every open issue of the project.
         try {
@@ -92,6 +94,14 @@ export async function askConnectors(repo: string, prev: ConectoresYaml | null | 
               { value: "__any", label: "Any column", hint: "every open issue of the project" }, ...columns,
             ], b?.estado && columns.some((c) => c.value === b.estado) ? b.estado : "__any", false);
             estado = pick === "__any" ? undefined : pick;
+            // Without transitions the ticket never changes column: propose them from the columns of the project
+            if (!transiciones || !Object.keys(transiciones).length) {
+              const sugeridas = suggestTransitions(role, columns.map((c) => c.value));
+              if (Object.keys(sugeridas).length) {
+                p.log.info(`Move the ticket along the project columns:\n  ${showTransitions(sugeridas)}`);
+                if (await confirmar("Use these moves? (editable later under transitions in orqen/config.yaml)", true, false)) transiciones = sugeridas;
+              }
+            }
           }
         } catch (e) { p.log.warn(`Could not read the columns of project ${proj}: ${(e as Error).message.slice(0, 200)}`); }
       }
@@ -103,7 +113,7 @@ export async function askConnectors(repo: string, prev: ConectoresYaml | null | 
       return {
         tipo: "github", repo: repoGh, ...(proj ? { proyecto: Number(proj), campo: b?.campo ?? "Status", ...(estado ? { estado } : {}) } : {}),
         ...(role === "requests" ? { filtro: filtro || defaultFilter } : { etiquetas: b?.etiquetas ?? ["orqen"] }),
-        ...(b?.transiciones ? { transiciones: b.transiciones } : {}),
+        ...(transiciones ? { transiciones } : {}),
       };
     }
     const b = same("asana");

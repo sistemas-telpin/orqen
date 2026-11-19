@@ -82,3 +82,26 @@ export async function checkDraft(draft: Draft, current: Env): Promise<CheckResul
   };
   return [await one("requests", draft.conectores.requests), await one("issues", draft.conectores.issues)];
 }
+
+/**
+ * A GitHub connector with a Project and no `transiciones` never moves its ticket: fills them from the project's columns
+ * (see transitions-suggest.ts). Used by `orqen connectors set`; the interactive setup asks first. A connector that already
+ * has transitions, or whose columns cannot be read, is left as it is.
+ */
+export async function withSuggestedTransitions(conectores: ConectoresYaml, env: Env): Promise<{ conectores: ConectoresYaml; added: string[] }> {
+  const { suggestTransitions } = await import("./transitions-suggest.ts");
+  const added: string[] = [];
+  const fill = async (role: "requests" | "issues", c?: ConectorYaml | null) => {
+    if (!c || c.tipo !== "github" || !c.proyecto || (c.transiciones && Object.keys(c.transiciones).length)) return c;
+    try {
+      const settings = connectorSettings(c, env);
+      if (settings.kind !== "github") return c;
+      const columns = await new GithubTracker(settings).statuses();
+      const transiciones = suggestTransitions(role, columns.map((x) => x.value));
+      if (!Object.keys(transiciones).length) return c;
+      added.push(role);
+      return { ...c, transiciones };
+    } catch { return c; }
+  };
+  return { conectores: { ...conectores, requests: (await fill("requests", conectores.requests))!, issues: await fill("issues", conectores.issues) }, added };
+}

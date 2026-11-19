@@ -557,6 +557,13 @@ connectors:
 | Claves | las de Jira (`SOP-123`) | `GH-42` (`prefijo` configurable) | `AS-<id>` |
 | Extras | `credentials`, `issue_type`, `operational_type`, `link_type` | `repo`, `project_owner`, `field`, `labels` | `prefix` |
 
+**Que el ticket se mueva.** Sin `transitions`, orqen comenta y pone la etiqueta `orqen-state-…`, pero no cambia la columna. Con un GitHub Project,
+`orqen connectors setup` (y `connectors set`, cuando el conector no trae ninguna) las propone a partir de las columnas del campo `Status`: en los
+requests `ANALYSIS` → la de "in progress", `ACCEPTANCE` → la de "review" y `CLOSED`/`CANCELLED` → la de "done"; en los issues también
+`DEVELOPMENT`, `TESTING`, `QA_REVIEW` y `CODE_REVIEW`. Solo propone lo que tiene una columna clara (en inglés o castellano) y se edita en `config.yaml`.
+Al terminar un pedido (`CLOSED` o `CANCELLED`) orqen además **cierra el issue de GitHub** (completado o "not planned"), aunque el Project
+no tenga la automatización de cerrar al pasar a Done.
+
 Las cuentas y tokens se guardan en `~/.orqen/credentials.env` (`JIRA_*`, `GITHUB_TOKEN`, `ASANA_TOKEN`) y se reutilizan entre repositorios. Una variable de entorno con el mismo nombre (por ejemplo `GITHUB_TOKEN` en CI) gana sobre el archivo. Las copias anteriores en `orqen/.env` se siguen leyendo como compatibilidad, con la menor prioridad; al guardar el conector, sus credenciales se trasladan a la configuración del usuario. `orqen connectors` muestra los dos sistemas y prueba las credenciales;
 `orqen connectors setup` los configura con preguntas. Los comandos aceptan la clave del request o la de su issue.
 

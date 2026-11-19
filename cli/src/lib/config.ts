@@ -31,6 +31,8 @@ export const Config = z.object({
     herramientas: z.array(z.string()).default(["claude"]),
   }),
   stack: Stack,
+  /** Spec-driven development tool: auto (detected), openspec, spec-kit… (see src/sdd). */
+  sdd: z.object({ proveedor: z.string().default("auto") }).optional(),
   /** Where the tickets live (requests = what the client sees, issues = optional team issues). */
   conectores: ConectoresYaml.nullish(),
   entornos: z.object({

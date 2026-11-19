@@ -59,6 +59,7 @@ Older names (still work, with a notice): pending → list requests · qa → rev
 
 JSON for tools (orqen-gui):
   status [KEY] --json · list requests|issues|prs --json · usage --json · tutorial --step <n> --json
+  spec [KEY|change] --json [--dir <worktree>]   the spec in the neutral model of src/sdd (any SDD tool)
   connectors get|check <json>|set <json>|general-get|general-set [--json]
   connectors github-choices <json|-> <requests|issues> <repositories|projects|statuses>
   bootstrap --list --json · bootstrap --describe <stack> --json`;

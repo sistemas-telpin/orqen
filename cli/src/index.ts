@@ -12,6 +12,7 @@ import { VERSION_CLI } from "./lib/system.ts";
 import { mostrarLogo } from "./ui/logo.ts";
 import { usageCommand } from "./lib/usage.ts";
 import { EVAL_HELP, evalCommand, learnCommand } from "./commands/eval.ts";
+import { SPEC_HELP, specCommand } from "./commands/spec.ts";
 
 
 const AYUDA = `
@@ -44,6 +45,7 @@ Commands:
   usage [--json]          AI agents installed on this machine and their quota used
 ${SWARM_HELP}
 ${EVAL_HELP}
+${SPEC_HELP}
   --version, -v           Show version
   --help, -h              Show this help · orqen help internal: agent-only commands and JSON for tools
 
@@ -65,6 +67,7 @@ async function main() {
   if (crudos[0] === "usage") return usageCommand(crudos.slice(1));
   if (crudos[0] === "eval") return evalCommand(crudos.slice(1));
   if (crudos[0] === "learn") return learnCommand(crudos.slice(1));
+  if (crudos[0] === "spec") return specCommand(crudos.slice(1));
   // `orqen env test e2e -- <args>`: everything after `--` goes to the test command untouched
   const sep = crudos.indexOf("--");
   const extra = sep >= 0 ? crudos.slice(sep + 1) : [];

@@ -176,10 +176,12 @@ test("init reuses project-local database scripts without a stack repository", ()
 });
 
 test("orqen init --commit commits only what orqen wrote; without it, init leaves the files uncommitted and explains how", () => {
-  const git = (cwd: string, ...a: string[]) => spawnSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", ...a], { cwd, encoding: "utf8" });
+  const git = (cwd: string, ...a: string[]) => spawnSync("git", a, { cwd, encoding: "utf8" });
   // a repository with history, and a file of the person's own that init must not touch
   const nuevo = () => {
     const r = repoTemporal({ "README.md": "x", "package.json": { name: "x", scripts: { test: "node --test" } } });
+    git(r, "config", "user.name", "orqen-test");
+    git(r, "config", "user.email", "test@example.com");
     git(r, "add", "-A"); git(r, "commit", "-qm", "first");
     writeFileSync(join(r, "mine.txt"), "mine");
     git(r, "add", "mine.txt");

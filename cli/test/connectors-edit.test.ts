@@ -1,7 +1,7 @@
 /** Connectors editor of the desktop app: `orqen connectors get | check - | set -`. No network. */
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
@@ -83,7 +83,7 @@ test("orqen connectors set / get / check: what the app's editor runs", () => {
   assert.equal(set.codigo, 0, set.error);
   const cfg = parse(readFileSync(join(repo, "orqen/config.yaml"), "utf8"));
   assert.equal(cfg.conectores.requests.transiciones.DELIVERY, "Entregado");
-  assert.doesNotMatch(readFileSync(join(repo, "orqen/.env"), "utf8"), /secret-token-1234/);
+  if (existsSync(join(repo, "orqen/.env"))) assert.doesNotMatch(readFileSync(join(repo, "orqen/.env"), "utf8"), /secret-token-1234/);
   assert.match(readFileSync(join(catalogo, "user", "providers.env"), "utf8"), /JIRA_TOKEN=secret-token-1234/);
 
   const get = orqen(repo, undefined, "connectors", "get", "--json");
@@ -112,7 +112,7 @@ test("orqen connectors set / get / check: what the app's editor runs", () => {
   const savedGeneral = parse(readFileSync(join(repo, "orqen/config.yaml"), "utf8"));
   assert.equal(savedGeneral.general.prefijos.requests, "REQ");
   assert.equal(savedGeneral.conectores.requests.filtro, draft.conectores.requests.filtro);
-  assert.doesNotMatch(readFileSync(join(repo, "orqen/.env"), "utf8"), /secret-token-1234/);
+  if (existsSync(join(repo, "orqen/.env"))) assert.doesNotMatch(readFileSync(join(repo, "orqen/.env"), "utf8"), /secret-token-1234/);
   // Saving providers later preserves the independently configured prefixes.
   const saveProviders = orqen(repo, JSON.stringify(draft), "connectors", "set", "-");
   assert.equal(saveProviders.codigo, 0, saveProviders.error);

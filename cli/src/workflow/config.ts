@@ -72,35 +72,38 @@ export function loadConfig(over: Partial<Config> = {}): Config {
   const localState = join(main, "cli", ".state");
   const baseBranch = env("BASE_BRANCH", project?.proyecto.rama_base ?? "main");
   const credentials = providerEnv(existsSync(join(repoPath, "orqen", ".env")) ? repoPath : main);
+  // orqen/config.yaml (flujo) is the shared configuration; a variable in orqen/.env or the environment overrides it
+  const f = project?.flujo;
+  const list = (k: string, fromYaml?: string[]) => process.env[k] !== undefined && process.env[k] !== "" ? split(env(k)) : fromYaml ?? [];
   return {
     connectors: project?.conectores
       ? { requests: connectorSettings(project.conectores.requests, credentials, project.general?.prefijos.requests), issues: project.conectores.issues ? connectorSettings(project.conectores.issues, credentials, project.general?.prefijos.issues) : undefined }
       : legacyConnectors(credentials),
-    supportStage: ["on", "true", "1", "yes"].includes(env("SUPPORT_STAGE").toLowerCase()),
+    supportStage: env("SUPPORT_STAGE") ? ["on", "true", "1", "yes"].includes(env("SUPPORT_STAGE").toLowerCase()) : !!f?.soporte,
     approvers: {
-      analysis: split(env("APPROVERS_ANALYSIS")),
-      qa: split(env("APPROVERS_QA")),
-      code: split(env("APPROVERS_CODE")),
-      client: split(env("APPROVERS_CLIENT")),
-      execution: split(env("APPROVERS_EXECUTION")),
+      analysis: list("APPROVERS_ANALYSIS", f?.aprobadores.analisis),
+      qa: list("APPROVERS_QA", f?.aprobadores.qa),
+      code: list("APPROVERS_CODE", f?.aprobadores.codigo),
+      client: list("APPROVERS_CLIENT", f?.aprobadores.cliente),
+      execution: list("APPROVERS_EXECUTION", f?.aprobadores.ejecucion),
     },
     factoryDir: env("FACTORY_DIR") || join(repoPath, "orqen", "work"),
     repoPath,
     baseBranch,
-    testCommand: env("TEST_COMMAND", "npm test"),
-    develBranch: env("DEVEL_BRANCH", "desarrollo"),
-    develPrCommand: env("DEVEL_PR_COMMAND", 'gh pr create --base {base} --head {branch} --title "{key}: {title}" --body-file {body}'),
+    testCommand: env("TEST_COMMAND") || f?.comando_tests || "npm test",
+    develBranch: env("DEVEL_BRANCH") || f?.rama_desarrollo || "desarrollo",
+    develPrCommand: env("DEVEL_PR_COMMAND") || f?.comando_pr || 'gh pr create --base {base} --head {branch} --title "{key}: {title}" --body-file {body}',
     // "jira" is the name used by earlier versions for "ticket"
-    codeReviewGate: ["ticket", "jira"].includes(env("CODE_REVIEW_GATE", "github")) ? "ticket" : "github",
-    githubReviewers: split(env("GITHUB_REVIEWERS")),
+    codeReviewGate: ["ticket", "jira"].includes(env("CODE_REVIEW_GATE") || f?.code_review.gate || "github") ? "ticket" : "github",
+    githubReviewers: list("GITHUB_REVIEWERS", f?.code_review.revisores),
     openspecCmd: env("OPENSPEC_CMD") && env("OPENSPEC_CMD") !== "openspec" ? env("OPENSPEC_CMD") : existsSync(localOpenSpec) ? localOpenSpec : "openspec",
     stateDir: envL("ORQEN_STATE_DIR", "REC_STATE_DIR") || (existsSync(localState) || !project ? localState : join(main, "orqen", "state")),
     stagesDir: stages ?? join(TEMPLATES_DIR, "stages"),
     environment: project?.entornos,
-    lockMinutes: Number(envL("ORQEN_LOCK_MIN", "REC_LOCK_MIN", "90")),
+    lockMinutes: Number(envL("ORQEN_LOCK_MIN", "REC_LOCK_MIN") || f?.lock_min || 90),
     // Headless agent command for `orqen cycle`. {prompt} is replaced (already escaped).
     agentCmd: env("AGENT_CMD") || project?.agente.comando || "claude -p --permission-mode acceptEdits",
-    intervalSec: Number(envL("ORQEN_INTERVAL_SEC", "REC_INTERVAL_SEC", "120")),
+    intervalSec: Number(envL("ORQEN_INTERVAL_SEC", "REC_INTERVAL_SEC") || f?.intervalo_seg || 120),
     ...over,
   };
 }

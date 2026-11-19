@@ -19,11 +19,38 @@ export const General = z.object({ prefijos: z.preprocess((v) => {
   return { ...rest, requests: rest.requests ?? requerimientos, issues: rest.issues ?? tickets };
 }, z.object({ requests: Prefijo, issues: Prefijo })) });
 
+/** A list of accounts: YAML list or "a, b" text. */
+const Cuentas = z.preprocess((v) => typeof v === "string" ? v.split(",").map((s) => s.trim()).filter(Boolean) : v ?? [], z.array(z.string()));
+/**
+ * How the request flow works in this repository (shared, versioned). A variable in orqen/.env or the environment with the
+ * old name (SUPPORT_STAGE, APPROVERS_*, CODE_REVIEW_GATE…) still overrides each value.
+ */
+export const Flujo = z.object({
+  /** SUPPORT_STAGE: new requests go to a support person first (/orqen:support works either way). */
+  soporte: z.boolean().default(false),
+  /** Accounts of the requests system tool (Jira account id, GitHub login, Asana user id). Empty = anyone. */
+  aprobadores: z.object({
+    analisis: Cuentas, qa: Cuentas, codigo: Cuentas, cliente: Cuentas, ejecucion: Cuentas,
+  }).partial().default({}),
+  /** Who decides in CODE_REVIEW: github (review on the PR) or ticket (/approve and /reject comments); revisores = GitHub logins that count. */
+  code_review: z.object({ gate: z.enum(["github", "ticket"]).default("github"), revisores: Cuentas }).partial().default({}),
+  /** Branch the integration PR goes to (DEVEL_BRANCH) and the command that opens it (DEVEL_PR_COMMAND). */
+  rama_desarrollo: z.string().nullish(),
+  comando_pr: z.string().nullish(),
+  /** Full test suite run in TESTING (TEST_COMMAND). */
+  comando_tests: z.string().nullish(),
+  /** Minutes a taken request stays reserved (ORQEN_LOCK_MIN) and seconds between rounds of `orqen cycle --loop` (ORQEN_INTERVAL_SEC). */
+  lock_min: z.number().int().positive().nullish(),
+  intervalo_seg: z.number().int().positive().nullish(),
+});
+export type Flujo = z.infer<typeof Flujo>;
+
 export const Config = z.object({
   version: z.literal(1),
   orqen: z.object({ cli: z.string(), kit: z.string() }),
   proyecto: z.object({ nombre: z.string(), rama_base: z.string().default("main") }),
   general: General.optional(),
+  flujo: Flujo.optional(),
   agente: z.object({ comando: z.string().nullish() }).default({}),
   openspec: z.object({
     version: z.string().nullish(),

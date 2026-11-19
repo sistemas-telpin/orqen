@@ -6,7 +6,6 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { parse, stringify } from "yaml";
-import { hash } from "../src/lib/kit.ts";
 import { MONOREPO, repoTemporal } from "./helpers.ts";
 
 const CLI = fileURLToPath(new URL("../src/index.ts", import.meta.url));
@@ -94,11 +93,9 @@ test("orqen update --yes reports current files and preserves user edits", () => 
   assert.equal(r1.codigo, 0, r1.salida);
   assert.match(r1.salida, /up to date/);
 
-  // Simulate an edited guide and an outdated environment template.
+  // Simulate an edited guide and an older kit.
   writeFileSync(join(repo, "orqen/stages/delivery.md"), "# Local delivery guide\n");
   const manifest = JSON.parse(readFileSync(join(repo, "orqen/manifest.json"), "utf8"));
-  writeFileSync(join(repo, "orqen/.env.example"), "OLD=1\n");
-  manifest.archivos["orqen/.env.example"] = hash("OLD=1\n");
   manifest.kit = "0.0.9";
   writeFileSync(join(repo, "orqen/manifest.json"), JSON.stringify(manifest));
 
@@ -107,7 +104,8 @@ test("orqen update --yes reports current files and preserves user edits", () => 
   assert.match(r2.salida, /Kit 0\.0\.9 → 0\.1\.0/);
   assert.equal(readFileSync(join(repo, "orqen/stages/delivery.md"), "utf8"), "# Local delivery guide\n");
   assert.ok(existsSync(join(repo, "orqen/stages/delivery.md.orqen-new")));
-  assert.match(readFileSync(join(repo, "orqen/.env.example"), "utf8"), /providers\.env/);
+  // init writes the flow settings into config.yaml, where the team edits them
+  assert.match(readFileSync(join(repo, "orqen/config.yaml"), "utf8"), /flujo:[\s\S]*rama_desarrollo: desarrollo/);
 });
 
 test("orqen update prompts for init when configuration is absent", () => {

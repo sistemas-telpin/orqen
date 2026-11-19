@@ -8,7 +8,6 @@ import { basename, resolve } from "node:path";
 import { agentesInstalados, comandoRapido, explorarConAgente, explorarRapidoAislado, type ResultadoExploracion } from "../lib/agent.ts";
 import { ARCHIVO_CONFIG, entornosDesdeStack, escribirConfig, existeConfig, leerConfig, type Config } from "../lib/config.ts";
 import { detectar } from "../lib/detect.ts";
-import { escribirEnv, leerEnv, RUTA_ENV } from "../lib/env.ts";
 import { checkSummary, missingSecrets, setupConnectorsStep } from "../lib/connectors-setup.ts";
 import { checkDraft, parseDraft, type Draft } from "../lib/connectors-edit.ts";
 import { providerEnv, providerFile, saveProviders } from "../lib/provider-credentials.ts";
@@ -145,7 +144,6 @@ export async function init(o: OpcionesInit) {
   const rama = await texto("Base branch for request branches and pull requests", ramaBase(repo), yes);
 
   const previous = existeConfig(repo) ? leerConfig(repo) : undefined;
-  const datosEnv = leerEnv(repo) ? undefined : {};
 
   // Connectors: what goes in config.yaml (project, filter…) and the provider accounts, shared by this user's repositories.
   const conectores = await prepararConectores(repo, previous?.conectores, o, yes);
@@ -178,6 +176,8 @@ export async function init(o: OpcionesInit) {
     stack,
     ...(conectores?.conectores ?? previous?.conectores ? { conectores: conectores?.conectores ?? previous?.conectores } : {}),
     ...(previous?.general ? { general: previous.general } : {}),
+    // how the flow works (shared): kept as is, or the defaults written out so the team sees what can be set
+    flujo: previous?.flujo ?? { soporte: false, aprobadores: { analisis: [], qa: [], codigo: [], cliente: [], ejecucion: [] }, code_review: { gate: "github", revisores: [] }, rama_desarrollo: "desarrollo" },
     entornos: pre ? pre.entornos : entornosDesdeStack(stack),
   };
   const vars = { RESUMEN_STACK: resumenStack(stack), BASE_BRANCH: config.proyecto.rama_base, AGENT_CMD: comandoAgente ? `${comandoAgente}` : "claude -p --permission-mode acceptEdits" };
@@ -196,10 +196,6 @@ export async function init(o: OpcionesInit) {
   }
   escribirConfig(repo, config);
   const res = await aplicar(repo, plan, (c) => resolverConflicto(c, yes));
-  if (datosEnv) {
-    escribirEnv(repo, readFileSync(join(repo, "orqen", ".env.example"), "utf8"), datosEnv);
-    p.log.success(`${RUTA_ENV} created ${gris("(ignored by Git)")}`);
-  }
   const env = providerEnv(repo);
   const faltanEnv = config.conectores ? missingSecrets(config.conectores, env) : [];
   const lado = res.filter((r) => r.accion === "guardado-al-lado");

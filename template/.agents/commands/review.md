@@ -28,5 +28,5 @@ Run the QA review of `$ARGUMENTS` with the QA person who invoked this command. O
    - Approve (only with a passing run): `orqen review <KEY> approve --report <report.md> --person "<QA name>" --agent qa`. The request moves to `CODE_REVIEW`, where the senior reviews the PR.
    - Request changes: `orqen review <KEY> reject --reason "<what development must fix>" --report <report.md> --person "<QA name>" --agent qa`. The request returns to `DEVELOPMENT` with the reason as feedback.
 
-   orqen saves the report as `orqen/work/<KEY>/round-<N>/qa-review-<n>.md` and comments the decision on the request and on its issue (when there is one). QA can also decide by commenting `/approve` or `/reject <reason>` on the request (limited to `APPROVERS_QA`).
+   orqen saves the report as `orqen/work/<KEY>/round-<N>/qa-review-<n>.md` and comments the decision on the request and on its issue (when there is one). QA can also decide by commenting `/approve` or `/reject <reason>` on the request (limited to `flujo.aprobadores.qa` in `orqen/config.yaml`).
 9. Stop the processes with `orqen env down` if they are still running and report the next step: approved → the senior, with `/orqen:approve <KEY>`; changes requested → development, with `/orqen:implement <KEY>`.

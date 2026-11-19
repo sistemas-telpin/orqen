@@ -15,7 +15,6 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSy
 import { dirname, join, relative } from "node:path";
 import { VERSION_CLI } from "./system.ts";
 import { TEMPLATES_DIR } from "./template-assets.ts";
-import { completarEnv } from "./env.ts";
 import { fusionarConfigOpenSpec } from "./openspec.ts";
 import { stageGuideFile } from "./stage-guides.ts";
 
@@ -81,7 +80,6 @@ export function archivosDelKit(vars: VariablesKit, repo: string): Record<string,
   for (const f of listar(join(TEMPLATES_DIR, "stages"))) out[`${DIR_ORQEN}/stages/${stageGuideFile(join(repo, DIR_ORQEN, "stages"), f)}`] = render(readFileSync(join(TEMPLATES_DIR, "stages", f), "utf8"), vars);
   for (const f of listar(join(TEMPLATES_DIR, ".agents"))) out[`${DIR_ORQEN}/plugin/${f}`] = render(readFileSync(join(TEMPLATES_DIR, ".agents", f), "utf8"), vars);
   out[`${DIR_ORQEN}/work/README.md`] = render(readFileSync(join(TEMPLATES_DIR, "orqen", "work", "README.md"), "utf8"), vars);
-  out[`${DIR_ORQEN}/.env.example`] = completarEnv(readFileSync(join(TEMPLATES_DIR, "env.example"), "utf8"), { BASE_BRANCH: vars.BASE_BRANCH, AGENT_CMD: vars.AGENT_CMD });
   return out;
 }
 
@@ -244,8 +242,5 @@ export async function aplicar(
   manifest.kit = VERSION_CLI;
   escribir(repo, ARCHIVO_MANIFEST, JSON.stringify(manifest, null, 2) + "\n");
 
-  // Create a Git-ignored orqen/.env from the example if needed.
-  const env = join(repo, DIR_ORQEN, ".env"), ejemplo = join(repo, DIR_ORQEN, ".env.example");
-  if (!existsSync(env) && existsSync(ejemplo)) writeFileSync(env, readFileSync(ejemplo, "utf8"));
   return out;
 }

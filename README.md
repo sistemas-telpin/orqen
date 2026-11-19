@@ -66,7 +66,7 @@ pantalla, `Get-UICulture`; en macOS, `AppleLanguages`; en Linux, `LC_ALL` / `LAN
 ## Soporte (opcional): `/orqen:support SOP-1234`
 
 Es la etapa **antes del analista**: la persona que recibe el reclamo intenta responderle al cliente sin llegar a un análisis ni a
-un desarrollo. `SUPPORT_STAGE` (en `orqen/.env`, apagada por defecto) solo decide si `orqen list requests` manda los pedidos nuevos a soporte: con `on` aparecen primero ahí; con `off`, el flujo es el de siempre
+un desarrollo. `flujo.soporte` (en `orqen/config.yaml`, apagada por defecto) solo decide si `orqen list requests` manda los pedidos nuevos a soporte: con `on` aparecen primero ahí; con `off`, el flujo es el de siempre
 (`NEW` → `ANALYSIS`).
 
 ```mermaid
@@ -430,8 +430,8 @@ actualizan solos; para los editados elegís conservar, reemplazar o dejar una co
 
 | Ruta                             | Para qué                                                                                       |
 | -------------------------------- | ---------------------------------------------------------------------------------------------- |
-| `orqen/config.yaml`              | Stack, cómo se levanta cada parte, migraciones, tests, rama base, agente y **conectores**       |
-| `orqen/.env`                     | Variables del proyecto y aprobadores (local, ignorado por git)                                |
+| `orqen/config.yaml`              | Stack, cómo se levanta cada parte, migraciones, tests, rama base, agente, **conectores** y **flujo** (aprobadores, gate del code review, rama de integración) |
+| `orqen/.env`                     | Opcional: overrides locales con variables (ignorado por git). `orqen init` ya no lo crea      |
 | `~/.orqen/providers.env`          | Cuentas y tokens de proveedores, compartidos por el usuario entre repositorios                 |
 | `orqen/stages/`                  | Guías de cada etapa (editables)                                                                |
 | `orqen/plugin/`                  | Comandos de Claude Code y el skill de grilling                                                 |
@@ -441,21 +441,47 @@ actualizan solos; para los editados elegís conservar, reemplazar o dejar una co
 | `AGENTS.md` y `CLAUDE.md`        | Instrucciones del proceso para los agentes                                                     |
 | `openspec/`                      | Specs y configuración de OpenSpec                                                              |
 
-### Variables principales
+### Configuración del flujo
 
-Las credenciales de proveedores van en `~/.orqen/providers.env`; las opciones de ejecución y aprobadores, en `orqen/.env`.
+Cómo trabaja el equipo se configura en `orqen/config.yaml`, versionado y compartido. `orqen init` escribe la sección con los valores por defecto:
+
+```yaml
+flujo:
+  soporte: false                 # true: los pedidos nuevos van primero a soporte (/orqen:support anda igual)
+  aprobadores:                   # cuentas del sistema de requests; vacío = cualquiera
+    analisis: []
+    qa: []
+    codigo: [seni]               # también destraban un BLOCKED
+    cliente: []
+    ejecucion: []
+  code_review:
+    gate: github                 # github (review en el PR) | ticket (/approve y /reject en el ticket)
+    revisores: []                # usuarios de GitHub cuyos reviews cuentan; vacío = cualquiera
+  rama_desarrollo: desarrollo    # adónde va el PR de integración
+  # comando_pr: 'gh pr create --base {base} --head {branch} --title "{key}: {title}" --body-file {body}'   # entre comillas: tiene ": "
+  # comando_tests: npm test
+  # lock_min: 90
+  # intervalo_seg: 120
+```
+
+Cada valor se puede pisar en una máquina con la variable de la tabla de abajo, en `orqen/.env` (ignorado por git) o en el entorno
+(por ejemplo en CI). Así siguen andando las instalaciones que tenían todo en `orqen/.env`.
+
+### Variables
+
+Las credenciales de proveedores van en `~/.orqen/providers.env`. El resto son overrides de `orqen/config.yaml`.
 
 | Variable                                                     | Para qué                                                                                   |
 | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------ |
 | `JIRA_URL`, `JIRA_USER`, `JIRA_TOKEN`, `JIRA_DEPLOYMENT`      | Conexión a Jira (`cloud` o `server`). Otro Jira: otro prefijo y `credenciales: <PREFIJO>` en el conector |
 | `GITHUB_TOKEN`                                               | GitHub Issues/Projects (vacío = la sesión de `gh`)                                         |
 | `ASANA_TOKEN`                                                | Asana (token personal)                                                                     |
-| `SUPPORT_STAGE`                                              | `on`: `orqen list requests` manda los pedidos nuevos primero a soporte. Por defecto `off`; `/orqen:support` funciona con cualquiera de los dos valores. No hay lista de personas de soporte: puede tomarlo cualquiera |
-| `APPROVERS_ANALYSIS`, `APPROVERS_QA`, `APPROVERS_CODE`, `APPROVERS_CLIENT`, `APPROVERS_EXECUTION` | Quién puede decidir en cada gate, con cuentas del sistema de requests (vacío = cualquiera). `APPROVERS_CODE` también destraba un BLOCKED |
-| `CODE_REVIEW_GATE`, `GITHUB_REVIEWERS`                       | Quién decide en CODE_REVIEW: `github` (review en el PR, por defecto) o `ticket` (`/approve` y `/reject` en el ticket; `jira` sigue funcionando). `GITHUB_REVIEWERS`: usuarios de GitHub cuyos reviews cuentan (vacío = cualquiera) |
-| `BASE_BRANCH`, `TEST_COMMAND`                                | Rama base de las ramas de pedidos y suite por defecto (si `config.yaml` no define tests)       |
-| `DEVEL_BRANCH`, `DEVEL_PR_COMMAND`                           | Rama de integración y comando que abre el PR (`orqen pr`)                                  |
-| `AGENT_CMD`, `ORQEN_INTERVAL_SEC`, `ORQEN_LOCK_MIN`          | Agente del modo desatendido, intervalo del ciclo y vencimiento del lock por pedido         |
+| `SUPPORT_STAGE` (`flujo.soporte`)                          | `on`: `orqen list requests` manda los pedidos nuevos primero a soporte. Por defecto `off`; `/orqen:support` funciona con cualquiera de los dos valores. No hay lista de personas de soporte: puede tomarlo cualquiera |
+| `APPROVERS_ANALYSIS`, `APPROVERS_QA`, `APPROVERS_CODE`, `APPROVERS_CLIENT`, `APPROVERS_EXECUTION` (`flujo.aprobadores`) | Quién puede decidir en cada gate, con cuentas del sistema de requests (vacío = cualquiera). `APPROVERS_CODE` también destraba un BLOCKED |
+| `CODE_REVIEW_GATE`, `GITHUB_REVIEWERS` (`flujo.code_review`) | Quién decide en CODE_REVIEW: `github` (review en el PR, por defecto) o `ticket` (`/approve` y `/reject` en el ticket; `jira` sigue funcionando). `GITHUB_REVIEWERS`: usuarios de GitHub cuyos reviews cuentan (vacío = cualquiera) |
+| `BASE_BRANCH`, `TEST_COMMAND`                                | Rama base (`proyecto.rama_base`) y suite de TESTING (`flujo.comando_tests`)                 |
+| `DEVEL_BRANCH`, `DEVEL_PR_COMMAND`                           | Rama de integración y comando que abre el PR (`flujo.rama_desarrollo`, `flujo.comando_pr`) |
+| `AGENT_CMD`, `ORQEN_INTERVAL_SEC`, `ORQEN_LOCK_MIN`          | Agente del modo desatendido (`agente.comando`), intervalo del ciclo y vencimiento del lock (`flujo.intervalo_seg`, `flujo.lock_min`) |
 
 ## App de escritorio
 

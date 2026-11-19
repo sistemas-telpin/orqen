@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, realpathSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { test } from "node:test";
 import { loadConfig, mainWorktree } from "../src/workflow/config.ts";
 import { GitWorkspace } from "../src/workflow/workspace.ts";
@@ -12,7 +12,7 @@ import { testConnectors } from "./fakes.ts";
 const git = (cwd: string, ...a: string[]) => execFileSync("git", a, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
 
 function repoWithWorktree() {
-  const base = realpathSync(mkdtempSync(join(tmpdir(), "orqen-wt-")));
+  const base = realpathSync.native(mkdtempSync(join(tmpdir(), "orqen-wt-")));   // native: expands Windows short names (ENZO-S~1)
   const main = join(base, "main");
   mkdirSync(main);
   git(main, "init", "-q", "-b", "main");
@@ -39,7 +39,7 @@ test("a worktree uses the main worktree's state dir and orqen/.env", () => {
   try {
     process.chdir(wt);
     const cfg = loadConfig();
-    assert.equal(cfg.repoPath, wt);
+    assert.equal(resolve(cfg.repoPath), wt);   // git prints C:/… on Windows
     assert.equal(cfg.stateDir, join(main, "cli", ".state"));   // no orqen/config.yaml in this repo: the legacy state dir, still the main one
     assert.equal(process.env.ORQEN_WT_TEST, "from-main");
   } finally {

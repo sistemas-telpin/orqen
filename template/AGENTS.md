@@ -42,7 +42,7 @@ orqen works alongside the person; it does not replace them. While someone is on 
 
 ### Support (optional)
 
-With `SUPPORT_STAGE=on`, `orqen list requests` sends a new request to a support person before the analyst. `orqen support` also works with it off, to pass a particular request through support.
+With `flujo.soporte: true` in `orqen/config.yaml` (or `SUPPORT_STAGE=on`), `orqen list requests` sends a new request to a support person before the analyst. `orqen support` also works with it off, to pass a particular request through support.
 
 1. Start with `/orqen:support <KEY>` or `orqen support <KEY>`. A person from support leads this stage; orqen records them by their Git name (`--person "<name>"` overrides it).
 2. Read the request, comments, similar requests, and the documented behavior. Look for the answer before asking the person, and ask them only what you cannot find.
@@ -80,7 +80,7 @@ For a data correction, restart, configuration change, or other work without code
 ANALYSIS → EXECUTION → EXECUTION_APPROVAL → APPLICATION → VERIFICATION → ACCEPTANCE → CLOSED
 ```
 
-Propose the steps, rollback, and read-only verification. A person authorized by `APPROVERS_EXECUTION` approves and applies the change. Never execute SQL that modifies data or change services yourself. If verification identifies a code defect, the request returns to analysis. Operational work still creates an issue (when configured); it skips the spec, branch, tests, and PR.
+Propose the steps, rollback, and read-only verification. A person authorized by `flujo.aprobadores.ejecucion` (`APPROVERS_EXECUTION`) approves and applies the change. Never execute SQL that modifies data or change services yourself. If verification identifies a code defect, the request returns to analysis. Operational work still creates an issue (when configured); it skips the spec, branch, tests, and PR.
 
 ### Work on a stage
 
@@ -97,7 +97,7 @@ Propose the steps, rollback, and read-only verification. A person authorized by 
 ### Integration PR, QA, and code review
 
 - `TESTING` opens no PR. The only PR is the integration PR to `DEVEL_BRANCH`, opened with `/orqen:pr` (`orqen pr <KEY> <explanation.md>`) from the request branch. orqen commits pending changes, pushes, and opens or updates it.
-- Only the **full lane** goes through `QA_REVIEW` after `TESTING`; the direct and light lanes go straight to `CODE_REVIEW`. QA runs `/orqen:review <KEY>`: it checks on screen the e2e of the change (`TESTING` already ran the whole regression) and records the decision with `orqen review <KEY> approve|reject [--reason "<what to fix>"] [--report <report.md>]`. Approval moves to `CODE_REVIEW`; rejection returns to `DEVELOPMENT` with the reason as feedback. QA can also comment `/approve` or `/reject <reason>` on the ticket (limited to `APPROVERS_QA`).
+- Only the **full lane** goes through `QA_REVIEW` after `TESTING`; the direct and light lanes go straight to `CODE_REVIEW`. QA runs `/orqen:review <KEY>`: it checks on screen the e2e of the change (`TESTING` already ran the whole regression) and records the decision with `orqen review <KEY> approve|reject [--reason "<what to fix>"] [--report <report.md>]`. Approval moves to `CODE_REVIEW`; rejection returns to `DEVELOPMENT` with the reason as feedback. QA can also comment `/approve` or `/reject <reason>` on the ticket (limited to `flujo.aprobadores.qa` in `orqen/config.yaml`).
 - The senior decides with `/orqen:approve <KEY>`. Optionally first a report (step 3 of `/orqen:approve`): review the PR diff read-only against the analysis, spec or plan, and acceptance criteria, and give a verdict plus each finding with its severity, `file:line`, impact, and possible solutions; record it with `orqen code-review <KEY> <report.md> --verdict <approve|minor|reject>` (it does not change the stage). The decision is recorded with `orqen approve <KEY>` or `orqen approve <KEY> --changes <comment.md>`: with the default `CODE_REVIEW_GATE=github` orqen posts it as a review on the PR with the senior's `gh` session (limited to `GITHUB_REVIEWERS` when set), moves to `DELIVERY` on approval, and returns to `DEVELOPMENT` on "changes requested" (the text becomes feedback for the agent). Reviews made directly on GitHub count too. Only reviews on the PR's current head count, so a later push needs a new review. With `CODE_REVIEW_GATE=ticket`, the decision is recorded on the tickets (or the senior comments `/approve` or `/reject <reason>` there).
 - `orqen approve` refuses a PR whose CI is failing or still running, or that conflicts with the development branch (`orqen list prs` shows both): request changes instead (conflicts go back to development to update the branch), or pass `--force` only when the senior explicitly says why it can be approved anyway. When `gh` cannot read the checks they show as `unknown` and do not block.
 - orqen never merges the PR. Once approved, a person merges it by hand into the development branch; orqen detects the merge (`orqen list prs` shows the ones still waiting) and comments it on the tickets. When orqen cannot read the PR, the person who merged it confirms it with `orqen merged <KEY>`.

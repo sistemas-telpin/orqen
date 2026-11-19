@@ -20,13 +20,13 @@ test("installs the kit idempotently", async () => {
 
   assert.ok(existsSync(join(repo, "orqen/stages/development.md")));
   assert.ok(existsSync(join(repo, "orqen/plugin/.claude-plugin/plugin.json")));
-  assert.ok(existsSync(join(repo, "orqen/.env")), "local .env created from the example");
+  // the shared settings live in orqen/config.yaml: no .env.example, and no .env is created (it only holds optional local overrides)
+  assert.ok(!existsSync(join(repo, "orqen/.env.example")));
+  assert.ok(!existsSync(join(repo, "orqen/.env")));
   assert.match(leer(repo, "AGENTS.md"), /orqen:inicio[\s\S]*Test stack\.[\s\S]*orqen:fin/);
   assert.equal(leer(repo, "CLAUDE.md"), "@AGENTS.md\n");
   assert.match(leer(repo, ".gitignore"), /orqen\/state\//);
   assert.equal(JSON.parse(leer(repo, ".claude-plugin/marketplace.json")).plugins[0].source, "./orqen/plugin");
-  assert.match(leer(repo, "orqen/.env.example"), /AGENT_CMD=claude -p/);
-  assert.doesNotMatch(leer(repo, "orqen/.env"), /^(?:JIRA_TOKEN|GITHUB_TOKEN|ASANA_TOKEN)=/m);
   assert.ok(Object.keys(leerManifest(repo).archivos).includes("AGENTS.md#orqen"));
 
   const otra = planificar(repo, vars);
@@ -69,17 +69,14 @@ test("offers conflict decisions for a guide edited by the team", async () => {
   const ruta = "orqen/stages/testing.md";
   writeFileSync(join(repo, ruta), "# Local testing guide\n");
 
-  // A changed agent command updates the unedited .env.example.
   const nuevas = { ...vars, AGENT_CMD: "codex exec --full-auto -" };
   const plan = planificar(repo, nuevas);
-  assert.equal(plan.find((c) => c.ruta === "orqen/.env.example")!.accion, "actualizar");
   assert.equal(plan.find((c) => c.ruta === ruta)!.accion, "conflicto");
 
   const res = await aplicar(repo, plan, siempre("nuevo"));
   assert.equal(leer(repo, ruta), "# Local testing guide\n", "keeps team edits");
   assert.ok(existsSync(join(repo, `${ruta}.orqen-new`)));
   assert.equal(res.find((r) => r.ruta === ruta)!.accion, "guardado-al-lado");
-  assert.match(leer(repo, "orqen/.env.example"), /codex exec/);
 
   await aplicar(repo, planificar(repo, nuevas), siempre("mantener"));
   assert.equal(leer(repo, ruta), "# Local testing guide\n");

@@ -37,7 +37,9 @@ Commands:
       --stack <id>        Stack from your private catalog (orqen bootstrap --list lists them)
       --dir <folder>      Where to create it (default: ./<name>)
       --params '<json>'   Parameter values, e.g. '{"PORT":"8081"}' (the rest use their defaults)
-  update [dir]            Update the CLI, OpenSpec, and kit
+  update [dir]            Update the CLI and, in an ORQEN project, OpenSpec and the kit
+      --cli-only         Update only the CLI
+      --desktop          Update the global npm install of ORQEN Desktop
       --yes, -y  --no-cli  --no-openspec  --no-kit
   env <cmd>               setup | up [--all] | test [type...] | status | down
   tutorial [step]         Step-by-step tour for newcomers, in your system language (es/en)
@@ -91,6 +93,8 @@ async function main() {
       commit: { type: "boolean" },
       connectors: { type: "string" },
       "no-cli": { type: "boolean" },
+      "cli-only": { type: "boolean" },
+      desktop: { type: "boolean" },
       "no-kit": { type: "boolean" },
       all: { type: "boolean" },
       dir: { type: "string" },
@@ -134,7 +138,11 @@ async function main() {
         herramientas: typeof v.tools === "string" ? v.tools.split(",").map((x) => x.trim()).filter(Boolean) : undefined,
       });
     case "update":
-      return update({ dir: (v.dir as string) ?? resto[0], yes: !!v.yes, sinCli: !!v["no-cli"], sinOpenspec: !!v["no-openspec"], sinKit: !!v["no-kit"], sinAnimacion: !!v["no-animation"] });
+      return update({
+        dir: (v.dir as string) ?? resto[0], yes: !!v.yes, sinCli: !!v["no-cli"],
+        sinOpenspec: !!v["no-openspec"], sinKit: !!v["no-kit"], sinAnimacion: !!v["no-animation"],
+        cliOnly: !!v["cli-only"], desktop: !!v.desktop, json: !!v.json,
+      });
     case "env":
       return entorno(resto[0], resto.slice(1), { dir: v.dir as string | undefined, todos: !!v.all, json: !!v.json, extra });
     default:

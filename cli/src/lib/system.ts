@@ -24,9 +24,9 @@ export function chequearSistema(repo: string): Chequeo[] {
   ];
 }
 
-/** Latest published CLI version, or null if the registry is unavailable. */
-export function ultimaVersionCli(): string | null {
-  const r = ejecutar("npm", ["view", PAQUETE_CLI, "version"], { timeoutMs: 30_000 });
+/** Latest stable version of a package, or null if the registry is unavailable. */
+export function ultimaVersionPaquete(gestor: string, paquete: string): string | null {
+  const r = ejecutar(gestor, ["view", `${paquete}@latest`, "version"], { timeoutMs: 30_000 });
   if (r.codigo !== 0) return null;
   const v = r.stdout.trim();
   return semver.valid(v) ? v : null;
@@ -37,10 +37,8 @@ export function instaladaConPnpm(): boolean {
   return /[\\/](pnpm|\.pnpm)[\\/]/i.test(fileURLToPath(import.meta.url));
 }
 
-export function comandoActualizarCli(): [string, string[]] {
-  return instaladaConPnpm() || (version("pnpm") && !version("npm"))
-    ? ["pnpm", ["add", "-g", `${PAQUETE_CLI}@latest`]]
-    : ["npm", ["install", "-g", `${PAQUETE_CLI}@latest`]];
+export function gestorCli(): "pnpm" | "npm" {
+  return instaladaConPnpm() || (!version("npm") && !!version("pnpm")) ? "pnpm" : "npm";
 }
 
 /** Use origin/HEAD, the current branch, or main as the base branch. */

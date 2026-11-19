@@ -1,7 +1,8 @@
-/** Update the CLI, compatible OpenSpec installation, and managed kit files. */
-import { resolve } from "node:path";
+/** Update the CLI or desktop app, and refresh OpenSpec and managed kit files in an ORQEN project. */
+import { existsSync, readFileSync, realpathSync } from "node:fs";
+import { join, resolve } from "node:path";
 import semver from "semver";
-import { actualizarVersiones, ARCHIVO_CONFIG, ARCHIVO_ENTORNO, configVieja, escribirConfig, leerConfig } from "../lib/config.ts";
+import { actualizarVersiones, ARCHIVO_CONFIG, ARCHIVO_ENTORNO, configVieja, escribirConfig, existeConfig, leerConfig } from "../lib/config.ts";
 import { leerEnv } from "../lib/env.ts";
 import { legacyToYaml, legacyVarsIn } from "../connectors/legacy.ts";
 import type { ConectoresYaml } from "../connectors/config.ts";
@@ -9,45 +10,85 @@ import { aplicar, leerManifest, planificar } from "../lib/kit.ts";
 import {
   actualizarArchivosOpenSpec, estadoOpenSpec, instalarOpenSpec, RANGO_OPENSPEC, ultimaVersionOpenSpec,
 } from "../lib/openspec.ts";
-import { ejecutar } from "../lib/proc.ts";
-import { comandoActualizarCli, ultimaVersionCli, VERSION_CLI } from "../lib/system.ts";
+import { ejecutar, ejecutarAsync } from "../lib/proc.ts";
+import { gestorCli, PAQUETE_CLI, ultimaVersionPaquete, VERSION_CLI } from "../lib/system.ts";
 import { resumenStack } from "../lib/stack.ts";
 import { mostrarLogo } from "../ui/logo.ts";
 import { azul, confirmar, gris, interactivo, magenta, p, pc } from "../ui/console.ts";
 import { resolverConflicto } from "./init.ts";
 
-export interface OpcionesUpdate { dir?: string; yes?: boolean; sinCli?: boolean; sinOpenspec?: boolean; sinKit?: boolean; sinAnimacion?: boolean }
+export interface OpcionesUpdate { dir?: string; yes?: boolean; sinCli?: boolean; sinOpenspec?: boolean; sinKit?: boolean; sinAnimacion?: boolean; cliOnly?: boolean; desktop?: boolean; json?: boolean }
+
+const PAQUETE_DESKTOP = "@telpin-sistemas/orqen-desktop";
+
+function paqueteGlobal(gestor: string, paquete: string): string {
+  const r = ejecutar(gestor, ["root", "-g"], { timeoutMs: 20_000 });
+  if (r.codigo !== 0 || !r.stdout.trim()) throw new Error(r.stderr.trim() || r.error?.message || `Could not locate global packages for ${gestor}.`);
+  return join(r.stdout.trim(), paquete);
+}
+
+async function actualizarPaquete(gestor: string, paquete: string, actual: string, yes: boolean) {
+  const ultima = ultimaVersionPaquete(gestor, paquete);
+  if (!ultima) return { status: "unavailable", version: actual };
+  if (!semver.gt(ultima, actual)) return { status: "current", version: actual };
+  if (!await confirmar(`Update ${paquete} from ${actual} to ${ultima}?`, true, yes)) return { status: "skipped", version: actual };
+
+  const r = await ejecutarAsync(gestor, [gestor === "pnpm" ? "add" : "install", "-g", `${paquete}@${ultima}`], { timeoutMs: 10 * 60_000 });
+  if (r.codigo !== 0) throw new Error(`Update failed for ${paquete}: ${(r.stderr || r.stdout || r.error?.message || `exit code ${r.codigo}`).trim().slice(-1500)}`);
+  return { status: "installed", version: ultima };
+}
 
 export async function update(o: OpcionesUpdate) {
+  if (o.desktop) {
+    const manifest = join(paqueteGlobal("npm", PAQUETE_DESKTOP), "package.json");
+    if (!existsSync(manifest)) throw new Error("Install ORQEN Desktop globally with npm before updating it.");
+    const launcher = process.env.ORQEN_DESKTOP_NPM_MANIFEST;
+    if (launcher && realpathSync(launcher) !== realpathSync(manifest)) {
+      throw new Error("The running desktop app is outside the active global npm installation.");
+    }
+    const { version: actual } = JSON.parse(readFileSync(manifest, "utf8"));
+    const result = await actualizarPaquete("npm", PAQUETE_DESKTOP, actual, !!o.yes || !interactivo());
+    if (result.status === "unavailable") throw new Error("Could not check npm for ORQEN Desktop updates.");
+    if (o.json) console.log(JSON.stringify(result));
+    else if (result.status === "installed") console.log(`ORQEN Desktop ${result.version} installed. Restart the app to use it.`);
+    else if (result.status === "current") console.log(`ORQEN Desktop ${result.version} is up to date.`);
+    return;
+  }
   const repo = resolve(o.dir ?? process.cwd());
   let yes = !!o.yes;
   await mostrarLogo(!o.sinAnimacion && !o.yes);
   p.intro(`${azul("orqen")} ${magenta("update")} ${gris(`v${VERSION_CLI} · ${repo}`)}`);
   if (!yes && !interactivo()) { p.log.warn("Non-interactive terminal. Using defaults as with --yes."); yes = true; }
 
-  let config;
-  try { config = leerConfig(repo); }
-  catch (e) { p.cancel((e as Error).message); process.exitCode = 1; return; }
-  const s = p.spinner();
+  const config = !o.cliOnly && (o.dir !== undefined || o.sinCli || existeConfig(repo)) ? leerConfig(repo) : undefined;
 
-  // 1. CLI
   if (!o.sinCli) {
-    s.start("Checking for orqen updates…");
-    const ultima = ultimaVersionCli();
-    if (!ultima) s.stop(gris("Could not reach npm. Using the installed version."));
-    else if (semver.gt(ultima, VERSION_CLI)) {
-      s.stop(`orqen update available: ${pc.bold(VERSION_CLI)} → ${pc.green(ultima)}`);
-      const [cmd, args] = comandoActualizarCli();
-      if (await confirmar(`Update the CLI? (${cmd} ${args.join(" ")})`, true, yes)) {
-        s.start(`Installing orqen@${ultima}…`);
-        const r = ejecutar(cmd, args, { timeoutMs: 10 * 60_000 });
-        if (r.codigo !== 0) { s.error(`Update failed:\n${(r.stderr || r.stdout).trim().slice(-1500)}`); process.exitCode = 1; return; }
-        s.stop(`orqen ${ultima} installed`);
-        p.outro(`Run ${pc.cyan("orqen update")} again to update the kit with version ${ultima}.`);
+    const gestor = gestorCli();
+    p.log.step("Checking for orqen updates…");
+    const result = await actualizarPaquete(gestor, PAQUETE_CLI, VERSION_CLI, yes);
+    if (result.status === "unavailable") {
+      if (!config) throw new Error("Could not check npm for orqen updates.");
+      p.log.warn("Could not reach npm. Using the installed CLI to update this project.");
+    }
+    if (result.status === "current") p.log.success(`orqen ${result.version} is up to date`);
+    if (result.status === "installed") {
+      p.log.success(`orqen ${result.version} installed`);
+      if (config) {
+        const cli = join(paqueteGlobal(gestor, PAQUETE_CLI), "dist", "index.js");
+        const args = [cli, "update", "--dir", repo, "--no-cli", "--no-animation"];
+        if (yes) args.push("--yes");
+        if (o.sinOpenspec) args.push("--no-openspec");
+        if (o.sinKit) args.push("--no-kit");
+        const r = ejecutar(process.execPath, args, { heredar: true });
+        if (r.error) throw r.error;
+        process.exitCode = r.codigo;
         return;
       }
-    } else s.stop(`orqen ${VERSION_CLI} is up to date`);
+    }
   }
+  if (!config) return;
+
+  const s = p.spinner();
 
   // 2. OpenSpec
   if (!o.sinOpenspec) {
@@ -70,7 +111,7 @@ export async function update(o: OpcionesUpdate) {
             s.stop("OpenSpec files updated");
           }
           actualizarVersiones(repo, { openspec: ultima });
-        } catch (e) { s.error((e as Error).message); }
+        } catch (e) { s.error((e as Error).message); process.exitCode = 1; }
       }
     }
   }

@@ -40,7 +40,9 @@ For non-interactive first use of `bootstrap`, pass `--tools-repo @company/tools`
 
 ## Update an installation
 
-`orqen update [dir]` checks for a newer CLI, a compatible OpenSpec update, and kit changes. The kit updates files that still match the manifest. For edited files, you can keep the existing version, replace it, or write a copy with the `.orqen-new` suffix.
+Run `orqen update` from any directory to update the CLI. In an ORQEN project, the same command continues with OpenSpec and the kit using the newly installed CLI. Use `--cli-only` to update just the CLI from inside a project, or `orqen update --desktop` to update the global npm desktop app.
+
+The kit updates files that still match the manifest. For edited files, you can keep the existing version, replace it, or write a copy with the `.orqen-new` suffix.
 
 Use `--no-cli`, `--no-openspec`, or `--no-kit` to skip a step. Run `orqen init` again when you need to detect the stack or regenerate the environment.
 

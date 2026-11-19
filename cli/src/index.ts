@@ -13,6 +13,7 @@ import { mostrarLogo } from "./ui/logo.ts";
 import { usageCommand } from "./lib/usage.ts";
 import { EVAL_HELP, evalCommand, learnCommand } from "./commands/eval.ts";
 import { SPEC_HELP, specCommand } from "./commands/spec.ts";
+import { practice } from "./practice/practice.ts";
 
 
 const AYUDA = `
@@ -46,6 +47,7 @@ Commands:
       --step <n|id>       Print one step and exit (--json for agents) · --list · --lang es|en
   lang                    Print the detected system language (es | en); ORQEN_LANG overrides it
   usage [--json]          AI agents installed on this machine and their quota used
+  practice <cmd>          The interactive tutorial's practice project (orqen-gui): create | request <1|2> | client <KEY>
 ${SWARM_HELP}
 ${EVAL_HELP}
 ${SPEC_HELP}
@@ -71,6 +73,7 @@ async function main() {
   if (crudos[0] === "eval") return evalCommand(crudos.slice(1));
   if (crudos[0] === "learn") return learnCommand(crudos.slice(1));
   if (crudos[0] === "spec") return specCommand(crudos.slice(1));
+  if (crudos[0] === "practice") return practice(crudos.slice(1));
   // `orqen env test e2e -- <args>`: everything after `--` goes to the test command untouched
   const sep = crudos.indexOf("--");
   const extra = sep >= 0 ? crudos.slice(sep + 1) : [];

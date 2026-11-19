@@ -18,7 +18,7 @@ export const isBotComment = (body: string) => [BOT_MARK, ...LEGACY_BOT_MARKS].so
 export const STATE_LABEL = "orqen-state-";
 export const LEGACY_STATE_LABELS = ["rec-state-"];
 
-export type ConnectorKind = "jira" | "github" | "asana";
+export type ConnectorKind = "jira" | "github" | "asana" | "local";
 export type Role = "requests" | "issues";
 
 export interface Comment { id: string; author: string; authorName: string; body: string; created: string }

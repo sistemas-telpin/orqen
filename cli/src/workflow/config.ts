@@ -77,7 +77,7 @@ export function loadConfig(over: Partial<Config> = {}): Config {
   const list = (k: string, fromYaml?: string[]) => process.env[k] !== undefined && process.env[k] !== "" ? split(env(k)) : fromYaml ?? [];
   return {
     connectors: project?.conectores
-      ? { requests: connectorSettings(project.conectores.requests, credentials, project.general?.prefijos.requests), issues: project.conectores.issues ? connectorSettings(project.conectores.issues, credentials, project.general?.prefijos.issues) : undefined }
+      ? { requests: connectorSettings(project.conectores.requests, credentials, project.general?.prefijos.requests, repoPath), issues: project.conectores.issues ? connectorSettings(project.conectores.issues, credentials, project.general?.prefijos.issues, repoPath) : undefined }
       : legacyConnectors(credentials),
     supportStage: env("SUPPORT_STAGE") ? ["on", "true", "1", "yes"].includes(env("SUPPORT_STAGE").toLowerCase()) : !!f?.soporte,
     approvers: {

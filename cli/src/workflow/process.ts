@@ -418,7 +418,7 @@ export class Process {
       key, branch: item.branch, base: info.base, body: bodyFile, change: item.change,
       title: (title ?? item.artifacts.ANALYSIS?.summary ?? ticket.title).slice(0, 80),
     }, this.cfg.develPrCommand);
-    const url = out.match(/https?:\/\/\S+/)?.[0];
+    const url = out.match(/(?:https?|file):\/\/\S+/)?.[0];
     if (!url) throw new Error(`The PR was not opened. Output: ${out || "(none)"}`);
     item.artifacts.devel_pr = url;
     this.store.save(item);

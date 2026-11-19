@@ -125,6 +125,25 @@ El cliente no usa orqen: responde en el ticket (GitHub, Jira o Asana).
 - **Cómo se entera orqen:** la próxima vez que alguien corre `orqen list requests` (o `orqen cycle`), lee los comentarios nuevos. Un comentario común vuelve el pedido a `ANALYSIS` con la respuesta como feedback. Un `/reject` lo manda a `ANALYSIS` en la ronda 2.
 - Mientras el pedido espera al cliente, `orqen analyze` se niega a seguir.
 
+## El estado de un pedido en otra máquina
+
+El estado operativo de cada pedido vive en `orqen/state/` (ignorado por git, uno por máquina y por clon). Si otra persona, otra máquina o un
+clon nuevo no tiene ese registro, orqen lo reconstruye así, de más completo a menos:
+
+1. **El registro local**, si existe.
+2. **La foto del repositorio.** En cada cambio de estado orqen escribe `orqen/work/<KEY>/state.json` con el pedido completo (ronda, carril,
+   análisis, feedback, comentarios ya vistos…; sin el lock) y lo commitea con la rama `orqen/<key>`. Si esa rama está en el repo local o
+   se bajó con `git fetch origin orqen/<key>`, orqen la lee, la guarda en `orqen/state/` y sigue desde ahí, con el registro completo. Si
+   hay varias copias (el árbol de trabajo, la rama local, `origin/…`), usa la más nueva.
+3. **La etiqueta del ticket** (`orqen-state-…`), solo para mostrar. `orqen list` y `orqen status` muestran el estado que dice el ticket y
+   marcan que esta máquina no tiene registro; no se guarda nada y no se ofrece como trabajo a un agente. Para seguir, hay que traer la rama
+   (`git fetch origin orqen/<key>`).
+4. Sin nada de eso, el pedido se trata como nuevo (`NEW`).
+
+Límites: la foto solo existe una vez que hay rama del pedido y hay que subirla (`orqen pr` la empuja); un pedido que todavía está en soporte o
+en análisis de carril directo no tiene rama, así que solo se ve por la etiqueta. Una foto puede ir un paso atrás del estado real si el pedido
+cambió desde el último commit de la rama.
+
 ## 3. Comandos de apoyo
 
 ```sh

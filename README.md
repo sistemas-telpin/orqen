@@ -438,8 +438,8 @@ actualizan solos; para los editados elegís conservar, reemplazar o dejar una co
 | `~/.orqen/credentials.env`        | Credenciales de los proveedores (tokens), del usuario y compartidas entre repositorios; antes `providers.env`, que se sigue leyendo |
 | `orqen/stages/`                  | Guías de cada etapa (editables)                                                                |
 | `orqen/plugin/`                  | Comandos de Claude Code y el skill de grilling                                                 |
-| `orqen/work/<KEY>/`              | Registro versionado de cada pedido                                                                |
-| `orqen/state/` y `orqen/tmp/`    | Estado operativo, procesos corriendo y sus logs (ignorados por git)                            |
+| `orqen/work/<KEY>/`              | Registro versionado de cada pedido; `state.json` es una foto completa del pedido que sirve para recuperarlo en otra máquina |
+| `orqen/state/` y `orqen/tmp/`    | Estado operativo, procesos corriendo y sus logs (ignorados por git; si falta el registro, orqen lo recupera de la foto de la rama o, para mostrarlo, de la etiqueta del ticket: ver `docs/flujo-paso-a-paso.md`) |
 | `orqen/manifest.json`            | Hashes de los archivos del kit, para que `orqen update` detecte tus cambios                    |
 | `AGENTS.md` y `CLAUDE.md`        | Instrucciones del proceso para los agentes                                                     |
 | `openspec/`                      | Specs y configuración de OpenSpec                                                              |

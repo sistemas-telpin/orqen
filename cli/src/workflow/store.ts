@@ -23,6 +23,8 @@ export interface WorkItem {
   feedback: Array<{ from: string; text?: string; rejection?: string }>;
   lock?: { agent: string; since: string };
   stateBeforeBlock?: State;
+  /** Only in memory, never saved: the state was read from the ticket's `orqen-state-*` label because this machine has no record of the request. */
+  recovered?: "label";
 }
 
 export const newWorkItem = (key: string): WorkItem => ({

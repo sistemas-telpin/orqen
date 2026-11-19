@@ -15,10 +15,10 @@ import { detectarIdioma } from "../lib/lang.ts";
 import type { Config } from "./config.ts";
 import { SCHEMAS } from "./schemas.ts";
 import {
-  LANES, type Lane, type State, type AgentState, GATES, isAgentState, isFinal, isGate, nextStateAfterStage,
+  LANES, type Lane, State, type AgentState, GATES, isAgentState, isFinal, isGate, nextStateAfterStage,
 } from "./states.ts";
 import { Factory } from "./factory.ts";
-import { canLinkNatively, type Comment, type Connectors, isBotComment, type Tracker } from "../connectors/index.ts";
+import { canLinkNatively, type Comment, type Connectors, isBotComment, LEGACY_STATE_LABELS, STATE_LABEL, type Tracker } from "../connectors/index.ts";
 import { type Scenario, type OpenSpecApi, type Task, hoursOf } from "./openspec.ts";
 import { reviewSql } from "./sql.ts";
 import { type WorkItem, Store, newWorkItem } from "./store.ts";
@@ -40,6 +40,8 @@ export interface BoardItem {
   /** DELIVERY: whether a person already merged the PR into the development branch (orqen never merges it). */
   merge?: "pending" | "merged";
   review?: { status: "none" | "current" | "stale" | "unknown"; detail?: string };
+  /** The state comes only from the ticket's label: this machine has no record of the request (see Process.item). */
+  recovered?: "label";
   /** `orqen list prs`: CI of the PR and conflicts with the development branch ("unknown": gh could not read them). */
   checks?: { ci: PrChecks["ci"] | "unknown"; conflicts?: boolean; detail?: string };
 }
@@ -60,12 +62,64 @@ export class Process {
     this.issues = connectors.issues;
   }
 
+  // ================================================================ the record of a request on this machine
+  /**
+   * The request as this machine knows it. The source of truth is orqen/state (ignored by git, one per machine); when it has no
+   * record, the full snapshot that orqen commits with the request branch (orqen/work/<KEY>/state.json) is used and saved here.
+   * The snapshot is read from the working tree or from a local or fetched branch: `git fetch origin orqen/<key>` is enough.
+   */
+  item(key: string): WorkItem | undefined {
+    return this.store.get(key) ?? this.fromSnapshot(key);
+  }
+
+  private fromSnapshot(key: string): WorkItem | undefined {
+    let found;
+    try { found = this.ws.snapshotOf?.(key); } catch { return undefined; }
+    const s = found?.snapshot as Record<string, any> | undefined;
+    // the short projections of earlier versions have no artifacts: not enough to continue from
+    if (!found || !s || typeof s !== "object" || typeof s.state !== "string" || !(s.state in State) || typeof s.artifacts !== "object" || !s.artifacts) return undefined;
+    const { _note, updated, lock, recovered, ...rest } = s;
+    this.store.save({ ...newWorkItem(key), ...rest, key } as WorkItem);
+    this.store.log(key, { ts: new Date().toISOString(), from: s.state as State, to: s.state as State, detail: `record recovered from ${found.source}`, agent: "process" });
+    return this.store.get(key);
+  }
+
+  /** `orqen status`: a request this machine has no record of, with the state its ticket's label says (read only), if any. */
+  async peek(key: string): Promise<WorkItem | undefined> {
+    const i = await this.known(key);
+    return i.recovered ? i : undefined;
+  }
+
+  /** Requests whose state was read from the ticket's label (read only: nothing is advanced from a label). */
+  private fromLabels = new Map<string, WorkItem>();
+
+  /** Local record, else the repository snapshot, else (only to show it) the state label of the ticket, else a new request. */
+  private async known(key: string): Promise<WorkItem> {
+    const local = this.item(key) ?? this.fromLabels.get(key);
+    if (local) return local;
+    let ticket;
+    try { ticket = await this.requests.ticket(key); } catch { return newWorkItem(key); }
+    const prefix = [STATE_LABEL, ...LEGACY_STATE_LABELS].find((p) => ticket.labels.some((l) => l.startsWith(p)));
+    const label = prefix ? ticket.labels.find((l) => l.startsWith(prefix))! : undefined;
+    const state = label ? label.slice(prefix!.length).toUpperCase() : "";
+    if (!(state in State) || state === "NEW") return newWorkItem(key);
+    const item: WorkItem = { ...newWorkItem(key), state: state as State, title: ticket.title, recovered: "label" };
+    this.fromLabels.set(key, item);
+    return item;
+  }
+
+  private fetchHint(key: string) {
+    return `If someone worked on it elsewhere, fetch its branch (git fetch origin ${branchFor(key)}) so orqen can recover it from orqen/work/${key}/state.json.`;
+  }
+  private unknownMsg(key: string) { return `${key} is unknown to orqen on this machine. ${this.fetchHint(key)}`; }
+
   // ================================================================ review
   async review(): Promise<Pending[]> {
     const pending: Pending[] = [];
     for (const key of await this.requests.pending()) {
       try {
-        const item = this.store.get(key) ?? newWorkItem(key);
+        const item = await this.known(key);
+        if (item.recovered) continue;   // state read from the ticket's label only: shown by `board`, never advanced
         if (isGate(item.state)) await this.reviewGate(item as WorkItem & { state: keyof typeof GATES });
         else if (item.state === "BLOCKED") await this.reviewUnblock(item);
         else if (item.state === "DELIVERY") await this.checkMerge(item);   // quiet: "unknown" just keeps waiting
@@ -88,10 +142,10 @@ export class Process {
    */
   async board(closed = false): Promise<BoardItem[]> {
     const pend = await this.review();
-    const keys = new Set([...pend.map((p) => p.key), ...this.store.all().map((r) => r.key)]);
+    const keys = new Set([...pend.map((p) => p.key), ...this.store.all().map((r) => r.key), ...this.fromLabels.keys()]);
     const out: BoardItem[] = [];
     for (const key of keys) {
-      const item = this.store.get(key) ?? newWorkItem(key);
+      const item = this.item(key) ?? this.fromLabels.get(key) ?? newWorkItem(key);
       if (isFinal(item.state) && !closed) continue;
       out.push(this.boardItem(item));
     }
@@ -105,7 +159,11 @@ export class Process {
       role: roleOf(item, this.cfg), takenBy: lock?.agent, since: lock?.since, returned: returned(item),
       estimated_hours: item.artifacts.estimated_hours, pr: item.artifacts.devel_pr,
       qa: needsQa(item) && item.state === "QA_REVIEW" ? "pending" : needsQa(item) && item.state === "CODE_REVIEW" ? "approved" : undefined,
-      next: nextSteps(item, this.cfg), updated: this.store.events(item.key).at(-1)?.ts,
+      recovered: item.recovered,
+      next: item.recovered
+        ? [{ step: 0, role: roleOf(item, this.cfg), command: `git fetch origin ${branchFor(item.key)}`, what: "The state comes from the ticket only: fetch the request branch so orqen recovers its full record, then continue" }]
+        : nextSteps(item, this.cfg),
+      updated: this.store.events(item.key).at(-1)?.ts,
       merge: item.state === "DELIVERY" && item.artifacts.devel_pr ? (item.artifacts.devel_pr_merged ? "merged" : "pending") : undefined,
     };
   }
@@ -139,8 +197,8 @@ export class Process {
    * approve → DELIVERY; changes → back to development with the comment as an indication.
    */
   async decide(key: string, action: "approve" | "changes", body: string, person = "senior", agent = "agent", force = false) {
-    const item = this.store.get(key);
-    if (!item) throw new Error(`${key} is unknown to orqen.`);
+    const item = this.item(key);
+    if (!item) throw new Error(this.unknownMsg(key));
     if (item.state !== "CODE_REVIEW") throw new Error(`${key} is in ${item.state}: the senior decides in CODE_REVIEW.`);
     const url = item.artifacts.devel_pr as string | undefined;
     if (!url) throw new Error(`${key} has no PR yet: it is opened with /orqen:pr ${workKey(item)}.`);
@@ -162,7 +220,7 @@ export class Process {
       if (!this.ws.reviewPr) throw new Error("This workspace cannot review PRs; use CODE_REVIEW_GATE=ticket.");
       this.ws.reviewPr(url, action === "approve" ? "approve" : "request-changes", body.trim() || `Approved by ${person} with orqen.`);
       await this.reviewCodeOnPr(item);
-      const after = this.store.get(key)!;
+      const after = this.item(key)!;
       if (after.state === "CODE_REVIEW")
         throw new Error(`The review was posted on ${url} but did not count${this.cfg.githubReviewers.length ? ` (GITHUB_REVIEWERS: ${this.cfg.githubReviewers.join(", ")})` : ""}. Check it on GitHub.`);
       return { state: after.state, url };
@@ -185,7 +243,7 @@ export class Process {
    * find an answer. The stage ends resolved (the client confirms in ACCEPTANCE) or escalated to the analyst.
    */
   async support(key: string, agent = "agent", person = agent) {
-    const item = this.store.get(key) ?? newWorkItem(key);
+    const item = this.item(key) ?? newWorkItem(key);
     if (item.state !== "NEW" && item.state !== "SUPPORT")
       throw new Error(`${key} is not waiting for support (state: ${item.state}).${item.state === "ANALYSIS" ? " It was escalated to the analyst: use `orqen analyze`." : ""}`);
     this.assertClaimable(item, agent);
@@ -202,7 +260,7 @@ export class Process {
   // ================================================================ analyze
   /** Opens (or resumes) the analysis of a request. An analyst drives it; the agent does the grilling with them. */
   async analyze(key: string, agent = "agent", analyst = agent) {
-    const item = this.store.get(key) ?? newWorkItem(key);
+    const item = this.item(key) ?? newWorkItem(key);
     if (item.state === "WAITING_CLIENT")
       throw new Error(`${key} is waiting for client answers on the ticket. When they reply it goes back to ANALYSIS (\`orqen list requests\`).`);
     if (item.state !== "NEW" && item.state !== "SUPPORT" && item.state !== "ANALYSIS")
@@ -221,8 +279,9 @@ export class Process {
 
   /** Records the lane. Light/full: prepares branch + OpenSpec change so the agent writes the spec. */
   async lane(key: string, lane: string, agent = "agent") {
-    const item = this.store.get(key);
-    if (!item || item.state !== "ANALYSIS") throw new Error(`${key} is not in ANALYSIS (state: ${item?.state ?? "unknown"}).`);
+    const item = this.item(key);
+    if (!item) throw new Error(this.unknownMsg(key));
+    if (item.state !== "ANALYSIS") throw new Error(`${key} is not in ANALYSIS (state: ${item.state}).`);
     const lock = this.activeLock(item) ?? (item.lock?.agent === agent ? item.lock : undefined);
     if (!lock || lock.agent !== agent) throw new Error(`Run \`orqen analyze ${key}\` first`);
     if (!LANES.includes(lane as Lane)) throw new Error(`Invalid lane "${lane}". Options: ${LANES.join(", ")}`);
@@ -243,9 +302,10 @@ export class Process {
 
   // ================================================================ take
   async take(key: string, agent = "agent", fromAnalyze = false) {
-    const item = this.store.get(key);
-    if (!item || !isAgentState(item.state))
-      throw new Error(`${key} has no work for an agent (state: ${item?.state ?? "unknown"}). Run \`orqen list requests\`.`);
+    const item = this.item(key);
+    if (!item) throw new Error(`${key} has no work for an agent (state: unknown). Run \`orqen list requests\`. ${this.fetchHint(key)}`);
+    if (!isAgentState(item.state))
+      throw new Error(`${key} has no work for an agent (state: ${item.state}). Run \`orqen list requests\`.`);
     if (item.state === "ANALYSIS" && !fromAnalyze)
       throw new Error(`The analysis of ${key} is driven by an analyst: use /orqen:analyze ${key} (or \`orqen analyze ${key}\`).`);
     if (item.state === "SUPPORT" && !fromAnalyze)
@@ -323,8 +383,8 @@ export class Process {
   // ================================================================ pr
   /** Where the request branch would go and whether it can be sent now (used by `orqen pr <KEY>` before writing the explanation). */
   prInfo(key: string) {
-    const item = this.store.get(key);
-    if (!item) throw new Error(`${key} is unknown to orqen.`);
+    const item = this.item(key);
+    if (!item) throw new Error(this.unknownMsg(key));
     if (item.route === "operational") throw new Error(`${key} is operational (no code): there is no branch to send.`);
     if (!item.branch || !["TESTING", "QA_REVIEW", "CODE_REVIEW", "DELIVERY", "ACCEPTANCE", "CLOSED"].includes(item.state))
       throw new Error(`${key} is in ${item.state}: the PR to ${this.cfg.develBranch} is opened once development is done (TESTING or later).`);
@@ -342,7 +402,7 @@ export class Process {
    */
   async pr(key: string, body: string, title?: string, agent = "agent") {
     const info = this.prInfo(key);
-    const item = this.store.get(key)!;
+    const item = this.item(key)!;
     if (body.trim().length < 80) throw new Error("The explanation is too short: describe what changed, why and how to verify it.");
     // fail before writing anything: otherwise devel-pr.md and the pending changes would stay out of the pushed branch
     const current = this.ws.currentBranch();
@@ -373,8 +433,8 @@ export class Process {
    * round-N/code-review-<n>.md, comments it on the issue (or the request) and logs it. With CODE_REVIEW_GATE=ticket the senior still gives /approve or /reject on the ticket.
    */
   async codeReview(key: string, body: string, verdict: string, agent = "agent") {
-    const item = this.store.get(key);
-    if (!item) throw new Error(`${key} is unknown to orqen.`);
+    const item = this.item(key);
+    if (!item) throw new Error(this.unknownMsg(key));
     if (item.route === "operational") throw new Error(`${key} is operational (no code): there is nothing to review.`);
     if (item.state !== "CODE_REVIEW") throw new Error(`${key} is in ${item.state}: the code review is recorded in CODE_REVIEW.`);
     if (!item.artifacts.devel_pr) throw new Error(`${key} has no PR to ${this.cfg.develBranch} yet: open it first with \`orqen pr ${key} <explanation.md>\`.`);
@@ -413,9 +473,10 @@ export class Process {
    * QA can also decide with /approve or /reject on the request (APPROVERS_QA).
    */
   async qaReview(key: string, decision: string, reason = "", report = "", by = "qa") {
-    const item = this.store.get(key);
-    if (!item || item.state !== "QA_REVIEW")
-      throw new Error(`${key} is not waiting for QA (state: ${item?.state ?? "unknown"}). Only full-lane requests go through QA, after TESTING.`);
+    const item = this.item(key);
+    if (!item) throw new Error(this.unknownMsg(key));
+    if (item.state !== "QA_REVIEW")
+      throw new Error(`${key} is not waiting for QA (state: ${item.state}). Only full-lane requests go through QA, after TESTING.`);
     if (decision !== "approve" && decision !== "reject") throw new Error(`Invalid decision "${decision}". Options: approve, reject`);
     if (decision === "reject" && reason.trim().length < 10)
       throw new Error('Say what development must fix: --reason "<text>" (10 characters or more).');
@@ -445,7 +506,7 @@ export class Process {
 
   // ================================================================ complete
   async complete(key: string, raw: unknown, agent = "agent"): Promise<CompleteResult> {
-    const item = this.store.get(key);
+    const item = this.item(key);
     if (!item || !isAgentState(item.state)) return { ok: false, errors: [`${key} is not in an agent stage`] };
     // an expired lock stays valid while nobody else took the request (the grilling can last longer than ORQEN_LOCK_MIN)
     const lock = this.activeLock(item) ?? (item.lock?.agent === agent ? item.lock : undefined);
@@ -829,8 +890,8 @@ export class Process {
 
   /** `orqen merged <KEY>`: a person confirms they merged the PR by hand (when orqen cannot read it from GitHub). */
   async confirmMerge(key: string, person: string) {
-    const item = this.store.get(key);
-    if (!item) throw new Error(`${key} is unknown to orqen.`);
+    const item = this.item(key);
+    if (!item) throw new Error(this.unknownMsg(key));
     if (item.state !== "DELIVERY") throw new Error(`${key} is in ${item.state}: the merge is confirmed in DELIVERY, after the senior approves the PR.`);
     if (!item.artifacts.devel_pr) throw new Error(`${key} has no PR: there is nothing to merge.`);
     if (item.artifacts.devel_pr_merged) return item.artifacts.devel_pr_merged as { at: string; by?: string };
@@ -866,7 +927,7 @@ export class Process {
    * A PR already merged stays in the development branch: the comment says so, reverting it is a person's call.
    */
   async cancel(key: string, reason: string, person: string, agent = "agent") {
-    let item = this.store.get(key);
+    let item = this.item(key);
     if (!item) { await this.requests.ticket(key); item = newWorkItem(key); }   // a request orqen has not touched yet: it must exist
     if (isFinal(item.state)) throw new Error(`${key} is already ${item.state}.`);
     if (reason.trim().length < 5) throw new Error("Say why it is cancelled (--reason): it goes on the request and the issue.");
@@ -889,14 +950,14 @@ export class Process {
 
   // ================================================================ utilities
   async block(key: string, reason: string, agent = "agent") {
-    const item = this.store.get(key) ?? newWorkItem(key);
+    const item = this.item(key) ?? newWorkItem(key);
     if (item.state === "BLOCKED") return;
     await this.requests.comment(key, `Human intervention needed: ${reason}\nWhen resolved, comment /approve <instructions> to retry.`);
     await this.move(item, "BLOCKED", reason, agent);
   }
 
   release(key: string) {
-    const item = this.store.get(key);
+    const item = this.item(key);
     if (item) { delete item.lock; this.store.save(item); }
   }
 

@@ -94,7 +94,7 @@ export async function runWorkflow(cmd: string, rest: string[]) {
 
   /** Accepts the request key or the current issue key of a known request, and always returns the request key. */
   function toKey(key?: string): string {
-    if (!key || store.get(key)) return key as string;
+    if (!key || flow.item(key)) return key as string;
     const item = store.all().find((r) => r.key.toUpperCase() === key.toUpperCase() || r.issue?.toUpperCase() === key.toUpperCase());
     // unknown key: it is taken as a new request (the connector says whether it exists)
     return item?.key ?? key;
@@ -200,7 +200,7 @@ export async function runWorkflow(cmd: string, rest: string[]) {
           const xs = board.filter((b) => b.role === role);
           if (!xs.length) continue;
           console.log(`${titles[role]}:`);
-          for (const b of xs) console.log(`  ${b.work.padEnd(12)} ${b.state.padEnd(15)} ${(b.next[0]?.command ?? "").padEnd(28)} ${b.takenBy ? `(taken by ${b.takenBy} since ${b.since?.slice(0, 16).replace("T", " ")})` : ""}`);
+          for (const b of xs) console.log(`  ${b.work.padEnd(12)} ${b.state.padEnd(15)} ${(b.next[0]?.command ?? "").padEnd(28)} ${b.takenBy ? `(taken by ${b.takenBy} since ${b.since?.slice(0, 16).replace("T", " ")})` : ""}${b.recovered ? "  ← state read from the ticket; this machine has no record" : ""}`);
         }
         return;
       }
@@ -402,7 +402,8 @@ export async function runWorkflow(cmd: string, rest: string[]) {
       case "status": {
         if (has("json")) {
           if (rest[0]) {
-            const item = store.get(toKey(rest[0]));
+            const k = toKey(rest[0]);
+            const item = flow.item(k) ?? await flow.peek(k);
             const b = item ? flow.boardItem(item) : undefined;
             return console.log(JSON.stringify(item ? { ...item, role: b!.role, next: b!.next, qa_status: b!.qa, returned: b!.returned, events: store.events(item.key) } : null, null, 2));
           }
@@ -414,8 +415,9 @@ export async function runWorkflow(cmd: string, rest: string[]) {
         }
         if (rest[0]) {
           const key = toKey(rest[0]);
-          const item = store.get(key);
+          const item = flow.item(key) ?? await flow.peek(key);
           console.log(item ? JSON.stringify({ ...item, artifacts: Object.keys(item.artifacts) }, null, 2) : "unknown");
+          if (item?.recovered) console.log(`State read from the ticket's label: this machine has no record of ${key}. Fetch its branch (git fetch origin orqen/${key.toLowerCase()}) to recover the full record.`);
           for (const ev of store.events(key)) console.log(`  ${ev.ts}  ${ev.from} → ${ev.to}  ${ev.detail}`);
         } else for (const r of store.all()) console.log(`${r.key.padEnd(12)} ${r.state.padEnd(15)} ${(r.issue ?? "").padEnd(12)} ${r.change ?? ""}`);
         return;

@@ -1,6 +1,7 @@
 /** git, tests and PR: always run by the process, never by the agent. */
 import { execFileSync, spawnSync } from "node:child_process";
-import { relative, resolve } from "node:path";
+import { existsSync, readFileSync } from "node:fs";
+import { join, relative, resolve, sep } from "node:path";
 import { bajarProcesos, levantarProcesos } from "../lib/processes.ts";
 import type { Config } from "./config.ts";
 
@@ -68,6 +69,8 @@ export interface Workspace {
   closePr?(url: string, comment: string): void;
   /** Posts the senior's review on the PR with their own GitHub session (gh). */
   reviewPr?(url: string, action: "approve" | "request-changes", body: string): void;
+  /** The newest orqen/work/<KEY>/state.json snapshot of a request, from the working tree or from its branch (local or origin/). */
+  snapshotOf?(key: string): { snapshot: unknown; source: string } | undefined;
 }
 
 /** Branch where a request is developed. */
@@ -196,6 +199,22 @@ export class GitWorkspace implements Workspace {
       head: j.headRefOid,
       reviews: (j.reviews ?? []).map((r) => ({ id: r.id, author: r.author?.login ?? "", state: r.state, commit: r.commit?.oid ?? "", body: r.body ?? "" })),
     };
+  }
+
+  snapshotOf(key: string) {
+    if (!/^[\w.-]+$/.test(key)) return undefined;
+    const file = join(this.cfg.factoryDir, key, "state.json");
+    const rel = relative(this.cfg.repoPath, file).split(sep).join("/");
+    if (rel.startsWith("..")) return undefined;   // orqen/work outside the repository: nothing to read from git
+    const found: Array<{ snapshot: any; source: string }> = [];
+    const add = (source: string, text: () => string) => {
+      try { found.push({ snapshot: JSON.parse(text()), source }); } catch { /* not there, or not valid */ }
+    };
+    if (existsSync(file)) add(rel, () => readFileSync(file, "utf8"));
+    for (const ref of [branchFor(key), legacyBranchFor(key)])
+      for (const r of [ref, `origin/${ref}`]) add(`${r}:${rel}`, () => this.git("show", `${r}:${rel}`));
+    const time = (x: { snapshot: any }) => Date.parse(x.snapshot?.updated ?? "") || 0;
+    return found.sort((a, b) => time(b) - time(a))[0];
   }
 
   prState(url: string): PrState {

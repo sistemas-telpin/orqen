@@ -1,6 +1,6 @@
 {
   "name": "orqen",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "ORQEN multi-agent orchestration on OpenSpec, from customer request to production.",
   "type": "module",
   "bin": {

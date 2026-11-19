@@ -68,11 +68,15 @@ export class JiraTracker implements Tracker {
   }
 
   async comments(key: string): Promise<Comment[]> {
-    const r = await this.req("GET", `/rest/api/2/issue/${this.native(key)}/comment`, undefined, { maxResults: 500, orderBy: "created" });
-    return (r.comments ?? []).map((c: any) => ({
-      id: String(c.id), author: c.author?.accountId ?? c.author?.name ?? "",
-      authorName: c.author?.displayName ?? "", body: c.body ?? "", created: c.created ?? "",
-    }));
+    const comments: Comment[] = [];
+    for (;;) {
+      const r = await this.req("GET", `/rest/api/2/issue/${this.native(key)}/comment`, undefined, { startAt: comments.length, maxResults: 500, orderBy: "created" });
+      for (const c of r.comments ?? []) comments.push({
+        id: String(c.id), author: c.author?.accountId ?? c.author?.name ?? "",
+        authorName: c.author?.displayName ?? "", body: c.body ?? "", created: c.created ?? "",
+      });
+      if (!r.comments?.length || r.total == null || comments.length >= r.total) return comments;
+    }
   }
 
   async comment(key: string, text: string) {

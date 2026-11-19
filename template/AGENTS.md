@@ -30,6 +30,8 @@ The 9 steps, one command each (the person runs it; you follow it):
 
 ### Working with the person
 
+In any stage, use `/orqen:ask <KEY> <question>` to ask the requester directly on the original request. The requester can reply with an ordinary comment. To read the replies and refresh `orqen/worqs/<KEY>/conversation.json`, run `orqen conversation <KEY>`. Both commands accept the request key or its linked issue key and preserve the current stage.
+
 orqen works alongside the person; it does not replace them. While someone is on the other side (they invoked
 `/orqen:support`, `/orqen:analyze`, `/orqen:implement`, `/orqen:pr`, `/orqen:review`, `/orqen:approve`, a review command, or asked you directly; `human_present: true` in the context):
 

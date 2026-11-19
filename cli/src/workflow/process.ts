@@ -132,6 +132,30 @@ export class Process {
   }
   private unknownMsg(key: string) { return `${key} is unknown to orqen on this machine. ${this.fetchHint(key)}`; }
 
+  async conversation(key: string) {
+    if (!this.item(key)) throw new Error(this.unknownMsg(key));
+    const comments = await this.requests.comments(key);
+    this.fac.conversation(key, comments);
+    return comments;
+  }
+
+  /**
+   * Asks the requester on their ticket, from any stage, without moving the worq. Returns a warning when a reply will move it anyway:
+   * in WAITING_CLIENT (the analysis is waiting for the client) any comment of the client counts as their answer.
+   */
+  async ask(key: string, question: string): Promise<{ warning?: string }> {
+    if (!question.trim()) throw new Error("A question for the requester is required.");
+    const item = this.item(key);
+    if (!item) throw new Error(this.unknownMsg(key));
+    const ticket = await this.requests.ticket(key);
+    await this.requests.comment(key, `Question for ${ticket.reportedBy || "the requester"}:\n\n${question.trim()}`);
+    try { await this.conversation(key); }
+    catch (e) { throw new Error(`Question posted to ${key}. Run orqen conversation ${key} to refresh the local copy: ${(e as Error).message}`); }
+    return item.state === "WAITING_CLIENT"
+      ? { warning: `${key} is waiting for the client's answers: their next comment, also a reply to this question, will count as that answer and send it back to ANALYSIS.` }
+      : {};
+  }
+
   // ================================================================ review
   async review(): Promise<Pending[]> {
     const pending: Pending[] = [];
@@ -1011,7 +1035,7 @@ export class Process {
     this.store.save(item);
     this.store.log(item.key, { ts: new Date().toISOString(), from, to, detail, agent });
     this.fac.record(item, from, to, detail, agent);
-    if (item.branch) this.attempt(() => this.ws.commit(item.key, `registro ${from} → ${to}`, { path: this.cfg.factoryDir, branch: item.branch }));
+    if (item.branch) this.attempt(() => this.ws.commit(item.key, `registro ${from} → ${to}`, { path: join(this.cfg.factoryDir, item.key), branch: item.branch }));
     try {
       await this.requests.setStateLabel(item.key, to);
       // CANCELLED falls back to the CLOSED destination when the connector has no own "CANCELLED" transition

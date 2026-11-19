@@ -17,12 +17,19 @@
 import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { WorkItem } from "./store.ts";
+import type { Comment } from "../connectors/types.ts";
 
 export class Factory {
   constructor(private dir: string) {}
 
   dirOf = (key: string) => join(this.dir, key);
   roundDir = (key: string, round: number) => join(this.dir, key, `round-${round}`);
+
+  conversation(key: string, comments: Comment[]) {
+    const dir = this.dirOf(key);
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, "conversation.json"), JSON.stringify({ request: key, comments }, null, 2) + "\n");
+  }
 
   private safe(fn: () => void) {
     try { fn(); } catch (e) { console.error(`[orqen] warning: could not write to the worqs folder: ${(e as Error).message}`); }

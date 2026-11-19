@@ -17,7 +17,7 @@ import { Process } from "../workflow/process.ts";
 import { Store } from "../workflow/store.ts";
 import { GitWorkspace } from "../workflow/workspace.ts";
 
-export const WORKFLOW_COMMANDS = ["list", "qa", "approve", "merged", "cancel", "pending", "support", "analyze", "lane", "take", "complete", "pr", "review", "code-review", "schema", "block", "release", "search", "status", "worqs", "worq", "cycle", "connectors"];
+export const WORKFLOW_COMMANDS = ["list", "qa", "approve", "merged", "cancel", "pending", "support", "analyze", "ask", "conversation", "lane", "take", "complete", "pr", "review", "code-review", "schema", "block", "release", "search", "status", "worqs", "worq", "cycle", "connectors"];
 
 /** What people run: the 9 steps (as /orqen:* commands in their agent) and the CLI commands meant for a person. */
 export const WORKFLOW_HELP = `The 9 steps (run the /orqen:* commands in your agent: it calls the CLI for you):
@@ -32,6 +32,8 @@ export const WORKFLOW_HELP = `The 9 steps (run the /orqen:* commands in your age
   9 /orqen:approve <KEY>     Senior: approve the PR or request changes; after the hand merge, run it again to deliver
 
 Request commands for people:
+  ask <KEY> <question>        Ask the requester on their ticket from any stage (/orqen:ask in the agent)
+  conversation <KEY>          Refresh and show the request comments saved in the worq's conversation.json
   status [KEY] [--json]       Where a request is, who acts and what comes next (no KEY: all of them)
   worqs [--all] [--json]      The worqs on this machine: orqen's unit of work, one per request (request + issue + branch + PR + record)
   worq <KEY> [--json]         One worq: state, request, issue, branch, PR and the files of its record in orqen/worqs/<KEY>/
@@ -174,6 +176,21 @@ export async function runWorkflow(cmd: string, rest: string[]) {
 
   async function dispatch() {
     switch (cmd) {
+      case "ask":
+      case "conversation": {
+        if (!/^[\w-][\w.-]*$/.test(rest[0] ?? "") || (cmd === "conversation" && rest.length !== 1)) {
+          throw new Error(`Usage: orqen ${cmd} <KEY>${cmd === "ask" ? " <question>" : ""}`);
+        }
+        const key = toKey(rest[0]);
+        if (cmd === "conversation") {
+          console.log(JSON.stringify(await flow.conversation(key), null, 2));
+        } else {
+          const { warning } = await flow.ask(key, rest.slice(1).join(" "));
+          console.log(`Question posted to ${key}. Conversation saved in ${flow.worqRel(key)}/conversation.json`);
+          if (warning) console.log(`⚠ ${warning}`);
+        }
+        return;
+      }
       case "list": {
         const what = (rest[0] ?? "requests").toLowerCase();
         const json = has("json"), all = has("all");

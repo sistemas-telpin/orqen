@@ -130,7 +130,8 @@ export class GitWorkspace implements Workspace {
     if (opts.branch && this.currentBranch() !== opts.branch) return false;
     const path = opts.path ? this.relativePath(opts.path) : undefined;
     if (opts.path && path === undefined) return false;
-    const scope = path ? ["--", path] : [];
+    // conversation.json (`orqen ask` / `orqen conversation`) keeps the client's replies, which do not belong in the repository
+    const scope = path ? ["--", path, `:(exclude,glob)${path}/conversation.json`, `:(exclude,glob)${path}/**/conversation.json`] : [];
     this.git("add", "-A", ...scope);
     if (!this.git("status", "--porcelain", ...scope)) return false;
     this.git("commit", "-m", `${key}: ${message}`, ...scope);

@@ -22,7 +22,7 @@ export const DIR_ORQEN = "orqen";
 export const ARCHIVO_MANIFEST = "orqen/manifest.json";
 export const INICIO_BLOQUE = "<!-- orqen:inicio — managed by orqen (edit outside this block; `orqen update` refreshes it) -->";
 export const FIN_BLOQUE = "<!-- orqen:fin -->";
-export const IGNORAR_GIT = ["orqen/state/", "orqen/tmp/", "orqen/.env"];
+export const IGNORAR_GIT = ["orqen/state/", "orqen/tmp/", "orqen/.env", "orqen/worqs/*/conversation.json"];
 
 export interface Manifest { kit: string; archivos: Record<string, string> }
 export interface VariablesKit { RESUMEN_STACK: string; BASE_BRANCH: string; AGENT_CMD: string }

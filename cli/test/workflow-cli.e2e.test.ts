@@ -25,6 +25,25 @@ async function finish(f: WorkflowFixture) {
 
 describe("Compiled workflow journeys", { concurrency: 3 }, () => {
 
+test("CLI: ask the requester from development by issue key and refresh their reply", async (t) => {
+  const f = await workflowFixture(t);
+  await supportEscalation(f);
+  await f.complete("REQ-7", analysis());
+  const issue = f.record().issue!;
+  const before = f.record();
+  const question = "Which column should appear first?";
+  await f.command(["ask", issue, question]);
+  assert.ok(f.jira.last("REQ-7").endsWith(question));
+  assert.ok(!f.jira.coms[issue].some(c => c.body.includes(question)));
+  f.jira.human("REQ-7", "client", "Invoice number.");
+  const comments = JSON.parse(await f.command(["conversation", issue]));
+  assert.deepEqual(comments.at(-1).body, "Invoice number.");
+  const file = join(f.repo, "orqen/worqs/REQ-7/conversation.json");
+  assert.deepEqual(JSON.parse(readFileSync(file, "utf8")), { request: "REQ-7", comments });
+  assert.equal(comments.filter((c: { body: string }) => c.body.includes(question)).length, 1);
+  assert.deepEqual(f.record(), before);
+});
+
 test("CLI: support resolves and the authorized client closes the request without an issue", { timeout: 180_000 }, async (t) => {
   const f = await workflowFixture(t);
   await f.command(["--help"]); await f.command(["--version"]);

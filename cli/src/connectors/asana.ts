@@ -14,7 +14,7 @@ export class AsanaTracker implements Tracker {
   constructor(private s: AsanaSettings, private api = API) {}
   get label() { return `Asana project ${this.s.project || "(none)"}`; }
 
-  private async req(method: string, path: string, body?: unknown) {
+  private async requestPage(method: string, path: string, body?: unknown) {
     if (!this.s.token) throw new Error("Asana connector without token: set ASANA_TOKEN in orqen/.env");
     const r = await fetch(this.api + path, {
       method,
@@ -23,7 +23,11 @@ export class AsanaTracker implements Tracker {
     });
     if (!r.ok) throw new Error(`Asana ${method} ${path}: ${r.status} ${await r.text()}`);
     const t = await r.text();
-    return t ? JSON.parse(t).data : {};
+    return t ? JSON.parse(t) : { data: {} };
+  }
+
+  private async req(method: string, path: string, body?: unknown) {
+    return (await this.requestPage(method, path, body)).data;
   }
 
   private gid = (key: string) => idOf(this.s.prefix, key);
@@ -52,8 +56,15 @@ export class AsanaTracker implements Tracker {
   }
 
   async comments(key: string): Promise<Comment[]> {
-    const s: any[] = await this.req("GET", `/tasks/${this.gid(key)}/stories?opt_fields=type,text,created_by.gid,created_by.name,created_at`);
-    return s.filter((x) => x.type === "comment").map((x) => ({
+    const path = `/tasks/${this.gid(key)}/stories?limit=100&opt_fields=type,text,created_by.gid,created_by.name,created_at`;
+    const stories = [];
+    let offset: string | undefined;
+    do {
+      const page = await this.requestPage("GET", offset ? `${path}&offset=${encodeURIComponent(offset)}` : path);
+      stories.push(...page.data);
+      offset = page.next_page?.offset;
+    } while (offset);
+    return stories.filter((x) => x.type === "comment").map((x) => ({
       id: x.gid, author: x.created_by?.gid ?? "", authorName: x.created_by?.name ?? "", body: x.text ?? "", created: x.created_at ?? "",
     }));
   }

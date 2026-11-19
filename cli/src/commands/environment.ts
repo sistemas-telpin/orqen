@@ -3,7 +3,7 @@
  *   setup            install dependencies (entornos.preparar)
  *   up [--all]       start the processes (npm run dev, npm start…) and wait until they are ready; then migrations and seed.
  *                    --all: also the processes that are only for e2e / visual tests (e.g. the frontend)
- *   test [type...]   unitarios / integracion / e2e / visual with the variables in entornos.variables
+ *   test [type...]   unit / integration / e2e / visual with the variables of orqen/environment.yaml
  *                    `-- <args>`: appended to the command of the requested type (e.g. only the e2e of a change)
  *   status           which processes are running
  *   down             stop the processes orqen started
@@ -16,6 +16,9 @@ import { pc } from "../ui/console.ts";
 
 const TIPOS = ["unitarios", "integracion", "e2e", "visual"] as const;
 type TipoTest = (typeof TIPOS)[number];
+/** Test types as people write them (orqen/environment.yaml uses unit / integration); the Spanish names still work. */
+const NOMBRE: Record<TipoTest, string> = { unitarios: "unit", integracion: "integration", e2e: "e2e", visual: "visual" };
+const tipoDe = (s: string) => (Object.entries(NOMBRE).find(([, en]) => en === s)?.[0] ?? s) as TipoTest;
 
 const titulo = (s: string) => console.log(`\n${pc.bold(pc.magenta("▸"))} ${pc.bold(s)}`);
 
@@ -42,7 +45,7 @@ export async function entorno(sub: string | undefined, resto: string[], o: { dir
       ok = await correr(repo, cfg, e.preparar, "install dependencies");
       break;
     case "up": {
-      if (!e.procesos.length) console.log(pc.dim("No processes configured in orqen/config.yaml (entornos.procesos)."));
+      if (!e.procesos.length) console.log(pc.dim("No processes configured in orqen/environment.yaml (processes)."));
       const r = await levantarProcesos(repo, e.procesos, e.variables, { todos: o.todos, alAvanzar: (m) => titulo(m) });
       if (!r.ok) {
         console.error(pc.red(`✘ ${r.detalle}`));
@@ -60,28 +63,28 @@ export async function entorno(sub: string | undefined, resto: string[], o: { dir
       break;
     }
     case "test": {
-      const pedidos = (resto.length ? resto : TIPOS.filter((t) => e.tests[t])) as TipoTest[];
+      const pedidos = (resto.length ? resto.map(tipoDe) : TIPOS.filter((t) => e.tests[t])) as TipoTest[];
       const invalidos = pedidos.filter((t) => !TIPOS.includes(t));
-      if (invalidos.length) throw new Error(`Invalid test type: ${invalidos.join(", ")}. Options: ${TIPOS.join(", ")}`);
-      if (!pedidos.length) throw new Error("No test commands are configured in orqen/config.yaml (entornos.tests).");
+      if (invalidos.length) throw new Error(`Invalid test type: ${invalidos.join(", ")}. Options: ${Object.values(NOMBRE).join(", ")}`);
+      if (!pedidos.length) throw new Error("No test commands are configured in orqen/environment.yaml (tests).");
       const extra = o.extra ?? [];
       if (extra.length && !resto.length)
         throw new Error("Name the test type the arguments after `--` are for, e.g. orqen env test e2e -- tests/login.spec.ts");
       const resultados: [string, boolean | null][] = [];
       for (const t of pedidos) {
         const cmd = e.tests[t];
-        if (!cmd) { resultados.push([t, null]); continue; }
+        if (!cmd) { resultados.push([NOMBRE[t], null]); continue; }
         const linea = extra.length ? `${cmd} ${extra.map(citar).join(" ")}` : cmd;
-        resultados.push([t, await correr(repo, cfg, [linea], `tests ${t}`)]);
+        resultados.push([NOMBRE[t], await correr(repo, cfg, [linea], `tests ${NOMBRE[t]}`)]);
       }
-      console.log("\n" + resultados.map(([t, r]) => `${r === null ? pc.yellow("–") : r ? pc.green("✔") : pc.red("✘")} ${t}${r === null ? pc.dim(" (no command configured in orqen/config.yaml)") : ""}`).join("\n"));
+      console.log("\n" + resultados.map(([t, r]) => `${r === null ? pc.yellow("–") : r ? pc.green("✔") : pc.red("✘")} ${t}${r === null ? pc.dim(" (no command configured in orqen/environment.yaml)") : ""}`).join("\n"));
       ok = resultados.every(([, r]) => r !== false);
       break;
     }
     case "status": {
       const st = await estadoProcesos(repo, e.procesos);
       if (o.json) { console.log(JSON.stringify({ processes: st, variables: e.variables, tests: e.tests }, null, 2)); break; }
-      if (!st.length) console.log(pc.dim("No processes configured in orqen/config.yaml (entornos.procesos)."));
+      if (!st.length) console.log(pc.dim("No processes configured in orqen/environment.yaml (processes)."));
       for (const x of st)
         console.log(`${x.corriendo ? pc.green("●") : pc.dim("○")} ${x.nombre.padEnd(16)} ${pc.dim(x.comando)}${x.puerto ? pc.dim(` :${x.puerto}`) : ""}${x.cuando === "e2e" ? pc.dim("  (e2e only)") : ""}${x.log ? pc.dim(`\n    log: ${x.log}`) : ""}`);
       break;
@@ -96,7 +99,7 @@ export async function entorno(sub: string | undefined, resto: string[], o: { dir
         "Usage: orqen env <command>",
         "  setup            install dependencies (entornos.preparar)",
         "  up [--all]       start the processes and wait until they are ready, then migrate and seed (--all: include e2e-only processes)",
-        "  test [type...]   unitarios | integracion | e2e | visual (default: all configured tests)",
+        "  test [type...]   unit | integration | e2e | visual (default: all configured tests)",
         "                   -- <args>: appended to that type's command, e.g. orqen env test e2e -- tests/login.spec.ts",
         "  status           show which processes are running and where their logs are",
         "  down             stop the processes orqen started",

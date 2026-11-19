@@ -72,7 +72,7 @@ export function loadConfig(over: Partial<Config> = {}): Config {
   const localState = join(main, "cli", ".state");
   const baseBranch = env("BASE_BRANCH", project?.proyecto.rama_base ?? "main");
   const credentials = providerEnv(existsSync(join(repoPath, "orqen", ".env")) ? repoPath : main);
-  // orqen/config.yaml (flujo) is the shared configuration; a variable in orqen/.env or the environment overrides it
+  // orqen/config.yaml (workflow) is the shared configuration; a variable in orqen/.env or the environment overrides it
   const f = project?.flujo;
   const list = (k: string, fromYaml?: string[]) => process.env[k] !== undefined && process.env[k] !== "" ? split(env(k)) : fromYaml ?? [];
   return {
@@ -115,5 +115,5 @@ export function warnLegacy(cfg: Config) {
   if (warned || !used.length) return;
   warned = true;
   console.error(`[orqen] orqen/.env uses variables of an earlier version (${used.join(", ")}). They still work; ` +
-    `run \`orqen update\` to move them to \`conectores\` in orqen/config.yaml (${used.map((k) => `${k} → ${LEGACY_VARS[k]}`).join(", ")}).`);
+    `run \`orqen update\` to move them to \`connectors\` in orqen/config.yaml (${used.map((k) => `${k} → ${LEGACY_VARS[k]}`).join(", ")}).`);
 }

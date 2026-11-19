@@ -22,7 +22,7 @@ test("development manages its environment and testing starts apps, runs the suit
   const pasos: string[] = [];
   const ws: Workspace = {
     prepareBranch: () => "orqen/req-1", currentBranch: () => "orqen/req-1", commit: () => true, push: () => {}, openPr: () => "",
-    startEnvironment: async (all) => { pasos.push(`start(${all ? "all" : "always"})`); return { ok: true, detail: "Entorno ready.", variables: { DATABASE_URL: "x" }, commands: { unitarios: "orqen env test unitarios" } }; },
+    startEnvironment: async (all) => { pasos.push(`start(${all ? "all" : "always"})`); return { ok: true, detail: "Entorno ready.", variables: { DATABASE_URL: "x" }, commands: { unit: "orqen env test unit" } }; },
     stopEnvironment: () => { pasos.push("stop"); },
     runTests: () => { pasos.push("tests"); return { ok: true, output: "" }; },
   };
@@ -40,7 +40,7 @@ test("development manages its environment and testing starts apps, runs the suit
   const dev = await p.take("REQ-1", "impl");
   assert.deepEqual(pasos, ["start(always)"]);
   assert.equal((dev.context as any).environment.ok, true);
-  assert.equal((dev.context as any).environment.commands.unitarios, "orqen env test unitarios");
+  assert.equal((dev.context as any).environment.commands.unit, "orqen env test unit");
   assert.deepEqual(await p.complete("REQ-1", { completed: true, changes_summary: "x", modified_files: [], added_tests: [] }, "impl"), { ok: true, next: "TESTING" });
   assert.deepEqual(pasos, ["start(always)", "stop"]);
 
@@ -81,7 +81,7 @@ setTimeout(() => createServer((q, r) => r.end(process.env.SALUDO)).listen(${port
     assert.doesNotMatch(e.detail, /front/, "the frontend only runs for e2e");
     assert.equal(readFileSync(join(dir, "preparado.txt"), "utf8"), "hola");
     assert.ok(existsSync(join(dir, "migrado.txt")));
-    assert.deepEqual(e.commands, { unitarios: "orqen env test unitarios", e2e: "orqen env test e2e" });
+    assert.deepEqual(e.commands, { unit: "orqen env test unit", e2e: "orqen env test e2e" });
 
     const r = ws.runTests();
     assert.equal(r.ok, false);

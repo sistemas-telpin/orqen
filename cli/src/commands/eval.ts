@@ -13,7 +13,7 @@ import { runCase, type CaseResult } from "../eval/run.ts";
 import { loadConfig } from "../workflow/config.ts";
 
 export const EVAL_HELP = `  eval [case|step...]     Run the agent on test tickets and check its work (orqen/evals/*.yaml, or the built-in cases)
-      --agent "<cmd>"     Headless agent (default: agente.comando of orqen/config.yaml)
+      --agent "<cmd>"     Headless agent (default: agent.command of orqen/config.yaml)
       --judge "<cmd>"     Also ask a judge agent whether the output made facts up ("" = the same agent)
       --no-lessons        Without the team's lessons (orqen/knowledge): compare how much they help
       --keep              Keep the test projects · --json  Machine-readable result

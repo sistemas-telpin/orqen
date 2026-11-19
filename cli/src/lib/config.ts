@@ -1,5 +1,9 @@
 /**
- * Repository configuration used by orqen commands.
+ * Repository configuration used by orqen commands, in two files with English keys:
+ *  - orqen/config.yaml: what the 9-step flow needs (project, connectors, workflow, agent, OpenSpec).
+ *  - orqen/environment.yaml: how the project starts and is tested (stack, processes, tests).
+ * Internally (and in the JSON of `orqen connectors get|set`) the keys keep their original names; see config-keys.ts.
+ * Files of earlier versions (Spanish keys, everything in config.yaml) are still read; `orqen update` rewrites them.
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -8,8 +12,10 @@ import { z } from "zod";
 import { ProcesoEntorno } from "./processes.ts";
 import { Stack } from "./stack.ts";
 import { ConectoresYaml } from "../connectors/config.ts";
+import { CONFIG_KEYS, ENVIRONMENT_KEYS, filePath, STACK_KEYS, toFile, toInternal } from "./config-keys.ts";
 
 export const ARCHIVO_CONFIG = "orqen/config.yaml";
+export const ARCHIVO_ENTORNO = "orqen/environment.yaml";
 
 const Prefijo = z.string().trim().regex(/^[A-Za-z][A-Za-z0-9_]{0,19}$/, "Usá letras, números o guion bajo; empezá con una letra (máximo 20 caracteres).").transform((v) => v.toUpperCase());
 /** Key prefixes of requests and issues (`requerimientos`/`tickets`: names used by earlier versions). */
@@ -31,9 +37,9 @@ export const Flujo = z.object({
   /** Accounts of the requests system tool (Jira account id, GitHub login, Asana user id). Empty = anyone. */
   aprobadores: z.object({
     analisis: Cuentas, qa: Cuentas, codigo: Cuentas, cliente: Cuentas, ejecucion: Cuentas,
-  }).partial().default({}),
+  }).partial().prefault({}),
   /** Who decides in CODE_REVIEW: github (review on the PR) or ticket (/approve and /reject comments); revisores = GitHub logins that count. */
-  code_review: z.object({ gate: z.enum(["github", "ticket"]).default("github"), revisores: Cuentas }).partial().default({}),
+  code_review: z.object({ gate: z.enum(["github", "ticket"]).default("github"), revisores: Cuentas }).partial().prefault({}),
   /** Branch the integration PR goes to (DEVEL_BRANCH) and the command that opens it (DEVEL_PR_COMMAND). */
   rama_desarrollo: z.string().nullish(),
   comando_pr: z.string().nullish(),
@@ -57,7 +63,7 @@ export const Config = z.object({
     instalacion: z.enum(["devDependency", "global"]),
     herramientas: z.array(z.string()).default(["claude"]),
   }),
-  stack: Stack,
+  stack: Stack.prefault({ resumen: "" }),
   /** Spec-driven development tool: auto (detected), openspec, spec-kit… (see src/sdd). */
   sdd: z.object({ proveedor: z.string().default("auto") }).optional(),
   /** Where the tickets live (requests = what the client sees, issues = optional team issues). */
@@ -73,19 +79,40 @@ export const Config = z.object({
       unitarios: z.string().nullish(), integracion: z.string().nullish(),
       e2e: z.string().nullish(), visual: z.string().nullish(),
     }).default({}),
-  }),
+  }).prefault({}),
 });
 export type Config = z.infer<typeof Config>;
 
 export function rutaConfig(repo: string) { return join(repo, ARCHIVO_CONFIG); }
+export function rutaEntorno(repo: string) { return join(repo, ARCHIVO_ENTORNO); }
 export function existeConfig(repo: string) { return existsSync(rutaConfig(repo)); }
 
+const leerYaml = (p: string) => (parseDocument(readFileSync(p, "utf8")).toJS() ?? {}) as Record<string, unknown>;
+
+/** config.yaml + environment.yaml (when present) with the internal key names. environment.yaml wins over the stack/entornos of an old config.yaml. */
 export function leerConfig(repo: string): Config {
   const p = rutaConfig(repo);
   if (!existsSync(p)) throw new Error(`Missing ${ARCHIVO_CONFIG} in ${repo}. Run \`orqen init\` first.`);
-  const r = Config.safeParse(parseDocument(readFileSync(p, "utf8")).toJS());
-  if (!r.success) throw new Error(`${ARCHIVO_CONFIG} is invalid:\n- ${r.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("\n- ")}`);
+  const raw = toInternal(leerYaml(p), CONFIG_KEYS);
+  if (existsSync(rutaEntorno(repo))) {
+    const { stack, ...env } = leerYaml(rutaEntorno(repo));
+    if (stack !== undefined) raw.stack = toInternal(stack, STACK_KEYS);
+    if (Object.keys(env).length) raw.entornos = toInternal(env, ENVIRONMENT_KEYS);
+  }
+  const r = Config.safeParse(raw);
+  if (!r.success) {
+    const where = (path: PropertyKey[]) => path[0] === "stack" ? `${ARCHIVO_ENTORNO}: ${filePath(path, { stack: { as: "stack", keys: STACK_KEYS } })}`
+      : path[0] === "entornos" ? `${ARCHIVO_ENTORNO}: ${filePath(path.slice(1), ENVIRONMENT_KEYS)}` : `${ARCHIVO_CONFIG}: ${filePath(path, CONFIG_KEYS)}`;
+    throw new Error(`Invalid orqen configuration:\n- ${r.error.issues.map((i) => `${where(i.path)}: ${i.message}`).join("\n- ")}`);
+  }
   return r.data;
+}
+
+/** Whether config.yaml still has the format of earlier versions (Spanish keys, or the stack and environment inside). */
+export function configVieja(repo: string): boolean {
+  if (!existeConfig(repo)) return false;
+  const top = Object.keys(leerYaml(rutaConfig(repo)));
+  return top.some((k) => ["proyecto", "agente", "conectores", "flujo", "stack", "entornos"].includes(k));
 }
 
 /** Run the command from a relative directory in sh or cmd.exe. */
@@ -122,18 +149,30 @@ export function entornosDesdeStack(stack: Stack): Config["entornos"] {
   };
 }
 
-export function serializarConfig(c: Config): string {
-  const limpio = JSON.parse(JSON.stringify(c, (_k, v) => (v === null ? undefined : v))); // Omit null and undefined values.
-  return [
-    "# Repository configuration generated by `orqen init`. Edit as needed.",
-    "# entornos: how each part of the project starts (procesos) and the tests used by `orqen env` and the workflow.",
-    stringify(limpio, { lineWidth: 0 }),
-  ].join("\n");
+const limpiar = (v: unknown) => JSON.parse(JSON.stringify(v, (_k, x) => (x === null ? undefined : x)));   // omit null and undefined
+
+/** The two files, with English keys: config.yaml (the flow) and environment.yaml (stack and how the project starts). */
+export function serializarConfig(c: Config): { config: string; entorno: string } {
+  const { stack, entornos, ...flujo } = limpiar(c) as Config;
+  return {
+    config: [
+      "# orqen configuration for the 9-step flow: project, connectors (where the tickets live) and workflow. Edit as needed.",
+      "# Tokens never go here: they live in ~/.orqen/providers.env. How the project starts is in orqen/environment.yaml.",
+      stringify(toFile(flujo, CONFIG_KEYS), { lineWidth: 0 }),
+    ].join("\n"),
+    entorno: [
+      "# How the project starts and is tested (orqen env, development and TESTING). Generated by `orqen init`; edit as needed.",
+      "# stack: what was detected · processes: how each part starts · tests: the suites.",
+      stringify({ stack: toFile(stack, STACK_KEYS), ...toFile(entornos, ENVIRONMENT_KEYS) }, { lineWidth: 0 }),
+    ].join("\n"),
+  };
 }
 
 export function escribirConfig(repo: string, c: Config) {
   mkdirSync(dirname(rutaConfig(repo)), { recursive: true });
-  writeFileSync(rutaConfig(repo), serializarConfig(c));
+  const s = serializarConfig(c);
+  writeFileSync(rutaConfig(repo), s.config);
+  writeFileSync(rutaEntorno(repo), s.entorno);
 }
 
 /** Update version fields while preserving comments and key order. */

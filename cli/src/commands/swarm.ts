@@ -26,7 +26,7 @@ export const SWARM_HELP = `  swarm "<task>"          Split a task into small sub
       --small "<cmd>"     Small model for subtasks (default: ${SWARM_DEFAULTS.small})
       --large "<cmd>"     Larger model after the small one fails (default: ${SWARM_DEFAULTS.large})
       --small-attempts <n> --large-attempts <n>   Attempts per tier (default 2 and 2)
-      --test "<cmd>"      Final verification when the plan has none (default: entornos.tests.unitarios)
+      --test "<cmd>"      Final verification when the plan has none (default: tests.unit of orqen/environment.yaml)
       --setup "<cmd>"     Run in each worktree before the agent (default: entornos.preparar); --no-setup
       --apply             Integrate a successful result into the starting branch (fast-forward only)
       --plan <file.json>  Use an existing plan instead of planning · --plan-only  Only write the plan

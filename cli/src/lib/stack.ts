@@ -86,5 +86,5 @@ export function resumenStack(stack: Stack): string {
   const t = Object.entries(stack.tests).filter(([, v]) => v);
   if (t.length) l.push("Tests:", ...t.map(([k, v]) => `- ${k}: \`${v}\``), "");
   if (stack.notas.length) l.push("Notes:", ...stack.notas.map((n) => `- ${n}`), "");
-  return l.join("\n").trim() || "_No stack detected. Fill in `orqen/config.yaml`._";
+  return l.join("\n").trim() || "_No stack detected. Fill in `orqen/environment.yaml`._";
 }

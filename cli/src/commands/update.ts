@@ -1,7 +1,7 @@
 /** Update the CLI, compatible OpenSpec installation, and managed kit files. */
 import { resolve } from "node:path";
 import semver from "semver";
-import { actualizarVersiones, escribirConfig, leerConfig } from "../lib/config.ts";
+import { actualizarVersiones, ARCHIVO_CONFIG, ARCHIVO_ENTORNO, configVieja, escribirConfig, leerConfig } from "../lib/config.ts";
 import { leerEnv } from "../lib/env.ts";
 import { legacyToYaml, legacyVarsIn } from "../connectors/legacy.ts";
 import type { ConectoresYaml } from "../connectors/config.ts";
@@ -104,11 +104,19 @@ export async function update(o: OpcionesUpdate) {
   if (!config.conectores && viejas.length) {
     const bloque = legacyToYaml(env) as ConectoresYaml;
     p.log.info(`orqen/.env uses variables of an earlier version: ${viejas.join(", ")}`);
-    if (await confirmar("Move where the tickets live to orqen/config.yaml (conectores)? orqen/.env is not modified", true, yes)) {
+    if (await confirmar("Move where the tickets live to orqen/config.yaml (connectors)? orqen/.env is not modified", true, yes)) {
       const actual = leerConfig(repo);
       actual.conectores = bloque;
       escribirConfig(repo, actual);
-      p.log.success(`conectores written in orqen/config.yaml ${gris("(you can delete REC_JQL and SIS_* from orqen/.env)")}`);
+      p.log.success(`connectors written in orqen/config.yaml ${gris("(you can delete REC_JQL and SIS_* from orqen/.env)")}`);
+    }
+  }
+  // 5. Format of earlier versions: Spanish keys and the stack/environment inside config.yaml
+  if (configVieja(repo)) {
+    p.log.info(`${ARCHIVO_CONFIG} uses the format of an earlier version (Spanish keys, stack and environment in the same file).`);
+    if (await confirmar(`Rewrite it with English keys and move the stack and environment to ${ARCHIVO_ENTORNO}? (comments in the file are not kept)`, true, yes)) {
+      escribirConfig(repo, leerConfig(repo));
+      p.log.success(`${ARCHIVO_CONFIG} rewritten · ${ARCHIVO_ENTORNO} created`);
     }
   }
   actualizarVersiones(repo, { cli: VERSION_CLI });

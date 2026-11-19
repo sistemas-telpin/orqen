@@ -6,7 +6,7 @@
  */
 import { basename, resolve } from "node:path";
 import { agentesInstalados, comandoRapido, explorarConAgente, explorarRapidoAislado, type ResultadoExploracion } from "../lib/agent.ts";
-import { ARCHIVO_CONFIG, entornosDesdeStack, escribirConfig, existeConfig, leerConfig, type Config } from "../lib/config.ts";
+import { ARCHIVO_CONFIG, ARCHIVO_ENTORNO, entornosDesdeStack, escribirConfig, existeConfig, leerConfig, type Config } from "../lib/config.ts";
 import { detectar } from "../lib/detect.ts";
 import { checkSummary, missingSecrets, setupConnectorsStep } from "../lib/connectors-setup.ts";
 import { checkDraft, parseDraft, type Draft } from "../lib/connectors-edit.ts";
@@ -199,14 +199,14 @@ export async function init(o: OpcionesInit) {
   const env = providerEnv(repo);
   const faltanEnv = config.conectores ? missingSecrets(config.conectores, env) : [];
   const lado = res.filter((r) => r.accion === "guardado-al-lado");
-  p.log.success(`${ARCHIVO_CONFIG} and kit v${VERSION_CLI} installed`);
+  p.log.success(`${ARCHIVO_CONFIG}, ${ARCHIVO_ENTORNO} and kit v${VERSION_CLI} installed`);
   for (const r of lado) p.log.warn(`${r.ruta}: the proposed version is in ${r.detalle} for you to merge`);
 
   const mk = marketplace(existsSync(join(repo, MARKETPLACE)) ? readFileSync(join(repo, MARKETPLACE), "utf8") : undefined).nombre;
   const pasos = [
     ...(!config.conectores ? [`Connect where the tickets live: ${pc.cyan("orqen connectors setup")} (Jira, GitHub or Asana).`] : []),
     ...(faltanEnv.length ? [`Complete the provider accounts with ${pc.cyan("orqen connectors setup")}: missing ${faltanEnv.join(", ")}. These accounts are shared across your repositories.`] : []),
-    `Review ${pc.cyan(ARCHIVO_CONFIG)}, then try: ${pc.cyan("orqen env up")} · ${pc.cyan("orqen env test")} · ${pc.cyan("orqen env down")}`,
+    `Review ${pc.cyan(ARCHIVO_CONFIG)} and ${pc.cyan(ARCHIVO_ENTORNO)}, then try: ${pc.cyan("orqen env up")} · ${pc.cyan("orqen env test")} · ${pc.cyan("orqen env down")}`,
     `Open Claude Code in this folder (restart it if it was open) and accept ${pc.bold("Trust this folder")}: ` +
       `the commands appear as ${pc.cyan("/orqen:tutorial")} (start here if you are new), ${pc.cyan("/orqen:support")}, ${pc.cyan("/orqen:analyze")}, ${pc.cyan("/orqen:list")}, ${pc.cyan("/orqen:implement")}, ${pc.cyan("/orqen:pr")}, ${pc.cyan("/orqen:review")} (QA), ${pc.cyan("/orqen:approve")} ` +
       gris(`(type /orqen: to list them; check with /plugin → orqen@${mk})`),
@@ -266,7 +266,7 @@ async function revisarStack(stack: Stack, yes: boolean, hayAgente: boolean): Pro
     stack.componentes.map((c) => c.nombre), false);
   const tests = { ...stack.tests };
   for (const k of ["unitarios", "integracion", "e2e", "visual"] as const) {
-    tests[k] = (await texto(`Test command for ${k} (leave blank to skip)`, tests[k] ?? "", false)) || undefined;
+    tests[k] = (await texto(`Test command for ${({ unitarios: "unit", integracion: "integration" } as Record<string, string>)[k] ?? k} tests (leave blank to skip)`, tests[k] ?? "", false)) || undefined;
   }
   const migraciones = (await texto("Migration command (leave blank to skip)", stack.migraciones ?? "", false)) || undefined;
   const seed = (await texto("Seed command for test data (leave blank to skip)", stack.seed ?? "", false)) || undefined;
@@ -284,7 +284,7 @@ async function revisarProcesos(e: Config["entornos"], yes: boolean): Promise<Con
   const linea = (x: ProcesoEntorno) => `${x.nombre}: ${x.comando}${x.ruta !== "." ? gris(` (in ${x.ruta})`) : ""}${x.puerto ? gris(` → :${x.puerto}`) : ""}${x.cuando === "e2e" ? gris("  [e2e only]") : ""}`;
   p.note(e.procesos.length
     ? e.procesos.map(linea).join("\n") + "\n\n" + gris("orqen starts them when needed (orqen take / orqen env up) and stops them afterwards.")
-    : gris("Could not find how to start the project (no dev/start script). You can add it under entornos.procesos in orqen/config.yaml."),
+    : gris("Could not find how to start the project (no dev/start script). You can add it under processes in orqen/environment.yaml."),
   "How the project starts");
   if (yes || !e.procesos.length) return e;
   if (!(await confirmar("Do you want to change any command?", false, false))) return e;
@@ -338,7 +338,8 @@ async function prepararOpenSpec(repo: string, agentes: string[], herramientasPed
 function resumenPlan(plan: Cambio[], config: Config): string {
   const icono: Record<string, string> = { crear: pc.green("+"), actualizar: pc.yellow("~"), igual: gris("="), conflicto: pc.red("!") };
   const filas = [
-    `${pc.green("+")} ${ARCHIVO_CONFIG}`,
+    `${pc.green("+")} ${ARCHIVO_CONFIG} ${gris("(the flow: project, connectors, workflow)")}`,
+    `${pc.green("+")} ${ARCHIVO_ENTORNO} ${gris("(stack, how each part starts, tests)")}`,
     ...plan.filter((c) => c.accion !== "igual" && !c.ruta.startsWith("orqen/stages/") && !c.ruta.startsWith("orqen/plugin/"))
       .map((c) => `${icono[c.accion]} ${c.ruta}${c.accion === "conflicto" ? pc.red("  (local edits require review)") : ""}`),
   ];

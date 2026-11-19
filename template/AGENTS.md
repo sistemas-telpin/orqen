@@ -8,7 +8,7 @@
 
 A **request** is the client's ticket in the requests system; its **issue** is the team's ticket that orqen creates in the
 issues system when the analysis closes (optional). Each system can be any supported tool (Jira, GitHub, or Asana, set in
-`conectores` in `orqen/config.yaml`). Commands accept either key.
+`connectors` in `orqen/config.yaml`). Commands accept either key.
 
 The 9 steps, one command each (the person runs it; you follow it):
 
@@ -42,7 +42,7 @@ orqen works alongside the person; it does not replace them. While someone is on 
 
 ### Support (optional)
 
-With `flujo.soporte: true` in `orqen/config.yaml` (or `SUPPORT_STAGE=on`), `orqen list requests` sends a new request to a support person before the analyst. `orqen support` also works with it off, to pass a particular request through support.
+With `workflow.support: true` in `orqen/config.yaml` (or `SUPPORT_STAGE=on`), `orqen list requests` sends a new request to a support person before the analyst. `orqen support` also works with it off, to pass a particular request through support.
 
 1. Start with `/orqen:support <KEY>` or `orqen support <KEY>`. A person from support leads this stage; orqen records them by their Git name (`--person "<name>"` overrides it).
 2. Read the request, comments, similar requests, and the documented behavior. Look for the answer before asking the person, and ask them only what you cannot find.
@@ -70,7 +70,7 @@ The analyst can still take a `NEW` request directly with `orqen analyze`, and ca
    | `full` | Broader changes involving architecture, data, integrations, security, or billing | Full OpenSpec proposal, specs, design, and tasks |
 
    With `light` or `full`, `orqen lane <KEY> <lane>` prepares a branch and change. Write the spec with the analyst under `openspec/changes/`.
-4. Run `orqen complete <KEY> <output.json>`. Once validation passes, orqen creates the issue (when `conectores.issues` is configured), links it to the request, and writes the record under `orqen/work/<KEY>/`. The request is the conversation with the customer; the issue tracks implementation (`conectores.issues.transiciones`). Rejected customer acceptance starts a new analysis round and a new issue.
+4. Run `orqen complete <KEY> <output.json>`. Once validation passes, orqen creates the issue (when `connectors.issues` is configured), links it to the request, and writes the record under `orqen/work/<KEY>/`. The request is the conversation with the customer; the issue tracks implementation (`connectors.issues.transitions`). Rejected customer acceptance starts a new analysis round and a new issue.
 
 ### Operational work
 
@@ -80,7 +80,7 @@ For a data correction, restart, configuration change, or other work without code
 ANALYSIS → EXECUTION → EXECUTION_APPROVAL → APPLICATION → VERIFICATION → ACCEPTANCE → CLOSED
 ```
 
-Propose the steps, rollback, and read-only verification. A person authorized by `flujo.aprobadores.ejecucion` (`APPROVERS_EXECUTION`) approves and applies the change. Never execute SQL that modifies data or change services yourself. If verification identifies a code defect, the request returns to analysis. Operational work still creates an issue (when configured); it skips the spec, branch, tests, and PR.
+Propose the steps, rollback, and read-only verification. A person authorized by `workflow.approvers.execution` (`APPROVERS_EXECUTION`) approves and applies the change. Never execute SQL that modifies data or change services yourself. If verification identifies a code defect, the request returns to analysis. Operational work still creates an issue (when configured); it skips the spec, branch, tests, and PR.
 
 ### Work on a stage
 
@@ -97,7 +97,7 @@ Propose the steps, rollback, and read-only verification. A person authorized by 
 ### Integration PR, QA, and code review
 
 - `TESTING` opens no PR. The only PR is the integration PR to `DEVEL_BRANCH`, opened with `/orqen:pr` (`orqen pr <KEY> <explanation.md>`) from the request branch. orqen commits pending changes, pushes, and opens or updates it.
-- Only the **full lane** goes through `QA_REVIEW` after `TESTING`; the direct and light lanes go straight to `CODE_REVIEW`. QA runs `/orqen:review <KEY>`: it checks on screen the e2e of the change (`TESTING` already ran the whole regression) and records the decision with `orqen review <KEY> approve|reject [--reason "<what to fix>"] [--report <report.md>]`. Approval moves to `CODE_REVIEW`; rejection returns to `DEVELOPMENT` with the reason as feedback. QA can also comment `/approve` or `/reject <reason>` on the ticket (limited to `flujo.aprobadores.qa` in `orqen/config.yaml`).
+- Only the **full lane** goes through `QA_REVIEW` after `TESTING`; the direct and light lanes go straight to `CODE_REVIEW`. QA runs `/orqen:review <KEY>`: it checks on screen the e2e of the change (`TESTING` already ran the whole regression) and records the decision with `orqen review <KEY> approve|reject [--reason "<what to fix>"] [--report <report.md>]`. Approval moves to `CODE_REVIEW`; rejection returns to `DEVELOPMENT` with the reason as feedback. QA can also comment `/approve` or `/reject <reason>` on the ticket (limited to `workflow.approvers.qa` in `orqen/config.yaml`).
 - The senior decides with `/orqen:approve <KEY>`. Optionally first a report (step 3 of `/orqen:approve`): review the PR diff read-only against the analysis, spec or plan, and acceptance criteria, and give a verdict plus each finding with its severity, `file:line`, impact, and possible solutions; record it with `orqen code-review <KEY> <report.md> --verdict <approve|minor|reject>` (it does not change the stage). The decision is recorded with `orqen approve <KEY>` or `orqen approve <KEY> --changes <comment.md>`: with the default `CODE_REVIEW_GATE=github` orqen posts it as a review on the PR with the senior's `gh` session (limited to `GITHUB_REVIEWERS` when set), moves to `DELIVERY` on approval, and returns to `DEVELOPMENT` on "changes requested" (the text becomes feedback for the agent). Reviews made directly on GitHub count too. Only reviews on the PR's current head count, so a later push needs a new review. With `CODE_REVIEW_GATE=ticket`, the decision is recorded on the tickets (or the senior comments `/approve` or `/reject <reason>` there).
 - `orqen approve` refuses a PR whose CI is failing or still running, or that conflicts with the development branch (`orqen list prs` shows both): request changes instead (conflicts go back to development to update the branch), or pass `--force` only when the senior explicitly says why it can be approved anyway. When `gh` cannot read the checks they show as `unknown` and do not block.
 - orqen never merges the PR. Once approved, a person merges it by hand into the development branch; orqen detects the merge (`orqen list prs` shows the ones still waiting) and comments it on the tickets. When orqen cannot read the PR, the person who merged it confirms it with `orqen merged <KEY>`.
@@ -118,20 +118,20 @@ Propose the steps, rollback, and read-only verification. A person authorized by 
 
 ### Environments and tests
 
-`orqen/config.yaml` defines how each part of the project starts under `entornos.procesos` (its command, such as
+`orqen/environment.yaml` defines how each part of the project starts under `processes` (its command, such as
 `npm run dev` or `npm start`, its directory, and its port). There is no Docker in between unless the team configured a
 process that uses it. **orqen manages them on its own; never ask a person to open a terminal or start anything:**
 
-- During `DEVELOPMENT`, `orqen take` installs dependencies, starts the `cuando: siempre` processes (backend, workers…),
+- During `DEVELOPMENT`, `orqen take` installs dependencies, starts the `when: always` processes (backend, workers…),
   waits until they respond, and runs migrations and seed commands. Read `environment` in the agent context for status,
   variables, and test commands.
 - `orqen complete` stops them when development ends.
 - Test scope: during `DEVELOPMENT`, write and run unit tests and the e2e of the Scenarios or criteria the change touches (`orqen env test e2e -- <files or filter>`). `TESTING` runs every test type, including the full e2e regression. In the full lane, QA then reviews the e2e of the change.
-- `TESTING` is run by the agent right after development (`/orqen:implement` continues into it), not by a person. orqen starts every process (including `cuando: e2e` ones such as the frontend), runs the full test suite,
+- `TESTING` is run by the agent right after development (`/orqen:implement` continues into it), not by a person. orqen starts every process (including `when: e2e` ones such as the frontend), runs the full test suite,
   and stops them.
 
 ```sh
-orqen env test [unitarios|integracion|e2e|visual]
+orqen env test [unit|integration|e2e|visual]
 orqen env test e2e -- <files or filter>  # Only the e2e of this change
 orqen env status   # what is running and where each process log is
 orqen env up --all # only when development also needs the frontend (e2e / visual)

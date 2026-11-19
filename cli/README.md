@@ -49,12 +49,12 @@ Use `--no-cli`, `--no-openspec`, or `--no-kit` to skip a step. Run `orqen init` 
 ```sh
 orqen env setup
 orqen env up [--all]
-orqen env test [unitarios|integracion|e2e|visual]
+orqen env test [unit|integration|e2e|visual]
 orqen env status
 orqen env down
 ```
 
-`up` starts the processes in `entornos.procesos` in the background (`--all` includes the `cuando: e2e` ones, such as the frontend), waits until each one responds on its port, URL, or log line, then runs migrations and seed commands. `down` stops what orqen started; `status` shows what is running and where each log is (`orqen/state/logs/`). The test commands receive variables from `entornos.variables` in `orqen/config.yaml`. The values `unitarios` and `integracion` select unit and integration tests.
+`up` starts the `processes` of `orqen/environment.yaml` in the background (`--all` includes the `when: e2e` ones, such as the frontend), waits until each one responds on its port, URL, or log line, then runs migrations and seed commands. `down` stops what orqen started; `status` shows what is running and where each log is (`orqen/state/logs/`). The test commands receive the `variables` of `orqen/environment.yaml`. `orqen env test unit|integration|e2e|visual` runs one suite (`unitarios` and `integracion` still work).
 
 ## Split a task across a swarm of agents
 
@@ -83,7 +83,7 @@ In `TESTING`, taking the stage starts the full environment, runs the configured 
 
 In the full lane, QA runs `/orqen:review <KEY>` in `QA_REVIEW` and records the decision with `orqen review <KEY> approve|reject`; the direct and light lanes skip QA. Run `orqen pr <KEY>` to inspect the integration target or add an explanation file to open the PR to `DEVEL_BRANCH`; testing opens no PR, so this is the PR the senior reviews. In `CODE_REVIEW`, the senior runs `/orqen:code-review <KEY>`, and `orqen code-review <KEY> <report.md> --verdict <approve|minor|reject>` records the report under `orqen/work/<KEY>/round-N/` and comments it on the internal ticket (or the external one) without changing the stage.
 
-For an existing checkout, the CLI also reads `cli/.env` and its local state under `cli/.state/`. The flow settings (approvers, code review gate, integration branch) live under `flujo` in `orqen/config.yaml`; a variable such as `APPROVERS_CODE` or `DEVEL_BRANCH` in `.env` or the environment overrides them.
+For an existing checkout, the CLI also reads `cli/.env` and its local state under `cli/.state/`. The flow settings (approvers, code review gate, integration branch) live under `workflow` in `orqen/config.yaml` (English keys; the Spanish ones of earlier versions are still read); a variable such as `APPROVERS_CODE` or `DEVEL_BRANCH` in `.env` or the environment overrides them.
 
 ## Develop locally
 

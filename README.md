@@ -47,7 +47,7 @@ siguiente** · ver qué hay para hacer · analizar · implementar · testing, PR
 - **El texto lo escribe orqen, no el agente**: está en la CLI (`cli/src/tutorial/content.ts`), así que es siempre el mismo y se puede corregir
   en un solo lugar. El comando de Claude Code corre `orqen tutorial --step <n> --json`, muestra el paso tal cual y ofrece los botones
   (siguiente, probalo, otro tema, salir). Si la persona pregunta algo, el agente contesta corto y vuelve al tutorial.
-- **Con los datos del repo**: procesos, puertos y URLs de `orqen/config.yaml`, claves de ejemplo según los conectores (Jira, GitHub o Asana), si hay soporte,
+- **Con los datos del repo**: procesos, puertos y URLs de `orqen/environment.yaml`, claves de ejemplo según los conectores (Jira, GitHub o Asana), si hay soporte,
   cómo se decide el code review y el comando para seguir un log en PowerShell (Windows) o bash. Nunca muestra secretos de `orqen/.env`.
 - **"Probalo ahora"** solo corre comandos de lectura (`orqen status`, `orqen list requests`, `orqen env status`, `git status`). Nunca toma ni cambia un pedido.
 
@@ -66,7 +66,7 @@ pantalla, `Get-UICulture`; en macOS, `AppleLanguages`; en Linux, `LC_ALL` / `LAN
 ## Soporte (opcional): `/orqen:support SOP-1234`
 
 Es la etapa **antes del analista**: la persona que recibe el reclamo intenta responderle al cliente sin llegar a un análisis ni a
-un desarrollo. `flujo.soporte` (en `orqen/config.yaml`, apagada por defecto) solo decide si `orqen list requests` manda los pedidos nuevos a soporte: con `on` aparecen primero ahí; con `off`, el flujo es el de siempre
+un desarrollo. `workflow.support` (en `orqen/config.yaml`, apagada por defecto) solo decide si `orqen list requests` manda los pedidos nuevos a soporte: con `on` aparecen primero ahí; con `off`, el flujo es el de siempre
 (`NEW` → `ANALYSIS`).
 
 ```mermaid
@@ -190,7 +190,7 @@ aprueba solo si la suite pasó y todo está cubierto. Si no, vuelve a DEVELOPMEN
 
 | Paso | Tests |
 | --- | --- |
-| DEVELOPMENT (`/orqen:implement`) | Unit tests del código que cambia y los **e2e de los Scenarios o criterios que agrega o toca** el cambio. Corre solo esos: `orqen env test unitarios` y `orqen env test e2e -- <archivos o filtro>` |
+| DEVELOPMENT (`/orqen:implement`) | Unit tests del código que cambia y los **e2e de los Scenarios o criterios que agrega o toca** el cambio. Corre solo esos: `orqen env test unit` y `orqen env test e2e -- <archivos o filtro>` |
 | TESTING (lo corre el agente solo al terminar `/orqen:implement`, todos los carriles) | **Todos** los tests configurados: unit, integración, la **regresión e2e completa** y visual. Es el único paso que corre la regresión entera |
 | QA_REVIEW (solo carril completo) | No repite la regresión: QA valida con criterio y en pantalla los e2e del cambio |
 
@@ -430,7 +430,8 @@ actualizan solos; para los editados elegís conservar, reemplazar o dejar una co
 
 | Ruta                             | Para qué                                                                                       |
 | -------------------------------- | ---------------------------------------------------------------------------------------------- |
-| `orqen/config.yaml`              | Stack, cómo se levanta cada parte, migraciones, tests, rama base, agente, **conectores** y **flujo** (aprobadores, gate del code review, rama de integración) |
+| `orqen/config.yaml`              | Lo que usa el flujo de 9 pasos: proyecto, prefijos, **connectors** (dónde viven los tickets), **workflow** (aprobadores, gate del code review, rama de integración), agente y OpenSpec |
+| `orqen/environment.yaml`         | Cómo se levanta y testea el proyecto: `stack` detectado, `processes`, variables, migraciones y `tests` |
 | `orqen/.env`                     | Opcional: overrides locales con variables (ignorado por git). `orqen init` ya no lo crea      |
 | `~/.orqen/providers.env`          | Cuentas y tokens de proveedores, compartidos por el usuario entre repositorios                 |
 | `orqen/stages/`                  | Guías de cada etapa (editables)                                                                |
@@ -441,28 +442,51 @@ actualizan solos; para los editados elegís conservar, reemplazar o dejar una co
 | `AGENTS.md` y `CLAUDE.md`        | Instrucciones del proceso para los agentes                                                     |
 | `openspec/`                      | Specs y configuración de OpenSpec                                                              |
 
-### Configuración del flujo
+### `orqen/config.yaml`: el flujo
 
-Cómo trabaja el equipo se configura en `orqen/config.yaml`, versionado y compartido. `orqen init` escribe la sección con los valores por defecto:
+Todo lo que usan los 9 pasos, versionado y compartido, con claves en inglés. `orqen init` lo escribe con los valores por defecto:
 
 ```yaml
-flujo:
-  soporte: false                 # true: los pedidos nuevos van primero a soporte (/orqen:support anda igual)
-  aprobadores:                   # cuentas del sistema de requests; vacío = cualquiera
-    analisis: []
+version: 1
+orqen: { cli: 0.1.0, kit: 0.1.0 }
+project:
+  name: portal-clientes
+  base_branch: main              # de acá salen las ramas de los pedidos
+general:
+  prefixes: { requests: SOP, issues: DEV }
+agent:
+  command: claude -p --permission-mode acceptEdits   # agente del modo desatendido (orqen cycle)
+openspec:
+  install: devDependency         # devDependency | global
+  tools: [claude]
+connectors:                      # dónde viven los tickets (ver Conectores); los tokens nunca van acá
+  requests:
+    type: jira
+    filter: project = SOP AND labels = orqen AND statusCategory != Done
+    transitions: { ACCEPTANCE: Esperando cliente, CLOSED: Resuelto }
+workflow:
+  support: false                 # true: los pedidos nuevos van primero a soporte (/orqen:support anda igual)
+  approvers:                     # cuentas del sistema de requests; vacío = cualquiera
+    analysis: []
     qa: []
-    codigo: [seni]               # también destraban un BLOCKED
-    cliente: []
-    ejecucion: []
+    code: [seni]                 # también destraban un BLOCKED
+    client: []
+    execution: []
   code_review:
     gate: github                 # github (review en el PR) | ticket (/approve y /reject en el ticket)
-    revisores: []                # usuarios de GitHub cuyos reviews cuentan; vacío = cualquiera
-  rama_desarrollo: desarrollo    # adónde va el PR de integración
-  # comando_pr: 'gh pr create --base {base} --head {branch} --title "{key}: {title}" --body-file {body}'   # entre comillas: tiene ": "
-  # comando_tests: npm test
-  # lock_min: 90
-  # intervalo_seg: 120
+    reviewers: []                # usuarios de GitHub cuyos reviews cuentan; vacío = cualquiera
+  devel_branch: desarrollo       # adónde va el PR de integración
+  # pr_command: 'gh pr create --base {base} --head {branch} --title "{key}: {title}" --body-file {body}'   # entre comillas: tiene ": "
+  # test_command: npm test       # suite completa de TESTING
+  # lock_minutes: 90
+  # interval_seconds: 120
 ```
+
+Cómo se levanta y se testea el proyecto va aparte, en `orqen/environment.yaml` (ver [Entornos y tests](#entornos-y-tests)).
+
+**Archivos de versiones anteriores**: un `config.yaml` con las claves en castellano (`proyecto`, `conectores`, `flujo`…) y con
+`stack`/`entornos` adentro se sigue leyendo igual. `orqen update` ofrece reescribirlo en inglés y pasar el stack y los entornos
+a `environment.yaml` (los comentarios del archivo no se conservan).
 
 Cada valor se puede pisar en una máquina con la variable de la tabla de abajo, en `orqen/.env` (ignorado por git) o en el entorno
 (por ejemplo en CI). Así siguen andando las instalaciones que tenían todo en `orqen/.env`.
@@ -473,15 +497,15 @@ Las credenciales de proveedores van en `~/.orqen/providers.env`. El resto son ov
 
 | Variable                                                     | Para qué                                                                                   |
 | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------ |
-| `JIRA_URL`, `JIRA_USER`, `JIRA_TOKEN`, `JIRA_DEPLOYMENT`      | Conexión a Jira (`cloud` o `server`). Otro Jira: otro prefijo y `credenciales: <PREFIJO>` en el conector |
+| `JIRA_URL`, `JIRA_USER`, `JIRA_TOKEN`, `JIRA_DEPLOYMENT`      | Conexión a Jira (`cloud` o `server`). Otro Jira: otro prefijo y `credentials: <PREFIJO>` en el conector |
 | `GITHUB_TOKEN`                                               | GitHub Issues/Projects (vacío = la sesión de `gh`)                                         |
 | `ASANA_TOKEN`                                                | Asana (token personal)                                                                     |
-| `SUPPORT_STAGE` (`flujo.soporte`)                          | `on`: `orqen list requests` manda los pedidos nuevos primero a soporte. Por defecto `off`; `/orqen:support` funciona con cualquiera de los dos valores. No hay lista de personas de soporte: puede tomarlo cualquiera |
-| `APPROVERS_ANALYSIS`, `APPROVERS_QA`, `APPROVERS_CODE`, `APPROVERS_CLIENT`, `APPROVERS_EXECUTION` (`flujo.aprobadores`) | Quién puede decidir en cada gate, con cuentas del sistema de requests (vacío = cualquiera). `APPROVERS_CODE` también destraba un BLOCKED |
-| `CODE_REVIEW_GATE`, `GITHUB_REVIEWERS` (`flujo.code_review`) | Quién decide en CODE_REVIEW: `github` (review en el PR, por defecto) o `ticket` (`/approve` y `/reject` en el ticket; `jira` sigue funcionando). `GITHUB_REVIEWERS`: usuarios de GitHub cuyos reviews cuentan (vacío = cualquiera) |
-| `BASE_BRANCH`, `TEST_COMMAND`                                | Rama base (`proyecto.rama_base`) y suite de TESTING (`flujo.comando_tests`)                 |
-| `DEVEL_BRANCH`, `DEVEL_PR_COMMAND`                           | Rama de integración y comando que abre el PR (`flujo.rama_desarrollo`, `flujo.comando_pr`) |
-| `AGENT_CMD`, `ORQEN_INTERVAL_SEC`, `ORQEN_LOCK_MIN`          | Agente del modo desatendido (`agente.comando`), intervalo del ciclo y vencimiento del lock (`flujo.intervalo_seg`, `flujo.lock_min`) |
+| `SUPPORT_STAGE` (`workflow.support`)                        | `on`: `orqen list requests` manda los pedidos nuevos primero a soporte. Por defecto `off`; `/orqen:support` funciona con cualquiera de los dos valores. No hay lista de personas de soporte: puede tomarlo cualquiera |
+| `APPROVERS_ANALYSIS`, `APPROVERS_QA`, `APPROVERS_CODE`, `APPROVERS_CLIENT`, `APPROVERS_EXECUTION` (`workflow.approvers`) | Quién puede decidir en cada gate, con cuentas del sistema de requests (vacío = cualquiera). `APPROVERS_CODE` también destraba un BLOCKED |
+| `CODE_REVIEW_GATE`, `GITHUB_REVIEWERS` (`workflow.code_review`) | Quién decide en CODE_REVIEW: `github` (review en el PR, por defecto) o `ticket` (`/approve` y `/reject` en el ticket; `jira` sigue funcionando). `GITHUB_REVIEWERS`: usuarios de GitHub cuyos reviews cuentan (vacío = cualquiera) |
+| `BASE_BRANCH`, `TEST_COMMAND`                                | Rama base (`project.base_branch`) y suite de TESTING (`workflow.test_command`)                 |
+| `DEVEL_BRANCH`, `DEVEL_PR_COMMAND`                           | Rama de integración y comando que abre el PR (`workflow.devel_branch`, `workflow.pr_command`) |
+| `AGENT_CMD`, `ORQEN_INTERVAL_SEC`, `ORQEN_LOCK_MIN`          | Agente del modo desatendido (`agent.command`), intervalo del ciclo y vencimiento del lock (`workflow.interval_seconds`, `workflow.lock_minutes`) |
 
 ## App de escritorio
 
@@ -494,7 +518,7 @@ En **Configuración → General** se definen el **prefijo de requests** (lo que 
 
 ```yaml
 general:
-  prefijos:
+  prefixes:
     requests: REQ
     issues: ISS
 ```
@@ -513,59 +537,65 @@ Cada sistema puede estar en **Jira**, **GitHub** (Issues, opcionalmente en un Gi
 (por ejemplo, el Jira del cliente para los requests y un GitHub Project del equipo para los issues). Se configuran en `orqen/config.yaml`:
 
 ```yaml
-conectores:
+connectors:
   requests:
-    tipo: jira                 # jira | github | asana
-    filtro: project = SOP AND labels = orqen AND statusCategory != Done
-    transiciones: { ACCEPTANCE: "Esperando cliente", CLOSED: "Resuelto", CANCELLED: "Cancelado" }   # sin CANCELLED usa la de CLOSED
+    type: jira                 # jira | github | asana
+    filter: project = SOP AND labels = orqen AND statusCategory != Done
+    transitions: { ACCEPTANCE: "Esperando cliente", CLOSED: "Resuelto", CANCELLED: "Cancelado" }   # sin CANCELLED usa la de CLOSED
   issues:                      # opcional
-    tipo: github
+    type: github
     repo: mi-org/mi-repo
-    proyecto: 7                # número del GitHub Project (opcional); mueve el campo Status
-    transiciones: { DEVELOPMENT: "In progress", CODE_REVIEW: "In review", CLOSED: "Done" }
+    project: 7                 # número del GitHub Project (opcional); mueve el campo Status
+    transitions: { DEVELOPMENT: "In progress", CODE_REVIEW: "In review", CLOSED: "Done" }
 ```
 
 | Campo | Jira | GitHub | Asana |
 | ----- | ---- | ------ | ----- |
-| `filtro` | JQL de los pedidos que maneja orqen | calificadores de búsqueda (`is:open label:orqen` por defecto) | tag de las tareas (`orqen` por defecto) |
-| `proyecto` | clave del proyecto donde se crea el issue | número del GitHub Project | id del proyecto |
-| `transiciones` | estado de orqen → transición del workflow | estado → opción del campo `campo` (Status) | estado → sección (`completed` la cierra) |
+| `filter` | JQL de los pedidos que maneja orqen | calificadores de búsqueda (`is:open label:orqen` por defecto) | tag de las tareas (`orqen` por defecto) |
+| `project` | clave del proyecto donde se crea el issue | número del GitHub Project | id del proyecto |
+| `transitions` | estado de orqen → transición del workflow | estado → opción del campo `field` (Status) | estado → sección (`completed` la cierra) |
 | Claves | las de Jira (`SOP-123`) | `GH-42` (`prefijo` configurable) | `AS-<id>` |
-| Extras | `credenciales`, `tipo_ticket`, `tipo_operativo`, `vinculo` | `repo`, `duenio_proyecto`, `campo`, `etiquetas` | `prefijo` |
+| Extras | `credentials`, `issue_type`, `operational_type`, `link_type` | `repo`, `project_owner`, `field`, `labels` | `prefix` |
 
 Las cuentas y tokens se guardan en `~/.orqen/providers.env` (`JIRA_*`, `GITHUB_TOKEN`, `ASANA_TOKEN`) y se reutilizan entre repositorios. Las copias anteriores en `orqen/.env` se siguen leyendo como compatibilidad; al guardar el conector, sus credenciales se trasladan a la configuración del usuario. `orqen connectors` muestra los dos sistemas y prueba las credenciales;
 `orqen connectors setup` los configura con preguntas. Los comandos aceptan la clave del request o la de su issue.
 
-**Si venías de una versión anterior**, todo se sigue leyendo: `externo`/`interno` en `conectores` y `requerimientos`/`tickets` en `prefijos`
+**Si venías de una versión anterior**, todo se sigue leyendo: las claves en castellano (`conectores`, `tipo`, `filtro`, `transiciones`…), `externo`/`interno` en `conectores` y `requerimientos`/`tickets` en `prefijos`
 equivalen a `requests`/`issues` (al guardar desde la app o `orqen connectors setup` se escriben con los nombres nuevos), y las variables
 `REC_JQL`, `SIS_PROJECT`, `SIS_*` de `orqen/.env` funcionan como Jira de requests + Jira de issues, con un aviso; `orqen update` ofrece pasarlas a
-`conectores`. Las ramas `rec/<key>` de pedidos en curso se siguen usando; las nuevas son `orqen/<key>`.
+`connectors`. Las ramas `rec/<key>` de pedidos en curso se siguen usando; las nuevas son `orqen/<key>`.
 
 ## Entornos y tests
 
 Cada parte del proyecto se levanta con su propio comando, sin Docker de por medio (si un equipo lo quiere, un proceso puede ser
-`docker compose up db`). `orqen init` lo propone y lo deja en `orqen/config.yaml`:
+`docker compose up db`). `orqen init` lo propone y lo deja en `orqen/environment.yaml`, separado de la configuración del flujo:
 
 ```yaml
-entornos:
-  procesos:
-    - nombre: api
-      comando: npm run dev        # o npm start, mvn spring-boot:run, dotnet watch run…
-      ruta: apps/api
-      puerto: 3000                # listo cuando el puerto responde (o `url:` / `listo_si: "texto del log"`)
-      cuando: siempre             # siempre: para desarrollar y testear · e2e: solo para tests e2e / visuales
-    - nombre: web
-      comando: npm run dev
-      ruta: apps/web
-      puerto: 5173
-      cuando: e2e
-  variables: { DATABASE_URL: postgresql://localhost:5432/pagos }
-  preparar: [pnpm install]
-  migrar: [npx prisma migrate deploy]
-  tests: { unitarios: pnpm test, e2e: pnpm exec playwright test }
+stack:                            # lo que detectó orqen init (y el agente); se usa para el resumen de AGENTS.md
+  summary: "Monorepo con API Node (Express + Prisma) y web React."
+  package_manager: pnpm
+  components:
+    - { name: api, type: backend, path: apps/api, language: typescript, port: 3000 }
+    - { name: web, type: frontend, path: apps/web, language: typescript, port: 5173 }
+processes:
+  - name: api
+    command: npm run dev          # o npm start, mvn spring-boot:run, dotnet watch run…
+    path: apps/api
+    port: 3000                    # listo cuando el puerto responde (o `url:` / `ready_when: "texto del log"`)
+    when: always                  # always: para desarrollar y testear · e2e: solo para tests e2e / visuales
+  - name: web
+    command: npm run dev
+    path: apps/web
+    port: 5173
+    when: e2e
+variables: { DATABASE_URL: postgresql://localhost:5432/pagos }
+prepare: [pnpm install]
+migrate: [npx prisma migrate deploy]
+seed: []
+tests: { unit: pnpm test, integration: pnpm test:int, e2e: pnpm exec playwright test }
 ```
 
-- En **DEVELOPMENT**, `orqen take` instala dependencias, levanta los procesos de `cuando: siempre` en segundo plano, espera a
+- En **DEVELOPMENT**, `orqen take` instala dependencias, levanta los procesos de `when: always` en segundo plano, espera a
   que respondan y corre migraciones y seeds. El agente recibe en `environment` el estado, las variables y los comandos de test.
   `orqen complete` los corta.
 - En **TESTING**, `orqen` levanta todos los procesos (también los de e2e), corre toda la suite configurada y los corta.
@@ -574,7 +604,7 @@ entornos:
 ```sh
 orqen env setup                                    # instala dependencias
 orqen env up [--all]                               # procesos + migraciones + seeds (--all: también los de e2e)
-orqen env test [unitarios|integracion|e2e|visual]
+orqen env test [unit|integration|e2e|visual]
 orqen env test e2e -- tests/login.spec.ts         # solo esos tests: lo que va después de -- se suma al comando
 orqen env status                                   # qué está corriendo y dónde está su log
 orqen env down                                     # corta lo que levantó orqen
@@ -611,13 +641,13 @@ orqen swarm --plan plan.json         # corre un plan ya revisado
 2. **OK de la persona**: muestra el plan y pregunta antes de lanzar (`--yes` o sin terminal: sigue solo).
 3. **Workers en paralelo**: cada subtarea corre en su propio `git worktree` (tu checkout no se toca), hasta `--parallel` a la vez
    (4 por defecto). Las que dependen de otras arrancan cuando esas ya están mergeadas, encima del código mergeado. En cada
-   worktree nuevo corre `entornos.preparar` (o `--setup`).
+   worktree nuevo corre `prepare` de `environment.yaml` (o `--setup`).
 4. **Verificación y escalado**: después de cada intento orqen corre el `test` de la subtarea. Si falla, resetea el worktree y
    reintenta pasándole al modelo la salida del error. El modelo chico (`--small`, Haiku) tiene 2 intentos; si no lo resuelve,
    la subtarea pasa al grande (`--large`, Sonnet) con 2 intentos más. Las marcadas `complex` en el plan arrancan en el grande.
 5. **Merge**: cada subtarea que pasa se commitea y se mergea (`--no-ff`) a la rama `orqen/swarm-<run>`. Si choca con algo
    mergeado mientras tanto, se rehace encima de lo último (cuenta como intento).
-6. **Test final**: con todo mergeado corre el `finalTest` del plan (o `--test` / `entornos.tests.unitarios`). Si falla, el
+6. **Test final**: con todo mergeado corre el `finalTest` del plan (o `--test` / `tests.unit` de `environment.yaml`). Si falla, el
    modelo grande lo arregla sobre la rama de integración (hasta 2 veces).
 
 Al terminar quedan la rama `orqen/swarm-<run>` lista para revisar y mergear (`git merge orqen/swarm-<run>` o un PR), y el

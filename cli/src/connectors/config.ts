@@ -17,7 +17,7 @@ import { z } from "zod";
 
 export const KINDS = ["jira", "github", "asana"] as const;
 
-/** One connector as written in config.yaml (keys in Spanish, like the rest of the file). */
+/** One connector with its internal key names (config.yaml uses English keys: see lib/config-keys.ts). */
 export const ConectorYaml = z.object({
   tipo: z.enum(KINDS),
   /** Prefix of the shared provider credential variables (default JIRA / GITHUB / ASANA). */

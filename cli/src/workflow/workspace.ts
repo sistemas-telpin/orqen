@@ -141,7 +141,9 @@ export class GitWorkspace implements Workspace {
   async startEnvironment(all: boolean): Promise<EnvironmentResult> {
     const e = this.cfg.environment;
     if (!e) return { ok: true, detail: "No environment configuration in orqen/config.yaml. Run `orqen init`." };
-    const commands = Object.fromEntries(Object.entries(e.tests).filter(([, v]) => v).map(([k]) => [k, `orqen env test ${k}`]));
+    // English test type names, as in orqen/environment.yaml (unitarios/integracion are the internal names)
+    const en: Record<string, string> = { unitarios: "unit", integracion: "integration" };
+    const commands = Object.fromEntries(Object.entries(e.tests).filter(([, v]) => v).map(([k]) => [en[k] ?? k, `orqen env test ${en[k] ?? k}`]));
     const done: string[] = [];
     const fail = (step: string, output: string): EnvironmentResult => ({
       ok: false, variables: e.variables, commands, output: output.slice(-3000),

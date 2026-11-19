@@ -7,7 +7,7 @@
  *   - scaffold     steps to create the code: copy files (`copiar`), run official generators (`correr`), write files (`archivo`)
  *   - tools        scripts copied to the project's `orqen/tools/` folder (e.g. the database script)
  *   - db           database settings written to `orqen/tools/db.json`
- *   - stack / entornos   what goes into orqen/config.yaml: how each part starts, variables, migrations and tests
+ *   - stack / entornos   what goes into orqen/environment.yaml: how each part starts, variables, migrations and tests
  *
  * `{{VARIABLES}}` are replaced in tool.yaml, in copied file contents and in their paths.
  */
@@ -183,7 +183,7 @@ export function instalarTools(proyecto: string, tool: Pick<Tool, "id" | "tools" 
       "| `node orqen/tools/db.mjs reset` | Deletes the container and its data |",
       "| `node orqen/tools/db.mjs status` | Shows whether it is running |",
       "",
-      "Settings: `orqen/tools/db.json` (if you change the port, change it in `orqen/config.yaml` too).",
+      "Settings: `orqen/tools/db.json` (if you change the port, change it in `orqen/environment.yaml` too).",
     ] : []),
     "",
   ].join("\n"));

@@ -82,7 +82,7 @@ test("orqen connectors set / get / check: what the app's editor runs", () => {
   const set = orqen(repo, JSON.stringify(draft), "connectors", "set", "-");
   assert.equal(set.codigo, 0, set.error);
   const cfg = parse(readFileSync(join(repo, "orqen/config.yaml"), "utf8"));
-  assert.equal(cfg.conectores.requests.transiciones.DELIVERY, "Entregado");
+  assert.equal(cfg.connectors.requests.transitions.DELIVERY, "Entregado");   // config.yaml in English; the JSON of the app keeps its names
   if (existsSync(join(repo, "orqen/.env"))) assert.doesNotMatch(readFileSync(join(repo, "orqen/.env"), "utf8"), /secret-token-1234/);
   assert.match(readFileSync(join(catalogo, "user", "providers.env"), "utf8"), /JIRA_TOKEN=secret-token-1234/);
 
@@ -110,8 +110,8 @@ test("orqen connectors set / get / check: what the app's editor runs", () => {
   assert.equal(saveGeneral.codigo, 0, saveGeneral.error);
   assert.deepEqual(JSON.parse(saveGeneral.salida).general.prefijos, { requests: "REQ", issues: "TKT" });
   const savedGeneral = parse(readFileSync(join(repo, "orqen/config.yaml"), "utf8"));
-  assert.equal(savedGeneral.general.prefijos.requests, "REQ");
-  assert.equal(savedGeneral.conectores.requests.filtro, draft.conectores.requests.filtro);
+  assert.equal(savedGeneral.general.prefixes.requests, "REQ");
+  assert.equal(savedGeneral.connectors.requests.filter, draft.conectores.requests.filtro);
   if (existsSync(join(repo, "orqen/.env"))) assert.doesNotMatch(readFileSync(join(repo, "orqen/.env"), "utf8"), /secret-token-1234/);
   // Saving providers later preserves the independently configured prefixes.
   const saveProviders = orqen(repo, JSON.stringify(draft), "connectors", "set", "-");

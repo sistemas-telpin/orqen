@@ -310,8 +310,8 @@ export function pasosTutorial(d: DatosTutorial, i: Idioma): Paso[] {
               { t: "h", texto: tx("Este proyecto tiene:", "This project has:") } as Bloque,
               { t: "pre", lineas: d.procesos.map((p) => ` ${p.nombre.padEnd(12)} ${(donde(p) || p.comando).padEnd(28)} ${p.cuando === "e2e" ? tx("(solo para tests e2e)", "(e2e tests only)") : tx("(desarrollo y tests)", "(development and tests)")}`) } as Bloque,
             ]
-          : [{ t: "p", texto: tx("Todavía no hay partes configuradas en orqen/config.yaml (entornos.procesos). Pedile al equipo que las agregue.",
-              "No parts are configured in orqen/config.yaml yet (entornos.procesos). Ask the team to add them.") } as Bloque]),
+          : [{ t: "p", texto: tx("Todavía no hay partes configuradas en orqen/environment.yaml (processes). Pedile al equipo que las agregue.",
+              "No parts are configured in orqen/environment.yaml yet (processes). Ask the team to add them.") } as Bloque]),
         { t: "h", texto: tx("[Terminal] Ver qué está corriendo:", "[Terminal] See what is running:") },
         { t: "cmd", lineas: ["orqen env status"] },
         { t: "p", texto: tx("● = prendido, ○ = apagado. Debajo de cada uno aparece dónde está su log (lo que va escribiendo).",

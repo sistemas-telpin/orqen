@@ -1,5 +1,5 @@
 /**
- * The SDD providers and which one a project uses: `sdd.proveedor` in orqen/config.yaml (or ORQEN_SDD), otherwise
+ * The SDD providers and which one a project uses: `sdd.provider` in orqen/config.yaml (or ORQEN_SDD), otherwise
  * the first one whose folders are in the project, otherwise OpenSpec (orqen's default). To add a tool: write a
  * provider (see openspec.ts) and list it here.
  */

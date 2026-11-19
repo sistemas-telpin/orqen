@@ -53,9 +53,9 @@ test("bootstrap uses the personal catalog for scaffold, scripts and configuratio
   assert.ok(existsSync(join(dir, "orqen/tools/db.mjs")));
   const db = JSON.parse(readFileSync(join(dir, "orqen/tools/db.json"), "utf8"));
   assert.equal(db.database, "payments");
-  const cfg = parse(readFileSync(join(dir, "orqen/config.yaml"), "utf8"));
-  assert.equal(cfg.stack.resumen, "Example Payments");
-  assert.equal(cfg.entornos.tests.unitarios, "node --test");
+  const env = parse(readFileSync(join(dir, "orqen/environment.yaml"), "utf8"));
+  assert.equal(env.stack.summary, "Example Payments");
+  assert.equal(env.tests.unit, "node --test");
   assert.match(readFileSync(join(dir, ".gitignore"), "utf8"), /orqen\/\.env/);
 });
 

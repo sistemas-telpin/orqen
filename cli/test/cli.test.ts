@@ -97,6 +97,7 @@ test("orqen update --yes reports current files and preserves user edits", () => 
   // Simulate an edited guide and an outdated environment template.
   writeFileSync(join(repo, "orqen/stages/delivery.md"), "# Local delivery guide\n");
   const manifest = JSON.parse(readFileSync(join(repo, "orqen/manifest.json"), "utf8"));
+  const installedKit = manifest.kit;
   writeFileSync(join(repo, "orqen/.env.example"), "OLD=1\n");
   manifest.archivos["orqen/.env.example"] = hash("OLD=1\n");
   manifest.kit = "0.0.9";
@@ -104,7 +105,7 @@ test("orqen update --yes reports current files and preserves user edits", () => 
 
   const r2 = orqen(repo, "update", "--yes", "--no-cli", "--no-openspec");
   assert.equal(r2.codigo, 0, r2.salida);
-  assert.match(r2.salida, /Kit 0\.0\.9 → 0\.1\.0/);
+  assert.ok(r2.salida.includes(`Kit 0.0.9 → ${installedKit}`), r2.salida);
   assert.equal(readFileSync(join(repo, "orqen/stages/delivery.md"), "utf8"), "# Local delivery guide\n");
   assert.ok(existsSync(join(repo, "orqen/stages/delivery.md.orqen-new")));
   assert.match(readFileSync(join(repo, "orqen/.env.example"), "utf8"), /providers\.env/);

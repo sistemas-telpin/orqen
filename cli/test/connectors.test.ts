@@ -89,6 +89,8 @@ test("GitHub: issues as tickets, comments, labels, and the Status field of a pro
   assert.equal((await gh.comments("GH-4"))[0].body, "/approve");
   await gh.comment("GH-4", "hello");
   assert.equal(s.calls.at(-1)!.body.body, "[orqen] hello");
+  await gh.comment("GH-4", "*Plan:*\n# Uno\n# Dos");
+  assert.equal(s.calls.at(-1)!.body.body, "[orqen] **Plan:**\n1. Uno\n2. Dos");   // Jira wiki → Markdown for GitHub
   await gh.setStateLabel("GH-4", "DEVELOPMENT");
   assert.deepEqual(labels, ["orqen", "orqen-state-development"]);
   assert.equal(await gh.transition("GH-4", "in progress"), true);

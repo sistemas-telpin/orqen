@@ -529,3 +529,16 @@ test("parsePrChecks reads check runs and commit statuses", () => {
   ] });
   assert.deepEqual([c.ci, c.failing, c.pending], ["failing", ["sonar"], ["e2e"]]);
 });
+
+test("switching to the request branch with uncommitted changes names the files and what to do", async () => {
+  const { execFileSync } = await import("node:child_process");
+  const { mkdtempSync: mk, writeFileSync: wr } = await import("node:fs");
+  const { GitWorkspace } = await import("../src/workflow/workspace.ts");
+  const dir = mk(join(tmpdir(), "orqen-dirty-"));
+  const g = (...a: string[]) => execFileSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", ...a], { cwd: dir, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+  g("init", "-q", "-b", "main"); wr(join(dir, ".gitignore"), "a\n"); wr(join(dir, "AGENTS.md"), "x\n"); g("add", "-A"); g("commit", "-qm", "init");
+  wr(join(dir, ".gitignore"), "a\nb\n"); wr(join(dir, "AGENTS.md"), "y\n");   // what `orqen init` does to tracked files
+  const cfg = loadConfig({ repoPath: dir, baseBranch: "main", stateDir: join(dir, "state"), factoryDir: join(dir, "orqen", "work"), connectors: testConnectors(), approvers: { code: [], client: [] } });
+  assert.throws(() => new GitWorkspace(cfg).prepareBranch("REQ-1"),
+    /uncommitted changes \(\.gitignore, AGENTS\.md\)[\s\S]*Commit or stash them first[\s\S]*git add -A && git commit -m "Install orqen"[\s\S]*orqen init --commit/);
+});

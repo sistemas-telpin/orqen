@@ -411,7 +411,8 @@ orqen init
 6. Escribe la configuración del entorno (sin Docker de por medio), `AGENTS.md` / `CLAUDE.md`, el plugin, las guías de etapa y el manifiesto,
    y fusiona las reglas del proceso con el `openspec/config.yaml` existente.
 
-Opciones: `--yes` (no interactivo; conserva los conectores que haya), `--agent "<comando>"`, `--tools claude,codex`, `--no-openspec`, `--no-connectors` (saltea el paso), `--connectors <archivo|->` (los conectores en JSON, el mismo formato que `orqen connectors set`, para correrlo sin preguntas).
+Al final `orqen init` ofrece commitear lo que escribió (`orqen/`, `.claude/`, `AGENTS.md`, `.gitignore`…, y nada más): sin ese commit, el primer `orqen take` no puede cambiar de rama. Con `--yes` solo lo hace si agregás `--commit`.
+Opciones: `--yes` (no interactivo; conserva los conectores que haya), `--commit` (commitea lo que escribió), `--agent "<comando>"`, `--tools claude,codex`, `--no-openspec`, `--no-connectors` (saltea el paso), `--connectors <archivo|->` (los conectores en JSON, el mismo formato que `orqen connectors set`, para correrlo sin preguntas).
 
 **Plugin para Claude Code** (da los comandos `/orqen:*` y el skill de grilling), una vez por usuario:
 
@@ -556,6 +557,10 @@ connectors:
 | `transitions` | estado de orqen → transición del workflow | estado → opción del campo `field` (Status) | estado → sección (`completed` la cierra) |
 | Claves | las de Jira (`SOP-123`) | `GH-42` (`prefijo` configurable) | `AS-<id>` |
 | Extras | `credentials`, `issue_type`, `operational_type`, `link_type` | `repo`, `project_owner`, `field`, `labels` | `prefix` |
+
+**Formato de los comentarios.** orqen escribe sus textos una sola vez, en el formato de Jira (`*negrita*`, `* ítem`, `# numerado`, `{code}`),
+que Jira muestra tal cual. A GitHub se los manda convertidos a Markdown (negrita `**así**`, listas `-` y `1.`, bloques de código): sin eso, un `#` al
+principio de línea sería un título y las preguntas al cliente saldrían como títulos grandes. Asana recibe el texto sin convertir.
 
 **Que el ticket se mueva.** Sin `transitions`, orqen comenta y pone la etiqueta `orqen-state-…`, pero no cambia la columna. Con un GitHub Project,
 `orqen connectors setup` (y `connectors set`, cuando el conector no trae ninguna) las propone a partir de las columnas del campo `Status`: en los

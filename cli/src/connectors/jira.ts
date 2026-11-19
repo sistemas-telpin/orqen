@@ -12,7 +12,10 @@ export class JiraTracker implements Tracker {
       ? "Basic " + Buffer.from(`${s.user}:${s.token}`).toString("base64")
       : `Bearer ${s.token}`;
   }
-  get label() { return `Jira${this.s.project ? ` ${this.s.project}` : ""} (${this.base.replace(/^https?:\/\//, "") || "no URL"})`; }
+  get label() {
+    if (this.s.unconfigured) return "not configured";
+    return `Jira${this.s.project ? ` ${this.s.project}` : ""} (${this.base.replace(/^https?:\/\//, "") || "no URL"})`;
+  }
 
   /** ORQEN role prefixes are independent of the native Jira project key. */
   private native(key: string): string {
@@ -28,7 +31,9 @@ export class JiraTracker implements Tracker {
   }
 
   private async req(method: string, path: string, body?: unknown, params?: Record<string, string | number>) {
-    if (!this.base) throw new Error("Jira connector without URL: set it in config.yaml (url) or in orqen/.env");
+    if (!this.base) throw new Error(this.s.unconfigured
+      ? "No connectors are configured: run `orqen connectors setup` to choose where the tickets live (Jira, GitHub or Asana)."
+      : "Jira connector without URL: set connectors.requests.url in orqen/config.yaml (or JIRA_URL in ~/.orqen/credentials.env)");
     const url = new URL(this.base + path);
     for (const [k, v] of Object.entries(params ?? {})) url.searchParams.set(k, String(v));
     const r = await fetch(url, {

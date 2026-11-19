@@ -61,6 +61,8 @@ export interface JiraSettings extends Base {
   kind: "jira"; url: string; user: string; token: string; deployment: "cloud" | "server";
   query: string; project: string; issueType: string; operationalType: string; linkType: string;
   prefix?: string;
+  /** Nothing is configured (no `connectors` and no variables of earlier versions): this Jira is only the compatibility default. */
+  unconfigured?: boolean;
 }
 export interface GithubSettings extends Base {
   kind: "github"; token: string; repo: string; query: string; prefix: string; labels: string[];

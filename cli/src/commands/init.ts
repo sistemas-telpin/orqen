@@ -24,6 +24,7 @@ import { mostrarLogo } from "../ui/logo.ts";
 import {
   azul, confirmar, diffColoreado, elegir, elegirVarios, gris, interactivo, magenta, p, pc, salirSiCancela, secreto, texto, textoValidado, tick,
 } from "../ui/console.ts";
+import { execFileSync } from "node:child_process";
 import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 
@@ -41,6 +42,8 @@ export interface OpcionesInit {
   sinLogo?: boolean;
   /** Skip the connectors step (keep the ones the repository already has). */
   sinConectores?: boolean;
+  /** Commit what init wrote (without asking). Interactively init asks; with --yes it only commits with --commit. */
+  commit?: boolean;
   /** Connectors draft as JSON ({"conectores": …, "env": …}, like `orqen connectors set`): a file path or "-" for stdin. */
   conectores?: string;
   /** Stack and environments already known (from a tool): skip detection, AI analysis and review. */
@@ -202,6 +205,7 @@ export async function init(o: OpcionesInit) {
   p.log.success(`${ARCHIVO_CONFIG}, ${ARCHIVO_ENTORNO} and kit v${VERSION_CLI} installed`);
   for (const r of lado) p.log.warn(`${r.ruta}: the proposed version is in ${r.detalle} for you to merge`);
 
+  const commiteado = await commitInstall(repo, o.commit, yes);
   const mk = marketplace(existsSync(join(repo, MARKETPLACE)) ? readFileSync(join(repo, MARKETPLACE), "utf8") : undefined).nombre;
   const pasos = [
     ...(!config.conectores ? [`Connect where the tickets live: ${pc.cyan("orqen connectors setup")} (Jira, GitHub or Asana).`] : []),
@@ -210,11 +214,31 @@ export async function init(o: OpcionesInit) {
     `Open Claude Code in this folder (restart it if it was open) and accept ${pc.bold("Trust this folder")}: ` +
       `the commands appear as ${pc.cyan("/orqen:tutorial")} (start here if you are new), ${pc.cyan("/orqen:support")}, ${pc.cyan("/orqen:analyze")}, ${pc.cyan("/orqen:list")}, ${pc.cyan("/orqen:implement")}, ${pc.cyan("/orqen:pr")}, ${pc.cyan("/orqen:review")} (QA), ${pc.cyan("/orqen:approve")} ` +
       gris(`(type /orqen: to list them; check with /plugin → orqen@${mk})`),
-    `Commit the changes (orqen/, .claude/, .claude-plugin/, AGENTS.md, CLAUDE.md, openspec/) so the team gets the same commands.`,
+    ...(!commiteado ? [`Commit the changes (orqen/, .claude/, .claude-plugin/, AGENTS.md, CLAUDE.md, openspec/) so the team gets the same commands: ${pc.cyan('git add -A && git commit -m "Install orqen"')}`] : []),
   ];
   if (o.sinLogo) return;   // `orqen bootstrap` shows its own next steps
   p.note(pasos.map((x, i) => `${pc.bold(`${i + 1}.`)} ${x}`).join("\n"), "Next steps");
   p.outro(`${magenta("//")} ${pc.bold("From request to production.")}`);
+}
+
+const INSTALLED = ["orqen", ".claude", ".claude-plugin", "AGENTS.md", "CLAUDE.md", ".gitignore", "openspec"];
+
+/**
+ * Commits what init wrote (the team gets the same commands, and the first `orqen take` can switch branches). Only those
+ * paths: nothing else the person had changed or staged. Asks when interactive; --yes only does it with --commit.
+ */
+async function commitInstall(repo: string, commit: boolean | undefined, yes: boolean): Promise<boolean> {
+  if (!commit && (yes || !(await confirmar("Commit the files orqen just wrote (orqen/, .claude/, AGENTS.md…)?", true, false)))) return false;
+  const paths = INSTALLED.filter((x) => existsSync(join(repo, x)));
+  try {
+    execFileSync("git", ["add", "--", ...paths], { cwd: repo, stdio: "pipe" });
+    execFileSync("git", ["commit", "-q", "-m", "Install orqen", "--", ...paths], { cwd: repo, stdio: "pipe" });
+    p.log.success("Committed: Install orqen");
+    return true;
+  } catch (e) {
+    p.log.warn(`Could not commit (${((e as { stderr?: Buffer }).stderr?.toString() || (e as Error).message).trim().split("\n")[0]}): commit the files by hand.`);
+    return false;
+  }
 }
 
 /** Connectors step: from --connectors (JSON), interactively, or kept as they were (--yes, --no-connectors). */

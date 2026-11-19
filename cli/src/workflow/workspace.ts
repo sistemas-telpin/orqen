@@ -85,8 +85,13 @@ export class GitWorkspace implements Workspace {
     const legacy = legacyBranchFor(key);   // requests started with an earlier version keep their branch
     const branch = this.git("branch", "--list", legacy) ? legacy : branchFor(key);
     if (this.currentBranch() === branch) return branch;
-    if (this.git("status", "--porcelain", "--untracked-files=no", ...this.excludeFactory()))
-      throw new Error("The repo has uncommitted changes; cannot switch branches");
+    const dirty = this.git("status", "--porcelain", "--untracked-files=no", ...this.excludeFactory());
+    if (dirty) {
+      // git() trims the output, so the first line loses its leading space: do not cut by position
+      const files = dirty.split("\n").map((l) => l.replace(/^\s*\S{1,2}\s+/, "").trim()).filter(Boolean);
+      throw new Error(`The repo has uncommitted changes (${files.slice(0, 4).join(", ")}${files.length > 4 ? `, … ${files.length - 4} more` : ""}); cannot switch to the request branch. ` +
+        "Commit or stash them first. Right after `orqen init`, commit the files it wrote: git add -A && git commit -m \"Install orqen\" (or run `orqen init --commit`).");
+    }
     try { this.git("fetch", "--all", "--prune"); } catch { /* no remote */ }
     if (this.git("branch", "--list", branch)) this.git("checkout", branch);
     else if (this.linkedWorktree()) {

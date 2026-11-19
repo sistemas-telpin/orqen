@@ -174,3 +174,46 @@ test("init reuses project-local database scripts without a stack repository", ()
   assert.equal(databases[0].stop, "node orqen/tools/db.mjs down");
   assert.equal(readFileSync(join(repo, "orqen/tools/db.mjs"), "utf8"), script);
 });
+
+test("orqen init --commit commits only what orqen wrote; without it, init leaves the files uncommitted and explains how", () => {
+  const git = (cwd: string, ...a: string[]) => spawnSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", ...a], { cwd, encoding: "utf8" });
+  // a repository with history, and a file of the person's own that init must not touch
+  const nuevo = () => {
+    const r = repoTemporal({ "README.md": "x", "package.json": { name: "x", scripts: { test: "node --test" } } });
+    git(r, "add", "-A"); git(r, "commit", "-qm", "first");
+    writeFileSync(join(r, "mine.txt"), "mine");
+    git(r, "add", "mine.txt");
+    return r;
+  };
+  const repo = nuevo();
+
+  const plain = orqen(repo, "init", "--yes", "--no-ai", "--no-openspec", "--no-connectors");
+  assert.equal(plain.codigo, 0, plain.salida);
+  assert.match(plain.salida, /4. Commit the changes/);   // the note box wraps the command, so it is not matched as one line
+  assert.match(plain.salida, /git commit -m "Install orqen"/);
+  assert.equal(git(repo, "log", "--oneline").stdout.trim().split("\n").length, 1, "--yes alone does not commit");
+
+  const repo2 = nuevo();   // init stops when the repository already has orqen/config.yaml
+  const withCommit = orqen(repo2, "init", "--yes", "--no-ai", "--no-openspec", "--no-connectors", "--commit");
+  assert.equal(withCommit.codigo, 0, withCommit.salida);
+  assert.doesNotMatch(withCommit.salida, /4. Commit the changes/);
+  const log = git(repo2, "log", "--oneline", "-1").stdout;
+  assert.match(log, /Install orqen/);
+  const files = git(repo2, "show", "--name-only", "--format=", "HEAD").stdout;
+  assert.match(files, /orqen\/config\.yaml/);
+  assert.match(files, /AGENTS\.md/);
+  assert.doesNotMatch(files, /mine\.txt/);
+  assert.match(git(repo2, "status", "--short").stdout, /^A\s+mine\.txt/m, "the person's staged file stays staged");
+});
+
+test("with nothing configured, the connectors say so instead of failing as a Jira without URL", () => {
+  const repo = repoTemporal({ "package.json": { name: "x" } });
+  const env = { JIRA_URL: "", REC_JQL: "", ORQEN_USER_CONFIG_DIR: join(repo, "no-user-config") };
+  assert.equal(orqenCon(env, repo, "init", "--yes", "--no-ai", "--no-openspec", "--no-connectors").codigo, 0);
+  const r = orqenCon(env, repo, "connectors");
+  assert.match(r.salida, /not configured/);
+  assert.match(r.salida, /No connectors are configured: run `orqen connectors setup`/);
+  assert.doesNotMatch(r.salida, /Jira connector without URL/);
+  const list = orqenCon(env, repo, "list", "requests");
+  assert.match(list.salida, /orqen connectors setup/);
+});

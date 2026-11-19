@@ -5,6 +5,7 @@
  */
 import { execFileSync } from "node:child_process";
 import { type GithubSettings, idOf, keyOf } from "./config.ts";
+import { toMarkdown } from "./markup.ts";
 import { BOT_MARK, type Comment, LEGACY_STATE_LABELS, type NewTicket, STATE_LABEL, type Ticket, type Tracker, checkFailure } from "./types.ts";
 
 const API = "https://api.github.com";
@@ -143,7 +144,7 @@ export class GithubTracker implements Tracker {
   }
 
   async comment(key: string, text: string) {
-    await this.req("POST", `/repos/{repo}/issues/${this.n(key)}/comments`, { body: `${BOT_MARK} ${text}` });
+    await this.req("POST", `/repos/{repo}/issues/${this.n(key)}/comments`, { body: `${BOT_MARK} ${toMarkdown(text)}` });
   }
 
   async setStateLabel(key: string, state: string) {
@@ -153,7 +154,7 @@ export class GithubTracker implements Tracker {
   }
 
   async create(t: NewTicket) {
-    const i = await this.req("POST", "/repos/{repo}/issues", { title: t.title.slice(0, 250), body: t.description, labels: [...this.s.labels, ...(t.labels ?? [])] });
+    const i = await this.req("POST", "/repos/{repo}/issues", { title: t.title.slice(0, 250), body: toMarkdown(t.description), labels: [...this.s.labels, ...(t.labels ?? [])] });
     if (this.s.project) await this.addToProject(i.node_id);
     return keyOf(this.s.prefix, i.number);
   }

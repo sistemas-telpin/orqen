@@ -42,6 +42,7 @@ export function legacyConnectors(env: Env): ConnectorsSettings {
     query: env.REC_JQL || `labels = ${DEFAULT_LABEL} AND statusCategory != Done`,
     project: "", issueType: "Task", operationalType: "Task", linkType: "Relates",
     transitions: kv(env.JIRA_TRANSITIONS),
+    ...(!env.JIRA_URL && !used.length ? { unconfigured: true } : {}),
   };
   // Before, the issue always existed: keep it when the .env comes from that version.
   const hadIssues = used.some((k) => k.startsWith("SIS_") || k === "REC_JQL");

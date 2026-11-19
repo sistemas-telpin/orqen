@@ -395,7 +395,7 @@ Para actualizar el catálogo se usa `git -C cli/tools pull --ff-only` desde la c
 ## Instalación en un repo
 
 ```sh
-npm i -g orqen          # o: pnpm add -g orqen (Node ≥ 20.12)
+npm i -g @telpin-sistemas/orqen  # o: pnpm add -g @telpin-sistemas/orqen (Node ≥ 20.12)
 cd mi-repo
 orqen init
 ```
@@ -460,7 +460,7 @@ Las credenciales de proveedores van en `~/.orqen/providers.env`; las opciones de
 ## App de escritorio
 
 La app de escritorio (Rust + GPUI) es un proyecto aparte: **[orqen-gui](https://github.com/sistemas-telpin/orqen-gui)**. Este repo es solo la CLI y no depende de ella: `orqen` sin argumentos muestra la ayuda.
-La app no tiene lógica propia: usa la CLI instalada (`npm i -g orqen`) con sus salidas `--json` (`status`, `list requests`, `env status`, `connectors get|check|set`, `bootstrap --list|--describe`, `tutorial --step`, `usage`). Si cambiás esas salidas, avisá en orqen-gui.
+La app no tiene lógica propia: usa la CLI instalada (`npm i -g @telpin-sistemas/orqen`) con sus salidas `--json` (`status`, `list requests`, `env status`, `connectors get|check|set`, `bootstrap --list|--describe`, `tutorial --step`, `usage`). Si cambiás esas salidas, avisá en orqen-gui.
 
 ## Conectores: sistema de requests y sistema de issues
 

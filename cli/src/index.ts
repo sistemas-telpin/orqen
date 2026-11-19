@@ -4,13 +4,14 @@ import { parseArgs } from "node:util";
 import { entorno } from "./commands/environment.ts";
 import { bootstrap } from "./commands/bootstrap.ts";
 import { init } from "./commands/init.ts";
-import { WORKFLOW_HELP, WORKFLOW_COMMANDS, runWorkflow } from "./commands/workflow.ts";
+import { WORKFLOW_HELP, WORKFLOW_INTERNAL_HELP, WORKFLOW_COMMANDS, runWorkflow } from "./commands/workflow.ts";
 import { update } from "./commands/update.ts";
 import { SWARM_HELP, swarm } from "./commands/swarm.ts";
 import { lang, tutorial } from "./commands/tutorial.ts";
 import { VERSION_CLI } from "./lib/system.ts";
 import { mostrarLogo } from "./ui/logo.ts";
 import { usageCommand } from "./lib/usage.ts";
+import { EVAL_HELP, evalCommand, learnCommand } from "./commands/eval.ts";
 
 
 const AYUDA = `
@@ -34,7 +35,6 @@ Commands:
       --stack <id>        Stack from your private catalog (orqen bootstrap --list lists them)
       --dir <folder>      Where to create it (default: ./<name>)
       --params '<json>'   Parameter values, e.g. '{"PORT":"8081"}' (the rest use their defaults)
-      --list --json · --describe <stack> --json   Catalog, parameters and requirements as JSON (for tools such as orqen-gui)
   update [dir]            Update the CLI, OpenSpec, and kit
       --yes, -y  --no-cli  --no-openspec  --no-kit
   env <cmd>               setup | up [--all] | test [type...] | status | down
@@ -43,8 +43,9 @@ Commands:
   lang                    Print the detected system language (es | en); ORQEN_LANG overrides it
   usage [--json]          AI agents installed on this machine and their quota used
 ${SWARM_HELP}
+${EVAL_HELP}
   --version, -v           Show version
-  --help, -h              Show this help
+  --help, -h              Show this help · orqen help internal: agent-only commands and JSON for tools
 
 ${WORKFLOW_HELP}
 `;
@@ -52,11 +53,18 @@ ${WORKFLOW_HELP}
 async function main() {
   // Request commands parse their own flags (--agent, --analyst, --json, --loop).
   const crudos = process.argv.slice(2);
+  if (crudos[0] === "help") {
+    if (crudos[1] === "internal") return console.log(WORKFLOW_INTERNAL_HELP);
+    await mostrarLogo({ animar: false });
+    return console.log(AYUDA);
+  }
   if (WORKFLOW_COMMANDS.includes(crudos[0])) return runWorkflow(crudos[0], crudos.slice(1));
   if (crudos[0] === "swarm") return swarm(crudos.slice(1));
   if (crudos[0] === "tutorial") return tutorial(crudos.slice(1));
   if (crudos[0] === "lang") return lang(crudos.slice(1));
   if (crudos[0] === "usage") return usageCommand(crudos.slice(1));
+  if (crudos[0] === "eval") return evalCommand(crudos.slice(1));
+  if (crudos[0] === "learn") return learnCommand(crudos.slice(1));
   // `orqen env test e2e -- <args>`: everything after `--` goes to the test command untouched
   const sep = crudos.indexOf("--");
   const extra = sep >= 0 ? crudos.slice(sep + 1) : [];

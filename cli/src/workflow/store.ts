@@ -18,6 +18,7 @@ export interface WorkItem {
   supporter?: string;            // who handled the request in SUPPORT
   analyst?: string;              // who drove the analysis
   issue?: string;                // key of the issue created when the analysis closed (issues system)
+  title?: string;                // title of the client's ticket, kept the last time orqen read it (for lists and the desktop app)
   artifacts: Record<string, any>;
   feedback: Array<{ from: string; text?: string; rejection?: string }>;
   lock?: { agent: string; since: string };
@@ -49,14 +50,18 @@ export class Store {
     return existsSync(f) ? readFileSync(f, "utf8").trim().split("\n").filter(Boolean).map((l) => JSON.parse(l)) : [];
   }
   all(): WorkItem[] {
-    return readdirSync(this.dir).filter((f) => f.endsWith(".json")).sort().map((f) => this.get(f.slice(0, -5))!);
+    // only request records: other tools (the desktop app) may keep their own files in this folder
+    return readdirSync(this.dir).filter((f) => f.endsWith(".json")).sort().map((f) => this.get(f.slice(0, -5))!)
+      .filter((r) => r && typeof r.key === "string" && typeof r.state === "string");
   }
 }
 
 /** Items saved by earlier versions used `sis` and then `internal` for the issue. */
 function migrate(item: WorkItem & { sis?: string; internal?: string }): WorkItem {
   for (const old of ["sis", "internal"] as const) if (item[old] !== undefined) { item.issue ??= item[old]; delete item[old]; }
-  const a = item.artifacts ?? {};
+  item.artifacts ??= {};
+  item.feedback ??= [];
+  const a = item.artifacts;
   for (const old of ["sis_linked", "internal_linked"]) if (a[old] !== undefined) { a.issue_linked ??= a[old]; delete a[old]; }
   for (const old of ["previous_sis", "previous_internal"]) if (a[old] !== undefined) { a.previous_issues ??= a[old]; delete a[old]; }
   return item;

@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { TEMPLATES_DIR } from "../lib/template-assets.ts";
 import { existeConfig, leerConfig, type Config as ProjectConfig } from "../lib/config.ts";
@@ -20,6 +20,23 @@ function repoRoot(): string {
     return execFileSync("git", ["rev-parse", "--show-toplevel"], { cwd: process.cwd(), encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
   } catch {
     return process.cwd();
+  }
+}
+
+/**
+ * The main working tree when `repo` is a linked git worktree (`git worktree add`), otherwise `repo`. The desktop app runs
+ * each request in its own worktree so several agents can work at once; what git does not track (orqen/state, orqen/.env)
+ * lives only in the main one, so every worktree shares the same requests state and credentials.
+ */
+export function mainWorktree(repo: string): string {
+  try {
+    const out = execFileSync("git", ["rev-parse", "--path-format=absolute", "--git-dir", "--git-common-dir"], { cwd: repo, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] })
+      .trim().split(/\r?\n/);
+    const [gitDir, common] = out.map((p) => resolve(p));
+    if (!gitDir || !common || gitDir === common) return repo;
+    return basename(common) === ".git" ? dirname(common) : repo;
+  } catch {
+    return repo;
   }
 }
 
@@ -46,14 +63,15 @@ export interface Config {
 
 export function loadConfig(over: Partial<Config> = {}): Config {
   const repoPath = over.repoPath ?? (env("REPO_PATH") || repoRoot());
-  const envFile = [join(repoPath, "orqen", ".env"), join(repoPath, "cli", ".env")].find(existsSync);
+  const main = mainWorktree(repoPath);
+  const envFile = [join(repoPath, "orqen", ".env"), join(repoPath, "cli", ".env"), join(main, "orqen", ".env")].find(existsSync);
   if (!over.repoPath && envFile) process.loadEnvFile(envFile);
   const project = !over.repoPath && existeConfig(repoPath) ? leerConfig(repoPath) : undefined;
   const stages = [join(repoPath, "orqen", "stages"), join(repoPath, "cli", "stages")].find(existsSync);
   const localOpenSpec = join(repoPath, "node_modules", ".bin", process.platform === "win32" ? "openspec.cmd" : "openspec");
-  const localState = join(repoPath, "cli", ".state");
+  const localState = join(main, "cli", ".state");
   const baseBranch = env("BASE_BRANCH", project?.proyecto.rama_base ?? "main");
-  const credentials = providerEnv(repoPath);
+  const credentials = providerEnv(existsSync(join(repoPath, "orqen", ".env")) ? repoPath : main);
   return {
     connectors: project?.conectores
       ? { requests: connectorSettings(project.conectores.requests, credentials, project.general?.prefijos.requests), issues: project.conectores.issues ? connectorSettings(project.conectores.issues, credentials, project.general?.prefijos.issues) : undefined }
@@ -76,7 +94,7 @@ export function loadConfig(over: Partial<Config> = {}): Config {
     codeReviewGate: ["ticket", "jira"].includes(env("CODE_REVIEW_GATE", "github")) ? "ticket" : "github",
     githubReviewers: split(env("GITHUB_REVIEWERS")),
     openspecCmd: env("OPENSPEC_CMD") && env("OPENSPEC_CMD") !== "openspec" ? env("OPENSPEC_CMD") : existsSync(localOpenSpec) ? localOpenSpec : "openspec",
-    stateDir: envL("ORQEN_STATE_DIR", "REC_STATE_DIR") || (existsSync(localState) || !project ? localState : join(repoPath, "orqen", "state")),
+    stateDir: envL("ORQEN_STATE_DIR", "REC_STATE_DIR") || (existsSync(localState) || !project ? localState : join(main, "orqen", "state")),
     stagesDir: stages ?? join(TEMPLATES_DIR, "stages"),
     environment: project?.entornos,
     lockMinutes: Number(envL("ORQEN_LOCK_MIN", "REC_LOCK_MIN", "90")),

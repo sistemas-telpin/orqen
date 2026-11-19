@@ -1,6 +1,6 @@
 /** git, tests and PR: always run by the process, never by the agent. */
 import { execFileSync, spawnSync } from "node:child_process";
-import { relative } from "node:path";
+import { relative, resolve } from "node:path";
 import { bajarProcesos, levantarProcesos } from "../lib/processes.ts";
 import type { Config } from "./config.ts";
 
@@ -58,12 +58,22 @@ export class GitWorkspace implements Workspace {
       throw new Error("The repo has uncommitted changes; cannot switch branches");
     try { this.git("fetch", "--all", "--prune"); } catch { /* no remote */ }
     if (this.git("branch", "--list", branch)) this.git("checkout", branch);
-    else {
+    else if (this.linkedWorktree()) {
+      // the base branch is usually checked out in the main worktree, where git does not let us check it out again
+      const base = this.git("branch", "-r", "--list", `origin/${this.cfg.baseBranch}`) ? `origin/${this.cfg.baseBranch}` : this.cfg.baseBranch;
+      this.git("checkout", "-b", branch, base);
+    } else {
       this.git("checkout", this.cfg.baseBranch);
       try { this.git("pull", "--ff-only"); } catch { /* no remote */ }
       this.git("checkout", "-b", branch);
     }
     return branch;
+  }
+
+  /** Whether the repo is a linked worktree (`git worktree add`; the desktop app gives each request its own). */
+  private linkedWorktree(): boolean {
+    try { return resolve(this.cfg.repoPath, this.git("rev-parse", "--git-dir")) !== resolve(this.cfg.repoPath, this.git("rev-parse", "--git-common-dir")); }
+    catch { return false; }
   }
 
   /** Pathspec that excludes orqen/work/ (the process record must not prevent switching branches). */

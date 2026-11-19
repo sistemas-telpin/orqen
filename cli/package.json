@@ -1,6 +1,6 @@
 {
-  "name": "orqen",
-  "version": "0.1.0",
+  "name": "@telpin-sistemas/orqen",
+  "version": "0.1.3",
   "description": "ORQEN multi-agent orchestration on OpenSpec, from customer request to production.",
   "type": "module",
   "bin": {

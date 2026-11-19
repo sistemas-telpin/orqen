@@ -4,10 +4,11 @@ import { fileURLToPath } from "node:url";
 import semver from "semver";
 import { ejecutar, version } from "./proc.ts";
 
-export const PAQUETE_CLI = "orqen";
-export const VERSION_CLI: string = JSON.parse(
+const { name, version: cliVersion } = JSON.parse(
   readFileSync(fileURLToPath(new URL("../../package.json", import.meta.url)), "utf8"),
-).version;
+) as { name: string; version: string };
+export const PAQUETE_CLI = name;
+export const VERSION_CLI = cliVersion;
 
 export interface Chequeo { nombre: string; ok: boolean; detalle: string; requerido: boolean; ayuda?: string }
 

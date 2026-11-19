@@ -1,7 +1,7 @@
 # orqen CLI
 
 ```sh
-pnpm add -g orqen         # or: npm i -g orqen
+pnpm add -g @telpin-sistemas/orqen         # or: npm i -g @telpin-sistemas/orqen
 orqen init               # Run from the repository you want to initialize
 ```
 

@@ -2,6 +2,7 @@ name: publish
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -20,6 +21,13 @@ jobs:
           node-version: 22
           registry-url: https://registry.npmjs.org
       - run: npm ci
-      - run: npm publish # prepublishOnly checks types and tests; prepack builds the CLI and bundles templates
+      - name: Verify package
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          npm run prepublishOnly
+          npm pack --dry-run
+      - name: Publish package
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+        run: npm publish # prepublishOnly checks types and tests; prepack builds the CLI and bundles templates
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

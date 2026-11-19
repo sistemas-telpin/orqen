@@ -13,9 +13,10 @@
  * `externo`/`interno` (earlier names of requests/issues) are still accepted.
  * Without `conectores`, the variables used by earlier versions of orqen/.env are still read (see legacy.ts).
  */
+import { resolve } from "node:path";
 import { z } from "zod";
 
-export const KINDS = ["jira", "github", "asana"] as const;
+export const KINDS = ["jira", "github", "asana", "local"] as const;
 
 /** One connector with its internal key names (config.yaml uses English keys: see lib/config-keys.ts). */
 export const ConectorYaml = z.object({
@@ -45,6 +46,8 @@ export const ConectorYaml = z.object({
   prefijo: z.string().nullish(),
   /** orqen state → status / column / section name in the tool. */
   transiciones: z.record(z.string(), z.string()).nullish(),
+  /** local: folder with one JSON file per ticket (the practice project; relative to the repository). */
+  carpeta: z.string().nullish(),
 });
 export type ConectorYaml = z.infer<typeof ConectorYaml>;
 
@@ -72,7 +75,11 @@ export interface GithubSettings extends Base {
 export interface AsanaSettings extends Base {
   kind: "asana"; token: string; project: string; tag: string; prefix: string;
 }
-export type ConnectorSettings = JiraSettings | GithubSettings | AsanaSettings;
+/** Tickets as JSON files in a folder: the practice project (`orqen practice`), no external tool. */
+export interface LocalSettings extends Base {
+  kind: "local"; dir: string; prefix: string;
+}
+export type ConnectorSettings = JiraSettings | GithubSettings | AsanaSettings | LocalSettings;
 export interface ConnectorsSettings { requests: ConnectorSettings; issues?: ConnectorSettings; legacy?: string[] }
 
 export const DEFAULT_LABEL = "orqen";
@@ -80,11 +87,12 @@ export const DEFAULT_LABEL = "orqen";
 type Env = Record<string, string | undefined>;
 
 export function credentialsPrefix(c: Pick<ConectorYaml, "tipo" | "credenciales">): string {
-  return c.credenciales || (c.tipo === "jira" ? "JIRA" : c.tipo === "github" ? "GITHUB" : "ASANA");
+  return c.credenciales || (c.tipo === "jira" ? "JIRA" : c.tipo === "github" ? "GITHUB" : c.tipo === "local" ? "LOCAL" : "ASANA");
 }
 
-export function connectorSettings(c: ConectorYaml, env: Env, prefix?: string): ConnectorSettings {
+export function connectorSettings(c: ConectorYaml, env: Env, prefix?: string, repo = process.cwd()): ConnectorSettings {
   const transitions = { ...(c.transiciones ?? {}) };
+  if (c.tipo === "local") return { kind: "local", transitions, dir: resolve(repo, c.carpeta || "tickets"), prefix: (prefix || c.prefijo || "LOC").toUpperCase() };
   if (c.tipo === "jira") {
     const p = credentialsPrefix(c);
     const project = c.proyecto ? String(c.proyecto) : "";

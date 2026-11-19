@@ -3,6 +3,7 @@ import { AsanaTracker } from "./asana.ts";
 import type { ConnectorSettings, ConnectorsSettings } from "./config.ts";
 import { GithubTracker } from "./github.ts";
 import { JiraTracker } from "./jira.ts";
+import { LocalTracker } from "./local.ts";
 import type { Connectors, Tracker } from "./types.ts";
 
 export * from "./types.ts";
@@ -10,6 +11,7 @@ export * from "./types.ts";
 export function trackerFor(s: ConnectorSettings): Tracker {
   if (s.kind === "jira") return new JiraTracker(s);
   if (s.kind === "github") return new GithubTracker(s);
+  if (s.kind === "local") return new LocalTracker(s);
   return new AsanaTracker(s);
 }
 

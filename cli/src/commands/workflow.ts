@@ -17,7 +17,7 @@ import { Process } from "../workflow/process.ts";
 import { Store } from "../workflow/store.ts";
 import { GitWorkspace } from "../workflow/workspace.ts";
 
-export const WORKFLOW_COMMANDS = ["list", "qa", "approve", "merged", "cancel", "pending", "support", "analyze", "ask", "conversation", "lane", "take", "complete", "pr", "review", "code-review", "schema", "block", "release", "search", "status", "worqs", "worq", "cycle", "connectors"];
+export const WORKFLOW_COMMANDS = ["list", "qa", "approve", "merged", "cancel", "pending", "support", "analyze", "ask", "conversation", "lane", "take", "complete", "pr", "review", "code-review", "schema", "block", "release", "search", "status", "worqs", "worq", "cycle", "connectors", "comments", "comment"];
 
 /** What people run: the 9 steps (as /orqen:* commands in their agent) and the CLI commands meant for a person. */
 export const WORKFLOW_HELP = `The 9 steps (run the /orqen:* commands in your agent: it calls the CLI for you):
@@ -40,6 +40,8 @@ Request commands for people:
   merged <KEY> [--person N]   Confirm the hand merge of an approved PR when orqen cannot read it from GitHub
   cancel <KEY> --reason T     Close the request without delivering it: closes the PR unmerged, comments both tickets (CANCELLED)
   release <KEY>               Free a request held by an agent that is no longer working on it
+  comments <KEY> [--json]     Read the request and its conversation with the client
+  comment <KEY> <file|->      Reply to the client on the request (--person NAME)
   connectors [setup]          Show and check the connectors (requests and issues), or set them up
   cycle [--loop]              Unattended mode (cron/CI/server): agent stages only, never support or analysis
 
@@ -571,6 +573,31 @@ export async function runWorkflow(cmd: string, rest: string[]) {
           console.log(`${name}: ${"label" in c ? c.label : ""}\n  ${"ok" in c && c.ok ? "✔" : "✘"} ${"detail" in c ? c.detail : ""}`);
         }
         if (out.some((c) => "ok" in c && !c.ok)) process.exitCode = 1;
+        return;
+      }
+      case "comments": {
+        const json = has("json");
+        const key = toKey(rest[0]);
+        if (!key) { console.error("Usage: orqen comments <KEY> [--json]"); process.exitCode = 1; return; }
+        const { readClientChat } = await import("./client-chat.ts");
+        const chat = await readClientChat(connectors.requests, key);
+        if (json) return console.log(JSON.stringify(chat, null, 2));
+        console.log(`${chat.key} · ${chat.title} (${chat.tool})`);
+        for (const m of chat.messages) console.log(`\n${m.from === "team" ? "→" : "←"} ${m.author || (m.from === "team" ? "orqen" : "client")}${m.created ? `  ${m.created.slice(0, 16).replace("T", " ")}` : ""}\n${m.text}`);
+        return;
+      }
+      case "comment": {
+        try {
+          const key = toKey(rest[0]);
+          if (!key || !rest[1]) throw new Error("Usage: orqen comment <KEY> <message.md|-> [--person NAME]");
+          const text = rest[1] === "-" ? readFileSync(0, "utf8") : readFileSync(rest[1], "utf8");
+          const { replyToClient } = await import("./client-chat.ts");
+          await replyToClient(connectors.requests, key, text, me);
+          console.log(`✔ answered on ${key}`);
+        } catch (e) {
+          console.error(`✘ ${(e as Error).message}`);
+          process.exitCode = 1;
+        }
         return;
       }
       case "cycle":

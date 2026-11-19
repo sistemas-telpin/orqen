@@ -54,7 +54,7 @@ export function datosDelRepo(repo: string, plataforma: NodeJS.Platform = process
     ramaDevel: env.DEVEL_BRANCH || "desarrollo",
     windows: plataforma === "win32",
     db: existsSync(join(repo, "orqen", "tools", "db.mjs")),
-    conectado: c.requests.kind === "jira" ? !!(real(c.requests.url) && real(c.requests.token)) : c.requests.kind === "github" ? !!c.requests.repo : !!(c.requests.project && c.requests.token),
+    conectado: c.requests.kind === "jira" ? !!(real(c.requests.url) && real(c.requests.token)) : c.requests.kind === "github" ? !!c.requests.repo : c.requests.kind === "local" ? true : !!(c.requests.project && c.requests.token),
   };
 }
 

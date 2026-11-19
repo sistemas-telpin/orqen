@@ -1,5 +1,5 @@
 /**
- * Connector settings: `conectores` in orqen/config.yaml (what and where) + shared provider credentials in ~/.orqen/providers.env.
+ * Connector settings: `conectores` in orqen/config.yaml (what and where) + shared provider credentials in ~/.orqen/credentials.env.
  *
  *   conectores:
  *     requests:                    # where the client's requests arrive (what the client sees)

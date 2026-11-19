@@ -78,7 +78,7 @@ test("orqen init --connectors saves the connectors and the provider accounts out
   assert.equal(cfg.connectors.requests.type, "jira");
   assert.equal(cfg.connectors.issues.repo, "my-org/my-repo");
   assert.ok(!readFileSync(join(repo, "orqen/config.yaml"), "utf8").includes("jira-secret-token"), "no secrets in config.yaml");
-  assert.match(readFileSync(join(usuario, "providers.env"), "utf8"), /JIRA_TOKEN=.*jira-secret-token/);
+  assert.match(readFileSync(join(usuario, "credentials.env"), "utf8"), /JIRA_TOKEN=.*jira-secret-token/);
 
   // Re-running init with --no-connectors keeps them.
   const r2 = orqenCon({ ORQEN_USER_CONFIG_DIR: usuario }, repo, "init", "--yes", "--no-ai", "--no-openspec", "--no-connectors");

@@ -157,7 +157,7 @@ export function serializarConfig(c: Config): { config: string; entorno: string }
   return {
     config: [
       "# orqen configuration for the 9-step flow: project, connectors (where the tickets live) and workflow. Edit as needed.",
-      "# Tokens never go here: they live in ~/.orqen/providers.env. How the project starts is in orqen/environment.yaml.",
+      "# Tokens never go here: they live in ~/.orqen/credentials.env. How the project starts is in orqen/environment.yaml.",
       stringify(toFile(flujo, CONFIG_KEYS), { lineWidth: 0 }),
     ].join("\n"),
     entorno: [

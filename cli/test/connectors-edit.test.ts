@@ -84,7 +84,7 @@ test("orqen connectors set / get / check: what the app's editor runs", () => {
   const cfg = parse(readFileSync(join(repo, "orqen/config.yaml"), "utf8"));
   assert.equal(cfg.connectors.requests.transitions.DELIVERY, "Entregado");   // config.yaml in English; the JSON of the app keeps its names
   if (existsSync(join(repo, "orqen/.env"))) assert.doesNotMatch(readFileSync(join(repo, "orqen/.env"), "utf8"), /secret-token-1234/);
-  assert.match(readFileSync(join(catalogo, "user", "providers.env"), "utf8"), /JIRA_TOKEN=secret-token-1234/);
+  assert.match(readFileSync(join(catalogo, "user", "credentials.env"), "utf8"), /JIRA_TOKEN=secret-token-1234/);
 
   const get = orqen(repo, undefined, "connectors", "get", "--json");
   assert.equal(get.codigo, 0, get.error);

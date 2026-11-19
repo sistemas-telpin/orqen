@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -39,6 +39,29 @@ test("provider accounts are shared between repositories without storing tokens i
     assert.equal(providerEnv(second, { GITHUB_TOKEN: "" }).GITHUB_TOKEN, "shared-provider-token");
     assert.equal(providerEnv(first, { GITHUB_TOKEN: "legacy-local" }).GITHUB_TOKEN, "shared-provider-token");
     assert.equal(providerEnv(first, { GITHUB_TOKEN: "ci-token" }).GITHUB_TOKEN, "ci-token");
+  } finally {
+    if (previous === undefined) delete process.env.ORQEN_USER_CONFIG_DIR;
+    else process.env.ORQEN_USER_CONFIG_DIR = previous;
+  }
+});
+
+test("credentials.env replaces the providers.env of earlier versions: still read, migrated on the next save", () => {
+  const root = mkdtempSync(join(tmpdir(), "orqen-credentials-"));
+  const previous = process.env.ORQEN_USER_CONFIG_DIR;
+  process.env.ORQEN_USER_CONFIG_DIR = join(root, "user");
+  try {
+    mkdirSync(join(root, "user"), { recursive: true });
+    mkdirSync(join(root, "repo", "orqen"), { recursive: true });
+    const old = join(root, "user", "providers.env");
+    writeFileSync(old, "GITHUB_TOKEN=old-file-token\nJIRA_TOKEN=old-jira\n");
+    assert.equal(providerFile(), join(root, "user", "credentials.env"));
+    assert.equal(providerEnv(join(root, "repo"), {}).GITHUB_TOKEN, "old-file-token");
+    // saving writes credentials.env with what the old file had, and drops the old file
+    saveProviders({ requests: { tipo: "github" as const, repo: "team/app" } }, {}, providerEnv(join(root, "repo"), {}));
+    assert.match(readFileSync(providerFile(), "utf8"), /GITHUB_TOKEN=old-file-token/);
+    assert.match(readFileSync(providerFile(), "utf8"), /JIRA_TOKEN=old-jira/);
+    assert.equal(existsSync(old), false);
+    assert.equal(providerEnv(join(root, "repo"), {}).GITHUB_TOKEN, "old-file-token");
   } finally {
     if (previous === undefined) delete process.env.ORQEN_USER_CONFIG_DIR;
     else process.env.ORQEN_USER_CONFIG_DIR = previous;

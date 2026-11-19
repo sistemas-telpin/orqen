@@ -1,14 +1,18 @@
 /** Shared provider accounts for this user. Repository .env files remain a compatibility fallback. */
-import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { completarEnv, leerEnv, parsearEnv } from "./env.ts";
 import { type ConectoresYaml, credentialsPrefix } from "../connectors/config.ts";
 
-export function providerFile() { return join(process.env.ORQEN_USER_CONFIG_DIR || join(homedir(), ".orqen"), "providers.env"); }
+const userDir = () => process.env.ORQEN_USER_CONFIG_DIR || join(homedir(), ".orqen");
+export function providerFile() { return join(userDir(), "credentials.env"); }
+/** Name used by earlier versions: still read when credentials.env does not exist, and replaced by it on the next save. */
+const legacyFile = () => join(userDir(), "providers.env");
 
 function sharedProviders(): Record<string, string> {
-  return existsSync(providerFile()) ? parsearEnv(readFileSync(providerFile(), "utf8")) : {};
+  const file = existsSync(providerFile()) ? providerFile() : existsSync(legacyFile()) ? legacyFile() : undefined;
+  return file ? parsearEnv(readFileSync(file, "utf8")) : {};
 }
 
 /**
@@ -39,5 +43,6 @@ export function saveProviders(connectors: ConectoresYaml, draft: Record<string, 
   writeFileSync(file + ".tmp", completarEnv("# ORQEN provider accounts for this user. Never commit this file.\n", values), { mode: 0o600 });
   renameSync(file + ".tmp", file);
   chmodSync(file, 0o600);
+  rmSync(legacyFile(), { force: true });   // everything it had is now in credentials.env
   return keys;
 }

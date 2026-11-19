@@ -407,7 +407,7 @@ orqen init
    si hay un agente de IA instalado, le pide que revise un resumen del repo (`--deep` para que lo explore entero, `--no-ai` para solo detección automática).
 3. Te deja confirmar o editar componentes, el comando que levanta cada parte (`npm run dev`, `npm start`…), tests, migraciones y seeds.
 4. Instala OpenSpec (2.x) si hace falta y corre `openspec init` para las herramientas elegidas.
-5. Configura los conectores: dónde llegan los requests del cliente y, opcional, dónde se cargan los issues del equipo (Jira, GitHub o Asana). Pide el proyecto/filtro y la cuenta, los prueba contra la herramienta y, si falla, deja corregir, guardar igual o dejarlo para después (`orqen connectors setup`). La selección va en `orqen/config.yaml`; las cuentas, en `~/.orqen/providers.env` (compartidas entre repositorios; si ya existen, Enter las conserva). Si el repo ya tenía conectores, por defecto se conservan.
+5. Configura los conectores: dónde llegan los requests del cliente y, opcional, dónde se cargan los issues del equipo (Jira, GitHub o Asana). Pide el proyecto/filtro y la cuenta, los prueba contra la herramienta y, si falla, deja corregir, guardar igual o dejarlo para después (`orqen connectors setup`). La selección va en `orqen/config.yaml`; las cuentas, en `~/.orqen/credentials.env` (compartidas entre repositorios; si ya existen, Enter las conserva). Si el repo ya tenía conectores, por defecto se conservan.
 6. Escribe la configuración del entorno (sin Docker de por medio), `AGENTS.md` / `CLAUDE.md`, el plugin, las guías de etapa y el manifiesto,
    y fusiona las reglas del proceso con el `openspec/config.yaml` existente.
 
@@ -433,7 +433,7 @@ actualizan solos; para los editados elegís conservar, reemplazar o dejar una co
 | `orqen/config.yaml`              | Lo que usa el flujo de 9 pasos: proyecto, prefijos, **connectors** (dónde viven los tickets), **workflow** (aprobadores, gate del code review, rama de integración), agente y OpenSpec |
 | `orqen/environment.yaml`         | Cómo se levanta y testea el proyecto: `stack` detectado, `processes`, variables, migraciones y `tests` |
 | `orqen/.env`                     | Opcional: overrides locales con variables (ignorado por git). `orqen init` ya no lo crea      |
-| `~/.orqen/providers.env`          | Cuentas y tokens de proveedores, compartidos por el usuario entre repositorios                 |
+| `~/.orqen/credentials.env`        | Credenciales de los proveedores (tokens), del usuario y compartidas entre repositorios; antes `providers.env`, que se sigue leyendo |
 | `orqen/stages/`                  | Guías de cada etapa (editables)                                                                |
 | `orqen/plugin/`                  | Comandos de Claude Code y el skill de grilling                                                 |
 | `orqen/work/<KEY>/`              | Registro versionado de cada pedido                                                                |
@@ -493,7 +493,7 @@ Cada valor se puede pisar en una máquina con la variable de la tabla de abajo, 
 
 ### Variables
 
-Las credenciales de proveedores van en `~/.orqen/providers.env`. El resto son overrides de `orqen/config.yaml`.
+Las credenciales de proveedores van en `~/.orqen/credentials.env`. El resto son overrides de `orqen/config.yaml`.
 
 | Variable                                                     | Para qué                                                                                   |
 | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------ |
@@ -557,7 +557,7 @@ connectors:
 | Claves | las de Jira (`SOP-123`) | `GH-42` (`prefijo` configurable) | `AS-<id>` |
 | Extras | `credentials`, `issue_type`, `operational_type`, `link_type` | `repo`, `project_owner`, `field`, `labels` | `prefix` |
 
-Las cuentas y tokens se guardan en `~/.orqen/providers.env` (`JIRA_*`, `GITHUB_TOKEN`, `ASANA_TOKEN`) y se reutilizan entre repositorios. Una variable de entorno con el mismo nombre (por ejemplo `GITHUB_TOKEN` en CI) gana sobre el archivo. Las copias anteriores en `orqen/.env` se siguen leyendo como compatibilidad, con la menor prioridad; al guardar el conector, sus credenciales se trasladan a la configuración del usuario. `orqen connectors` muestra los dos sistemas y prueba las credenciales;
+Las cuentas y tokens se guardan en `~/.orqen/credentials.env` (`JIRA_*`, `GITHUB_TOKEN`, `ASANA_TOKEN`) y se reutilizan entre repositorios. Una variable de entorno con el mismo nombre (por ejemplo `GITHUB_TOKEN` en CI) gana sobre el archivo. Las copias anteriores en `orqen/.env` se siguen leyendo como compatibilidad, con la menor prioridad; al guardar el conector, sus credenciales se trasladan a la configuración del usuario. `orqen connectors` muestra los dos sistemas y prueba las credenciales;
 `orqen connectors setup` los configura con preguntas. Los comandos aceptan la clave del request o la de su issue.
 
 **Si venías de una versión anterior**, todo se sigue leyendo: las claves en castellano (`conectores`, `tipo`, `filtro`, `transiciones`…), `externo`/`interno` en `conectores` y `requerimientos`/`tickets` en `prefijos`

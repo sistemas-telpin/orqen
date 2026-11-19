@@ -644,7 +644,17 @@ orqen env setup | up [--all] | test [tipo] | status | down
 orqen tutorial [paso] [--step <n|id>] [--list] [--lang es|en]   Tutorial paso a paso · orqen lang: idioma detectado
 orqen swarm "<tarea>" [--parallel N] [--plan-only | --plan plan.json] [--small C] [--large C] [--yes]
 
-orqen list requests|issues|prs [--json] Tablero por rol · cola de desarrollo · cola de PRs (y merges pendientes)
+# Para personas (los pasos 2, 3, 5, 6, 7 y 9 se corren como /orqen:* en el agente)
+orqen list requests|issues|prs [--json] Pasos 1, 4 y 8: las colas de trabajo (no toma nada)
+orqen status [KEY] [--json]            Dónde está un pedido, quién actúa y qué sigue
+orqen merged <KEY> [--person NOMBRE]   Confirma el merge manual del PR cuando orqen no puede leerlo (sin gh)
+orqen cancel <KEY> --reason <texto>    Cancela el pedido sin entregar: cierra el PR sin mergear y comenta en los tickets
+orqen release <KEY>                    Libera la reserva de un pedido
+orqen connectors [setup] [--json]      Muestra y prueba los conectores (requests e issues), o los configura
+orqen cycle [--loop]                   Modo desatendido
+orqen help internal                    Los comandos internos y los JSON para herramientas
+
+# Internos: los corre el agente dentro de los /orqen:*
 orqen support <KEY> [--person N]       Abre la atención de soporte (anda con SUPPORT_STAGE on u off)
 orqen analyze <KEY> [--analyst N]      Abre el análisis con un analista
 orqen lane <KEY> <direct|light|full>   Registra el carril (light/full: rama + change de OpenSpec)
@@ -652,22 +662,19 @@ orqen take <KEY> [--agent N]           Reserva una etapa de agente y prepara ram
 orqen complete <KEY> <salida.json|->   Valida la salida de la etapa y avanza el proceso
 orqen pr <KEY> [<explicación.md>] [--title T]                     Sin archivo: informa. Con archivo: commit + push + PR a DEVEL_BRANCH
 orqen review <KEY> approve|reject [--reason T] [--report F]           Decisión de QA (QA_REVIEW, solo carril completo)
-orqen approve <KEY> [--changes <comentario.md|->] [--force]           Decisión del senior: aprueba el PR (no con CI en rojo o conflictos) o pide cambios
+orqen approve <KEY> [--changes <comentario.md|->] [--force]         Decisión del senior: aprueba el PR (no con CI en rojo o conflictos) o pide cambios
 orqen code-review <KEY> <informe.md|-> --verdict <approve|minor|reject> Registra el informe opcional del senior (no decide)
-orqen merged <KEY> [--person NOMBRE]     Confirma el merge manual del PR cuando orqen no puede leerlo (sin gh)
-orqen cancel <KEY> --reason <texto>     Cancela el pedido sin entregar: cierra el PR sin mergear y comenta en los tickets
-orqen status [KEY]                     Estado actual y log
 orqen schema <ETAPA>                   JSON Schema de la salida de una etapa
 orqen block <KEY> <motivo>             Escala a una persona
-orqen release <KEY>                    Libera la reserva de un pedido
-orqen connectors [setup] [--json]      Muestra y prueba los conectores (requests e issues), o los configura
 orqen search <JQL>                     Busca issues (antecedentes / relacionados)
-orqen cycle [--loop]                   Modo desatendido
+orqen pending [--json] · orqen qa …     Nombres viejos (list requests · review)
 ```
 
 `take`, `complete`, `status`, `block`, `release`, `pr`, `review` y `approve` aceptan la clave del request o la de su issue.
 Nombres viejos que siguen andando con un aviso: `orqen pending` → `orqen list requests`, `orqen qa` → `orqen review`,
 `/orqen:e2e-review` → `/orqen:review`, `/orqen:code-review` → `/orqen:approve`.
+
+**Worktrees**: si la carpeta es un worktree de git (`git worktree add`, la app de escritorio abre uno por pedido), orqen usa el estado (`orqen/state`) y `orqen/.env` del worktree principal, así todos ven los mismos pedidos; `take` crea la rama del pedido desde la base sin hacer checkout de la base.
 
 ## Garantías y límites
 

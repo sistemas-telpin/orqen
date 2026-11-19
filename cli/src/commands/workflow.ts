@@ -2,6 +2,7 @@
 import { ejecutar, partirComando } from "../lib/proc.ts";
 import { providerEnv, saveProviders, providerFile } from "../lib/provider-credentials.ts";
 import { stageGuideFile } from "../lib/stage-guides.ts";
+import { lessonsFor } from "./eval.ts";
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { userInfo } from "node:os";
@@ -18,26 +19,51 @@ import { GitWorkspace } from "../workflow/workspace.ts";
 
 export const WORKFLOW_COMMANDS = ["list", "qa", "approve", "merged", "cancel", "pending", "support", "analyze", "lane", "take", "complete", "pr", "review", "code-review", "schema", "block", "release", "search", "status", "cycle", "connectors"];
 
-export const WORKFLOW_HELP = `Customer request workflow (the 9 steps):
-  list requests [--json] [--all]        1 · Everyone's work list, by role (advances what is already decided; takes nothing)
-  support <KEY> [--person NAME]         2 · First-line support (/orqen:support)
-  analyze <KEY> [--analyst NAME]        3 · Analysis (/orqen:analyze)
-  list issues [--json]                  4 · Development queue: issues nobody took, the ones that came back marked
-  take <KEY> [--agent NAME]             5 · Claim an agent stage (/orqen:implement: development, then testing)
-  pr <KEY> [<explanation.md>]           6 · Inspect or open the integration PR (/orqen:pr)
-  review <KEY> approve|reject [--reason TEXT] [--report FILE]   7 · QA decision in QA_REVIEW, full lane (/orqen:review)
-  list prs [--json]                     8 · Senior's queue: PRs to review and whether the review is on the last commit
-  approve <KEY> [--changes <comment.md|->] [--force] [--person NAME]   9 · Senior: approve the PR (not with red CI or conflicts) or request changes (/orqen:approve)
-  code-review <KEY> <report.md|-> --verdict <approve|minor|reject>   Record the senior's optional PR report (does not decide)
-  merged <KEY> [--person NAME]          After approval a person merges the PR by hand; confirm it when orqen cannot read it from GitHub
-  cancel <KEY> --reason TEXT [--person NAME]   Close the request without delivering it: closes the PR unmerged, comments both tickets (CANCELLED)
-  lane <KEY> <direct|light|full>        Record the lane
-  complete <KEY> <output.json|->       Validate output and advance the workflow
-  schema <STAGE> · block <KEY> <reason> · release <KEY> · search <query>
-  status [KEY] [--json] · cycle [--loop]
-  connectors [setup|get|check <json>|set <json>] [--json] Show/check the connectors, or set them up (get/check/set: JSON for tools such as orqen-gui)
-  connectors github-choices <json|-> <requests|issues> <repositories|projects|statuses> List GitHub choices for a draft
-Older names (still work, with a notice): pending → list requests · qa → review`;
+/** What people run: the 9 steps (as /orqen:* commands in their agent) and the CLI commands meant for a person. */
+export const WORKFLOW_HELP = `The 9 steps (run the /orqen:* commands in your agent: it calls the CLI for you):
+  1 /orqen:list requests     orqen list requests [--json] [--all]   Everyone's work list, by role (takes nothing)
+  2 /orqen:support <KEY>     First-line support: answer the client or escalate to the analyst
+  3 /orqen:analyze <KEY>     Analysis with the analyst: criteria, lane, spec and the issue
+  4 /orqen:list issues       orqen list issues [--json]             Development queue (free, taken, came back)
+  5 /orqen:implement <KEY>   Implement; the testing runs on its own afterwards
+  6 /orqen:pr <KEY>          Explain the changes and open the integration PR
+  7 /orqen:review <KEY>      QA (full lane only): check the e2e on screen, approve or reject
+  8 /orqen:list prs          orqen list prs [--json]                Senior's queue: PRs to review or to merge, with CI and conflicts
+  9 /orqen:approve <KEY>     Senior: approve the PR or request changes; after the hand merge, run it again to deliver
+
+Request commands for people:
+  status [KEY] [--json]       Where a request is, who acts and what comes next (no KEY: all of them)
+  merged <KEY> [--person N]   Confirm the hand merge of an approved PR when orqen cannot read it from GitHub
+  cancel <KEY> --reason T     Close the request without delivering it: closes the PR unmerged, comments both tickets (CANCELLED)
+  release <KEY>               Free a request held by an agent that is no longer working on it
+  connectors [setup]          Show and check the connectors (requests and issues), or set them up
+  cycle [--loop]              Unattended mode (cron/CI/server): agent stages only, never support or analysis
+
+Agent-only commands (the /orqen:* commands run them) and JSON for tools: orqen help internal`;
+
+/** What only the agent runs (inside the /orqen:* commands) and the JSON commands for tools such as orqen-gui. */
+export const WORKFLOW_INTERNAL_HELP = `Agent-only commands (the /orqen:* commands run them; a person does not need them):
+  support <KEY> [--person NAME]          2 · Open or resume first-line support and print the context
+  analyze <KEY> [--analyst NAME]         3 · Open or resume the analysis and print the context
+  lane <KEY> <direct|light|full>         3 · Record the lane (light/full: branch + OpenSpec change)
+  take <KEY> [--agent NAME]              5 · Claim an agent stage, prepare branch and environment (also EXECUTION/VERIFICATION)
+  complete <KEY> <output.json|->         Validate a stage's output and advance the workflow
+  schema <STAGE>                         JSON Schema of a stage's output
+  pr <KEY> [<explanation.md>] [--title T]   6 · No file: where the branch goes. With file: commit + push + PR
+  review <KEY> approve|reject [--reason TEXT] [--report FILE]   7 · QA decision (QA_REVIEW, full lane)
+  approve <KEY> [--changes <comment.md|->] [--force] [--person NAME]   9 · Senior: approve the PR (not with red CI or conflicts) or request changes
+  code-review <KEY> <report.md|-> --verdict <approve|minor|reject>   9 · Record the senior's optional PR report (does not decide)
+  block <KEY> <reason>                   Escalate to a person on the ticket
+  search <query>                         Search tickets (precedents, related work)
+
+Older names (still work, with a notice): pending → list requests · qa → review
+
+JSON for tools (orqen-gui):
+  status [KEY] --json · list requests|issues|prs --json · usage --json · tutorial --step <n> --json
+  spec [KEY|change] --json [--dir <worktree>]   the spec in the neutral model of src/sdd (any SDD tool)
+  connectors get|check <json>|set <json>|general-get|general-set [--json]
+  connectors github-choices <json|-> <requests|issues> <repositories|projects|statuses>
+  bootstrap --list --json · bootstrap --describe <stack> --json`;
 
 /** The person at this machine: Git's user.name for this repository, otherwise the system user. */
 export function quienSoy(repo: string): string | undefined {
@@ -108,6 +134,8 @@ export async function runWorkflow(cmd: string, rest: string[]) {
       "",
       guide(s),
       "",
+      // the feedback loop: what the team corrected in this stage before (orqen learn --apply)
+      ...(() => { const l = lessonsFor(cfg.repoPath, s); return l ? [l, ""] : []; })(),
       "## Context",
       "```json", JSON.stringify(ctx, null, 2), "```",
       "",
@@ -379,8 +407,8 @@ export async function runWorkflow(cmd: string, rest: string[]) {
             return console.log(JSON.stringify(item ? { ...item, role: b!.role, next: b!.next, qa_status: b!.qa, returned: b!.returned, events: store.events(item.key) } : null, null, 2));
           }
           return console.log(JSON.stringify(store.all().map((r) => ({
-            key: r.key, state: r.state, issue: r.issue, lane: r.lane, route: r.route, round: r.round, branch: r.branch || undefined,
-            change: r.change || undefined, analyst: r.analyst, supporter: r.supporter, lock: r.lock, devel_pr: r.artifacts.devel_pr,
+            key: r.key, title: r.title ?? r.artifacts?.ANALYSIS?.summary, state: r.state, issue: r.issue, lane: r.lane, route: r.route, round: r.round, branch: r.branch || undefined,
+            change: r.change || undefined, analyst: r.analyst, supporter: r.supporter, lock: r.lock, devel_pr: r.artifacts?.devel_pr,
             updated: store.events(r.key).at(-1)?.ts,
           })), null, 2));
         }

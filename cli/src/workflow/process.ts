@@ -34,7 +34,7 @@ const COMMENT_MAX = 30_000;   // Jira rejects comments over 32767 characters (Gi
 export interface Pending { key: string; state: AgentState | "NEW"; for: "support" | "analyst" | "agent"; takenBy?: string }
 /** One row of `orqen list`: who acts on the request and which command comes next. */
 export interface BoardItem {
-  key: string; issue?: string; work: string; state: State; lane?: string; route?: string; role: Role;
+  key: string; title?: string; issue?: string; work: string; state: State; lane?: string; route?: string; role: Role;
   takenBy?: string; since?: string; returned?: string; estimated_hours?: number; pr?: string;
   qa?: "pending" | "approved"; next: NextStep[]; updated?: string;
   /** DELIVERY: whether a person already merged the PR into the development branch (orqen never merges it). */
@@ -101,7 +101,7 @@ export class Process {
   boardItem(item: WorkItem): BoardItem {
     const lock = this.activeLock(item);
     return {
-      key: item.key, issue: item.issue, work: workKey(item), state: item.state, lane: item.lane, route: item.route,
+      key: item.key, title: item.title ?? item.artifacts?.ANALYSIS?.summary, issue: item.issue, work: workKey(item), state: item.state, lane: item.lane, route: item.route,
       role: roleOf(item, this.cfg), takenBy: lock?.agent, since: lock?.since, returned: returned(item),
       estimated_hours: item.artifacts.estimated_hours, pr: item.artifacts.devel_pr,
       qa: needsQa(item) && item.state === "QA_REVIEW" ? "pending" : needsQa(item) && item.state === "CODE_REVIEW" ? "approved" : undefined,
@@ -255,6 +255,7 @@ export class Process {
     this.store.save(item);
 
     const ticket = await this.requests.ticket(key);
+    if (ticket.title && item.title !== ticket.title) { item.title = ticket.title; this.store.save(item); }
     const state = item.state;
 
     // ANALYSIS (light/full are created by `orqen lane`) and the fast lane (EXECUTION/VERIFICATION) do not prepare a branch here

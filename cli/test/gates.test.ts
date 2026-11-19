@@ -8,7 +8,7 @@ import { loadConfig } from "../src/workflow/config.ts";
 import type { OpenSpecApi } from "../src/workflow/openspec.ts";
 import { Process, changeName } from "../src/workflow/process.ts";
 import { Store, newWorkItem } from "../src/workflow/store.ts";
-import type { Workspace } from "../src/workflow/workspace.ts";
+import { parsePrChecks, type Workspace } from "../src/workflow/workspace.ts";
 import { both, FakeTracker, testConnectors } from "./fakes.ts";
 
 const fakeOs: OpenSpecApi = {
@@ -427,4 +427,104 @@ test("DELIVERY waits for a person to merge the PR: orqen detects it, records it 
   assert.equal(m.by, "Marta");
   assert.match(jira.last("REQ-3"), /PR merged into desarrollo by Marta \(confirmed by hand\)/);
   assert.equal((await noGh.take("REQ-3", "delivery")).item.state, "DELIVERY");
+});
+
+test("orqen cancel: closes the open PR unmerged, comments both tickets, moves to CANCELLED and leaves the board", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "rec-c-"));
+  const cfg = loadConfig({
+    stateDir: join(dir, "state"), factoryDir: join(dir, "factory"),
+    connectors: { ...testConnectors(), requests: { ...testConnectors().requests, transitions: { CLOSED: "Done" } } },
+    approvers: { analysis: [], code: [], client: [] },
+  });
+  const jira = new FakeTracker({ "REQ-1": { title: "Algo" }, "REQ-2": { title: "Otro" }, "REQ-3": { title: "Nuevo" }, "DEV-9": { title: "issue" } });
+  const closed: Array<[string, string]> = [];
+  let prState: "OPEN" | "MERGED" = "OPEN";
+  const ws: Workspace = { ...failingTests, prState: () => ({ state: prState }), closePr: (url, c) => { closed.push([url, c]); } };
+  const store = new Store(cfg.stateDir);
+  const flow = new Process(cfg, both(jira), store, ws, fakeOs);
+  store.save({ ...newWorkItem("REQ-1"), state: "CODE_REVIEW", issue: "DEV-9", lock: { agent: "x", since: new Date().toISOString() }, artifacts: { devel_pr: "https://gh/pr/1" } });
+
+  await assert.rejects(flow.cancel("REQ-1", "no", "Ana"), /Say why it is cancelled/);
+  const r = await flow.cancel("REQ-1", "El cliente lo retiró", "Ana");
+  assert.deepEqual(r, { state: "CANCELLED", pr: "closed", url: "https://gh/pr/1" });
+  assert.equal(closed.length, 1);
+  assert.match(closed[0][1], /REQ-1 was cancelled by Ana: El cliente lo retiró/);
+  const item = store.get("REQ-1")!;
+  assert.equal(item.state, "CANCELLED");
+  assert.equal(item.lock, undefined);
+  assert.equal(item.artifacts.cancelled.reason, "El cliente lo retiró");
+  assert.equal(item.artifacts.cancelled.from, "CODE_REVIEW");
+  assert.match(jira.last("REQ-1"), /Request cancelled by Ana: El cliente lo retiró\nThe PR was closed without merging/);
+  assert.match(jira.last("DEV-9"), /Request cancelled by Ana/);
+  assert.deepEqual(jira.transitions["REQ-1"], ["Done"]);   // no CANCELLED transition: falls back to CLOSED's
+  assert.equal(jira.labels["REQ-1"], "CANCELLED");
+  await assert.rejects(flow.cancel("REQ-1", "otra vez más", "Ana"), /already CANCELLED/);
+  assert.ok(!(await flow.board()).some((b) => b.key === "REQ-1"));
+  assert.ok((await flow.board(true)).some((b) => b.key === "REQ-1" && b.role === "done" && b.next.length === 0));
+
+  // PR already merged: nothing to close, the comment says the code stays in the development branch
+  store.save({ ...newWorkItem("REQ-2"), state: "ACCEPTANCE", artifacts: { devel_pr: "https://gh/pr/2" } });
+  prState = "MERGED";
+  assert.equal((await flow.cancel("REQ-2", "Ya no aplica", "Ana")).pr, "merged");
+  assert.equal(closed.length, 1);
+  assert.match(jira.last("REQ-2"), /already merged into desarrollo[\s\S]*revert it by hand/);
+
+  // a request orqen never touched can be cancelled; an unknown key cannot
+  assert.equal((await flow.cancel("REQ-3", "Duplicado de REQ-1", "Ana")).state, "CANCELLED");
+  jira.ticket = async (k) => { throw new Error(`${k} does not exist`); };
+  await assert.rejects(flow.cancel("REQ-404", "No existe nada", "Ana"), /REQ-404 does not exist/);
+});
+
+test("the senior cannot approve a PR with red CI or conflicts (unless --force); unknown checks do not block", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "rec-ci-"));
+  const cfg = loadConfig({
+    stateDir: join(dir, "state"), factoryDir: join(dir, "factory"), connectors: testConnectors(),
+    approvers: { analysis: [], code: [], client: [] }, codeReviewGate: "ticket",
+  });
+  const jira = new FakeTracker({ "REQ-1": { title: "Algo" } });
+  let checks: any = { mergeable: "MERGEABLE", statusCheckRollup: [{ __typename: "CheckRun", name: "build", status: "COMPLETED", conclusion: "FAILURE" }] };
+  const ws: Workspace = { ...failingTests, prChecks: () => parsePrChecks(checks) };
+  const store = new Store(cfg.stateDir);
+  const flow = new Process(cfg, both(jira, false), store, ws, fakeOs);
+  store.save({ ...newWorkItem("REQ-1"), state: "CODE_REVIEW", artifacts: { devel_pr: "https://gh/pr/1" } });
+
+  assert.deepEqual((await flow.prQueue())[0].checks, { ci: "failing", conflicts: false, detail: "build" });
+  await assert.rejects(flow.decide("REQ-1", "approve", "", "Seni"), /cannot be approved yet: its CI is failing \(build\)/);
+  checks = { mergeable: "CONFLICTING", statusCheckRollup: [] };
+  await assert.rejects(flow.decide("REQ-1", "approve", "", "Seni"), /conflicts with desarrollo[\s\S]*--changes/);
+  checks = { mergeable: "MERGEABLE", statusCheckRollup: [{ __typename: "StatusContext", context: "ci/jenkins", state: "PENDING" }] };
+  await assert.rejects(flow.decide("REQ-1", "approve", "", "Seni"), /CI is still running \(ci\/jenkins\)/);
+  assert.equal(store.get("REQ-1")!.state, "CODE_REVIEW");
+  // requesting changes is never blocked
+  await flow.decide("REQ-1", "changes", "Actualizá la rama con desarrollo.", "Seni");
+  assert.equal(store.get("REQ-1")!.state, "DEVELOPMENT");
+
+  // --force approves anyway and leaves it on record
+  store.save({ ...store.get("REQ-1")!, state: "CODE_REVIEW" });
+  await flow.decide("REQ-1", "approve", "", "Seni", "agent", true);
+  assert.equal(store.get("REQ-1")!.state, "DELIVERY");
+  assert.match(jira.coms["REQ-1"].map((c) => c.body).join("\n"), /Approved with --force although its CI is still running/);
+
+  // gh unavailable: shown as unknown, approval goes through
+  const noGh = new Process(cfg, both(jira, false), store, { ...failingTests, prChecks: () => { throw new Error("spawn gh ENOENT"); } }, fakeOs);
+  store.save({ ...newWorkItem("REQ-1"), state: "CODE_REVIEW", artifacts: { devel_pr: "https://gh/pr/1" } });
+  assert.equal((await noGh.prQueue())[0].checks?.ci, "unknown");
+  await noGh.decide("REQ-1", "approve", "", "Seni");
+  assert.equal(store.get("REQ-1")!.state, "DELIVERY");
+});
+
+test("parsePrChecks reads check runs and commit statuses", () => {
+  assert.deepEqual(parsePrChecks({ mergeable: "UNKNOWN" }), { ci: "none", failing: [], pending: [], conflicts: undefined });
+  assert.deepEqual(parsePrChecks({
+    mergeable: "MERGEABLE", statusCheckRollup: [
+      { __typename: "CheckRun", name: "lint", status: "COMPLETED", conclusion: "SUCCESS" },
+      { __typename: "CheckRun", name: "skip", status: "COMPLETED", conclusion: "SKIPPED" },
+      { __typename: "StatusContext", context: "deploy", state: "SUCCESS" },
+    ],
+  }), { ci: "passing", failing: [], pending: [], conflicts: false });
+  const c = parsePrChecks({ statusCheckRollup: [
+    { __typename: "CheckRun", name: "e2e", status: "IN_PROGRESS" },
+    { __typename: "StatusContext", context: "sonar", state: "ERROR" },
+  ] });
+  assert.deepEqual([c.ci, c.failing, c.pending], ["failing", ["sonar"], ["e2e"]]);
 });

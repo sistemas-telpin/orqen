@@ -15,7 +15,7 @@ import { detectarIdioma } from "../lib/lang.ts";
 import type { Config } from "./config.ts";
 import { SCHEMAS } from "./schemas.ts";
 import {
-  LANES, type Lane, type State, type AgentState, GATES, isAgentState, isGate, nextStateAfterStage,
+  LANES, type Lane, type State, type AgentState, GATES, isAgentState, isFinal, isGate, nextStateAfterStage,
 } from "./states.ts";
 import { Factory } from "./factory.ts";
 import { canLinkNatively, type Comment, type Connectors, isBotComment, type Tracker } from "../connectors/index.ts";
@@ -23,7 +23,7 @@ import { type Scenario, type OpenSpecApi, type Task, hoursOf } from "./openspec.
 import { reviewSql } from "./sql.ts";
 import { type WorkItem, Store, newWorkItem } from "./store.ts";
 import { needsQa, nextSteps, returned, roleOf, workKey, type NextStep, type Role } from "./board.ts";
-import { branchFor, type EnvironmentResult, type PrReview, type Workspace } from "./workspace.ts";
+import { branchFor, type EnvironmentResult, type PrChecks, type PrReview, type Workspace } from "./workspace.ts";
 
 const CMD = /^\s*\/(approve|reject)\b\s*([\s\S]*)/i;
 /** Verdicts of `orqen code-review` (code review report for the senior) and how they read on the ticket. */
@@ -40,6 +40,8 @@ export interface BoardItem {
   /** DELIVERY: whether a person already merged the PR into the development branch (orqen never merges it). */
   merge?: "pending" | "merged";
   review?: { status: "none" | "current" | "stale" | "unknown"; detail?: string };
+  /** `orqen list prs`: CI of the PR and conflicts with the development branch ("unknown": gh could not read them). */
+  checks?: { ci: PrChecks["ci"] | "unknown"; conflicts?: boolean; detail?: string };
 }
 export type CompleteResult = { ok: true; next: State } | { ok: false; errors: string[] };
 
@@ -90,7 +92,7 @@ export class Process {
     const out: BoardItem[] = [];
     for (const key of keys) {
       const item = this.store.get(key) ?? newWorkItem(key);
-      if (item.state === "CLOSED" && !closed) continue;
+      if (isFinal(item.state) && !closed) continue;
       out.push(this.boardItem(item));
     }
     return out;
@@ -115,6 +117,7 @@ export class Process {
   async prQueue(): Promise<BoardItem[]> {
     const items = (await this.board()).filter((b) => b.pr && (b.state === "CODE_REVIEW" || b.merge === "pending"));
     for (const b of items) {
+      b.checks = this.prHealth(b.pr!);
       if (b.state === "DELIVERY") { b.review = { status: "current", detail: "approved: waiting for the merge" }; continue; }
       if (this.cfg.codeReviewGate !== "github" || !this.ws.prReviews) { b.review = { status: "none" }; continue; }
       try {
@@ -135,13 +138,26 @@ export class Process {
    * gh session and the gate reads it (it only counts on the last commit); with the ticket gate orqen records it directly.
    * approve → DELIVERY; changes → back to development with the comment as an indication.
    */
-  async decide(key: string, action: "approve" | "changes", body: string, person = "senior", agent = "agent") {
+  async decide(key: string, action: "approve" | "changes", body: string, person = "senior", agent = "agent", force = false) {
     const item = this.store.get(key);
     if (!item) throw new Error(`${key} is unknown to orqen.`);
     if (item.state !== "CODE_REVIEW") throw new Error(`${key} is in ${item.state}: the senior decides in CODE_REVIEW.`);
     const url = item.artifacts.devel_pr as string | undefined;
     if (!url) throw new Error(`${key} has no PR yet: it is opened with /orqen:pr ${workKey(item)}.`);
     if (action === "changes" && body.trim().length < 10) throw new Error("Say which changes are needed: the comment goes back to development as the indication.");
+    if (action === "approve") {
+      // a red or conflicting PR is not approved (unknown, e.g. no gh, does not block)
+      const h = this.prHealth(url);
+      const problem = h.conflicts ? `it has conflicts with ${this.cfg.develBranch}`
+        : h.ci === "failing" ? `its CI is failing${h.detail ? ` (${h.detail})` : ""}`
+        : h.ci === "pending" ? `its CI is still running${h.detail ? ` (${h.detail})` : ""}` : "";
+      if (problem && !force)
+        throw new Error(`The PR ${url} cannot be approved yet: ${problem}. ` + (h.conflicts
+          ? `Request changes so development brings the branch up to date with ${this.cfg.develBranch} (orqen approve ${workKey(item)} --changes).`
+          : h.ci === "pending" ? "Wait for it to finish and approve again." : "Request changes with what failed, or fix the CI first.")
+          + " Use --force only if you know why it can be approved anyway.");
+      if (problem) body = `${body.trim()}${body.trim() ? "\n\n" : ""}Approved with --force although ${problem}.`;
+    }
     if (this.cfg.codeReviewGate === "github") {
       if (!this.ws.reviewPr) throw new Error("This workspace cannot review PRs; use CODE_REVIEW_GATE=ticket.");
       this.ws.reviewPr(url, action === "approve" ? "approve" : "request-changes", body.trim() || `Approved by ${person} with orqen.`);
@@ -830,6 +846,46 @@ export class Process {
     await this.attemptAsync(() => this.commentBoth(item, `${what}: ${url}`));
   }
 
+  /** CI and conflicts of a PR. "unknown" (no gh, a PR outside GitHub…) never blocks: it is only shown. */
+  private prHealth(url: string): NonNullable<BoardItem["checks"]> {
+    if (!this.ws.prChecks) return { ci: "unknown", detail: "this workspace cannot read PRs" };
+    try {
+      const c = this.ws.prChecks(url);
+      const names = c.failing.length ? c.failing : c.pending;
+      return { ci: c.ci, conflicts: c.conflicts, ...(names.length ? { detail: names.slice(0, 5).join(", ") } : {}) };
+    } catch (e) {
+      return { ci: "unknown", detail: ((e as Error).message.split("\n")[0] || "gh failed").slice(0, 200) };
+    }
+  }
+
+  // ================================================================ cancel
+  /**
+   * `orqen cancel <KEY>`: closes the request without delivering it (the client withdrew it, a duplicate, it no longer applies).
+   * Closes the open PR without merging it (the branch stays), comments both tickets and moves to CANCELLED, which is final.
+   * A PR already merged stays in the development branch: the comment says so, reverting it is a person's call.
+   */
+  async cancel(key: string, reason: string, person: string, agent = "agent") {
+    let item = this.store.get(key);
+    if (!item) { await this.requests.ticket(key); item = newWorkItem(key); }   // a request orqen has not touched yet: it must exist
+    if (isFinal(item.state)) throw new Error(`${key} is already ${item.state}.`);
+    if (reason.trim().length < 5) throw new Error("Say why it is cancelled (--reason): it goes on the request and the issue.");
+    const url = item.artifacts.devel_pr as string | undefined;
+    let pr: "closed" | "merged" | "open" | undefined;
+    if (url) {
+      const merged = !!item.artifacts.devel_pr_merged || this.attempt(() => this.ws.prState?.(url).state) === "MERGED";
+      if (merged) pr = "merged";
+      else if (this.ws.closePr && this.attempt(() => { this.ws.closePr!(url, `[orqen] ${key} was cancelled by ${person}: ${reason.trim()}`); return true; })) pr = "closed";
+      else pr = "open";
+    }
+    item.artifacts.cancelled = { at: new Date().toISOString(), by: person, reason: reason.trim(), from: item.state, ...(pr ? { pr } : {}) };
+    const note = pr === "merged" ? `\nThe PR was already merged into ${this.cfg.develBranch} (${url}): that code stays there; revert it by hand if needed.`
+      : pr === "closed" ? `\nThe PR was closed without merging: ${url}`
+      : pr === "open" ? `\nThe PR could not be closed automatically: close it by hand: ${url}` : "";
+    await this.commentBoth(item, `Request cancelled by ${person}: ${reason.trim()}${note}`);
+    await this.move(item, "CANCELLED", `cancelled by ${person}: ${reason.trim()}`, agent);
+    return { state: item.state, pr, url };
+  }
+
   // ================================================================ utilities
   async block(key: string, reason: string, agent = "agent") {
     const item = this.store.get(key) ?? newWorkItem(key);
@@ -877,10 +933,12 @@ export class Process {
     if (item.branch) this.attempt(() => this.ws.commit(item.key, `registro ${from} → ${to}`, { path: this.cfg.factoryDir, branch: item.branch }));
     try {
       await this.requests.setStateLabel(item.key, to);
-      const t = this.cfg.connectors.requests.transitions[to];
+      // CANCELLED falls back to the CLOSED destination when the connector has no own "CANCELLED" transition
+      const dest = (ts?: Record<string, string>) => ts?.[to] ?? (to === "CANCELLED" ? ts?.CLOSED : undefined);
+      const t = dest(this.cfg.connectors.requests.transitions);
       if (t) await this.requests.transition(item.key, t);
       if (item.issue && this.issues) {
-        const ts = this.cfg.connectors.issues?.transitions[to];
+        const ts = dest(this.cfg.connectors.issues?.transitions);
         if (ts) await this.issues.transition(item.issue, ts);
       }
     } catch (e) {

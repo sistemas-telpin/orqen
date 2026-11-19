@@ -22,6 +22,7 @@ export const State = {
   VERIFICATION: "VERIFICATION",       // agent: verifies (read-only) that the problem is solved
   ACCEPTANCE: "ACCEPTANCE",           // gate: the client signs off
   CLOSED: "CLOSED",
+  CANCELLED: "CANCELLED",             // closed without delivering: the client withdrew it, a duplicate… (`orqen cancel`)
   BLOCKED: "BLOCKED",
 } as const;
 export type State = (typeof State)[keyof typeof State];
@@ -53,6 +54,8 @@ export const GATES: Record<Gate, { kind: "answer" | "approval"; approve: State; 
   APPLICATION: { kind: "approval", approve: "VERIFICATION", reject: "EXECUTION" },
 };
 export const isGate = (s: State): s is Gate => s in GATES;
+/** The request is over: delivered (CLOSED) or cancelled. */
+export const isFinal = (s: State) => s === "CLOSED" || s === "CANCELLED";
 
 export const MAX_TESTING_ATTEMPTS = 3;
 export const MAX_QUESTION_ROUNDS = 3;

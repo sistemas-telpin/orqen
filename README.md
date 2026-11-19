@@ -275,6 +275,10 @@ Con `CODE_REVIEW_GATE=github` (el valor por defecto) el senior **no necesita com
 y `orqen` lo lee con `gh` en cada `orqen list` / `orqen cycle`:
 
 - **Approve** → el pedido pasa a DELIVERY y se comenta en el pedido y el issue.
+- **CI y conflictos.** `orqen list prs` muestra el CI del PR y si tiene conflictos con `desarrollo` (lo lee con `gh`).
+  `orqen approve` no aprueba un PR con el CI en rojo, todavía corriendo o con conflictos: pide cambios (los conflictos vuelven a
+  desarrollo para actualizar la rama) o, si sabés por qué igual se puede aprobar, `--force` (queda registrado en el ticket).
+  Si `gh` no puede leerlo, se muestra como `unknown` y no frena. Para los reviews hechos directo en GitHub, usá la protección de rama.
 - **El merge lo hace una persona.** orqen nunca mergea el PR: después del approve, alguien lo mergea a mano a `desarrollo`.
   orqen lo detecta solo (en `orqen list`, `orqen cycle` o al retomar DELIVERY), lo comenta en el request y el issue, y recién
   ahí sigue la entrega al cliente. Antes de pedir el merge, DELIVERY archiva el change de OpenSpec y lo pushea a la rama, así
@@ -343,6 +347,7 @@ Tickets, git, PR y `openspec archive` los ejecuta solo `orqen`; el agente produc
 | CODE_REVIEW    | senior            | revisa el PR a desarrollo (`/orqen:pr`) con el informe opcional de `/orqen:approve` y decide con un review en GitHub | —                                                                                                                                                             |
 | DELIVERY       | `orqen` + agente  | `orqen` archiva (si hubo spec), espera el merge manual del PR y el agente escribe notas y mensaje al cliente                                 | `openspec archive` fusiona los deltas en `openspec/specs` y se empuja a la rama del PR                                                                       |
 | ACCEPTANCE     | cliente           | `/approve` cierra; `/reject` abre la ronda 2 (vuelve a ANALYSIS: nuevo carril, change y issue)                  | nuevo change `…-r2`                                                                                                                                           |
+| CANCELLED      | cualquiera        | `orqen cancel <KEY> --reason "…"` desde cualquier estado: cierra el PR sin mergear (la rama queda), comenta en el request y el issue y sale del tablero. Si el PR ya estaba mergeado, avisa que ese código queda en desarrollo | el change queda sin archivar en la rama                                                                                                                       |
 
 Si se agotan los reintentos o hay un error, el pedido pasa a **BLOCKED**. Una persona destraba con `/approve <indicaciones>`
 (`APPROVERS_ANALYSIS` + `APPROVERS_CODE`): el pedido vuelve a la etapa en la que se bloqueó, con los contadores de reintentos en cero
@@ -486,7 +491,7 @@ conectores:
   requests:
     tipo: jira                 # jira | github | asana
     filtro: project = SOP AND labels = orqen AND statusCategory != Done
-    transiciones: { ACCEPTANCE: "Esperando cliente", CLOSED: "Resuelto" }
+    transiciones: { ACCEPTANCE: "Esperando cliente", CLOSED: "Resuelto", CANCELLED: "Cancelado" }   # sin CANCELLED usa la de CLOSED
   issues:                      # opcional
     tipo: github
     repo: mi-org/mi-repo
@@ -647,9 +652,10 @@ orqen take <KEY> [--agent N]           Reserva una etapa de agente y prepara ram
 orqen complete <KEY> <salida.json|->   Valida la salida de la etapa y avanza el proceso
 orqen pr <KEY> [<explicación.md>] [--title T]                     Sin archivo: informa. Con archivo: commit + push + PR a DEVEL_BRANCH
 orqen review <KEY> approve|reject [--reason T] [--report F]           Decisión de QA (QA_REVIEW, solo carril completo)
-orqen approve <KEY> [--changes <comentario.md|->]                     Decisión del senior: aprueba el PR o pide cambios
+orqen approve <KEY> [--changes <comentario.md|->] [--force]           Decisión del senior: aprueba el PR (no con CI en rojo o conflictos) o pide cambios
 orqen code-review <KEY> <informe.md|-> --verdict <approve|minor|reject> Registra el informe opcional del senior (no decide)
 orqen merged <KEY> [--person NOMBRE]     Confirma el merge manual del PR cuando orqen no puede leerlo (sin gh)
+orqen cancel <KEY> --reason <texto>     Cancela el pedido sin entregar: cierra el PR sin mergear y comenta en los tickets
 orqen status [KEY]                     Estado actual y log
 orqen schema <ETAPA>                   JSON Schema de la salida de una etapa
 orqen block <KEY> <motivo>             Escala a una persona

@@ -16,7 +16,7 @@ import { Process } from "../workflow/process.ts";
 import { Store } from "../workflow/store.ts";
 import { GitWorkspace } from "../workflow/workspace.ts";
 
-export const WORKFLOW_COMMANDS = ["list", "qa", "approve", "merged", "pending", "support", "analyze", "lane", "take", "complete", "pr", "review", "code-review", "schema", "block", "release", "search", "status", "cycle", "connectors"];
+export const WORKFLOW_COMMANDS = ["list", "qa", "approve", "merged", "cancel", "pending", "support", "analyze", "lane", "take", "complete", "pr", "review", "code-review", "schema", "block", "release", "search", "status", "cycle", "connectors"];
 
 export const WORKFLOW_HELP = `Customer request workflow (the 9 steps):
   list requests [--json] [--all]        1 · Everyone's work list, by role (advances what is already decided; takes nothing)
@@ -27,9 +27,10 @@ export const WORKFLOW_HELP = `Customer request workflow (the 9 steps):
   pr <KEY> [<explanation.md>]           6 · Inspect or open the integration PR (/orqen:pr)
   review <KEY> approve|reject [--reason TEXT] [--report FILE]   7 · QA decision in QA_REVIEW, full lane (/orqen:review)
   list prs [--json]                     8 · Senior's queue: PRs to review and whether the review is on the last commit
-  approve <KEY> [--changes <comment.md|->] [--person NAME]   9 · Senior: approve the PR or request changes (/orqen:approve)
+  approve <KEY> [--changes <comment.md|->] [--force] [--person NAME]   9 · Senior: approve the PR (not with red CI or conflicts) or request changes (/orqen:approve)
   code-review <KEY> <report.md|-> --verdict <approve|minor|reject>   Record the senior's optional PR report (does not decide)
   merged <KEY> [--person NAME]          After approval a person merges the PR by hand; confirm it when orqen cannot read it from GitHub
+  cancel <KEY> --reason TEXT [--person NAME]   Close the request without delivering it: closes the PR unmerged, comments both tickets (CANCELLED)
   lane <KEY> <direct|light|full>        Record the lane
   complete <KEY> <output.json|->       Validate output and advance the workflow
   schema <STAGE> · block <KEY> <reason> · release <KEY> · search <query>
@@ -146,12 +147,14 @@ export async function runWorkflow(cmd: string, rest: string[]) {
       case "list": {
         const what = (rest[0] ?? "requests").toLowerCase();
         const json = has("json"), all = has("all");
+        const ciText = (c?: { ci: string; conflicts?: boolean; detail?: string }) => !c ? "" :
+          ` · CI: ${c.ci}${c.detail && c.ci !== "passing" ? ` (${c.detail})` : ""}${c.conflicts ? " · CONFLICTS with the base branch" : ""}`;
         if (!["requests", "issues", "prs"].includes(what)) { console.error("Usage: orqen list <requests|issues|prs> [--json]"); process.exitCode = 1; return; }
         if (what === "prs") {
           const q = await flow.prQueue();
           if (json) return console.log(JSON.stringify(q, null, 2));
           if (!q.length) return console.log("No PRs waiting for code review or merge.");
-          for (const b of q) console.log(`  ${b.work.padEnd(12)} ${(b.lane ?? "").padEnd(7)} ${b.pr}\n${"".padEnd(15)}${b.qa ? `QA ${b.qa} · ` : ""}review: ${b.review?.status}${b.review?.detail ? ` (${b.review.detail})` : ""}`);
+          for (const b of q) console.log(`  ${b.work.padEnd(12)} ${(b.lane ?? "").padEnd(7)} ${b.pr}\n${"".padEnd(15)}${b.qa ? `QA ${b.qa} · ` : ""}review: ${b.review?.status}${b.review?.detail ? ` (${b.review.detail})` : ""}${ciText(b.checks)}`);
           return;
         }
         const board = await flow.board(all);
@@ -190,13 +193,26 @@ export async function runWorkflow(cmd: string, rest: string[]) {
       }
       case "approve": {
         try {
-          const changes = flag("changes");
+          const changes = flag("changes"), force = has("force");
           const comment = flag("comment");
           const key = toKey(rest[0]);
           if (!key) throw new Error("Usage: orqen approve <KEY> [--changes <comment.md|->] [--comment <text>]");
           const body = changes !== undefined ? (changes === "-" || changes === "" ? readFileSync(0, "utf8") : readFileSync(changes, "utf8")) : (comment ?? "");
-          const r = await flow.decide(key, changes !== undefined ? "changes" : "approve", body, me || "senior", agent);
+          const r = await flow.decide(key, changes !== undefined ? "changes" : "approve", body, me || "senior", agent, force);
           console.log(r.state === "DEVELOPMENT" ? `✔ changes requested on ${r.url}: back to development` : `✔ PR approved (${r.url}) → ${r.state}`);
+        } catch (e) {
+          console.error(`✘ ${(e as Error).message}`);
+          process.exitCode = 1;
+        }
+        return;
+      }
+      case "cancel": {
+        try {
+          const reason = flag("reason") ?? "";
+          const key = toKey(rest[0]);
+          if (!key) throw new Error("Usage: orqen cancel <KEY> --reason <text> [--person NAME]");
+          const r = await flow.cancel(key, reason, me || agent, agent);
+          console.log(`✔ ${rest[0]} cancelled${r.pr === "closed" ? ` · PR closed without merging (${r.url})` : r.pr === "open" ? ` · close the PR by hand: ${r.url}` : r.pr === "merged" ? ` · the PR was already merged: revert it by hand if needed` : ""}`);
         } catch (e) {
           console.error(`✘ ${(e as Error).message}`);
           process.exitCode = 1;

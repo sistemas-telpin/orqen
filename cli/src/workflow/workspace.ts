@@ -19,6 +19,33 @@ export interface EnvironmentResult {
 /** A review left on the PR (GitHub). `commit` is the commit it was submitted on. */
 export interface PrReview { id: string; author: string; state: string; commit: string; body: string }
 export interface PrState { state: "OPEN" | "MERGED" | "CLOSED"; mergedAt?: string; mergedBy?: string }
+/** Health of a PR before approving it: the CI checks on its head and whether it merges cleanly into the base branch. */
+export interface PrChecks {
+  ci: "passing" | "failing" | "pending" | "none";
+  failing: string[]; pending: string[];
+  /** true: conflicts with the base branch; undefined: GitHub has not computed it yet. */
+  conflicts?: boolean;
+}
+
+/** Reads `gh pr view --json mergeable,statusCheckRollup` (check runs and commit statuses). */
+export function parsePrChecks(j: { mergeable?: string; statusCheckRollup?: Array<Record<string, any>> }): PrChecks {
+  const failing: string[] = [], pending: string[] = [];
+  let total = 0;
+  for (const c of j.statusCheckRollup ?? []) {
+    total++;
+    const name = c.name || c.context || c.workflowName || "check";
+    if (c.__typename === "StatusContext" || (c.state && !c.status)) {
+      const s = String(c.state ?? "").toUpperCase();
+      if (s === "FAILURE" || s === "ERROR") failing.push(name); else if (s !== "SUCCESS") pending.push(name);
+    } else if (String(c.status ?? "").toUpperCase() !== "COMPLETED") pending.push(name);
+    else if (["FAILURE", "CANCELLED", "TIMED_OUT", "ACTION_REQUIRED", "STARTUP_FAILURE"].includes(String(c.conclusion ?? "").toUpperCase())) failing.push(name);
+  }
+  const m = String(j.mergeable ?? "").toUpperCase();
+  return {
+    ci: failing.length ? "failing" : pending.length ? "pending" : total ? "passing" : "none", failing, pending,
+    conflicts: m === "CONFLICTING" ? true : m === "MERGEABLE" ? false : undefined,
+  };
+}
 
 export interface Workspace {
   prepareBranch(key: string): string;
@@ -35,6 +62,10 @@ export interface Workspace {
   prReviews?(url: string): { head: string; reviews: PrReview[] };
   /** State of the PR (gh): whether a person already merged it, and who. */
   prState?(url: string): PrState;
+  /** CI checks and conflicts of the PR (gh): the senior does not approve a red or conflicting PR. */
+  prChecks?(url: string): PrChecks;
+  /** Closes the PR without merging it, with a comment (gh). Used when a request is cancelled. */
+  closePr?(url: string, comment: string): void;
   /** Posts the senior's review on the PR with their own GitHub session (gh). */
   reviewPr?(url: string, action: "approve" | "request-changes", body: string): void;
 }
@@ -156,6 +187,20 @@ export class GitWorkspace implements Workspace {
     });
     const j = JSON.parse(out) as { state: string; mergedAt?: string; mergedBy?: { login?: string } };
     return { state: j.state === "MERGED" ? "MERGED" : j.state === "CLOSED" ? "CLOSED" : "OPEN", mergedAt: j.mergedAt || undefined, mergedBy: j.mergedBy?.login || undefined };
+  }
+
+  prChecks(url: string): PrChecks {
+    const out = execFileSync("gh", ["pr", "view", url, "--json", "mergeable,statusCheckRollup"], {
+      cwd: this.cfg.repoPath, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"],
+    });
+    return parsePrChecks(JSON.parse(out));
+  }
+
+  closePr(url: string, comment: string) {
+    // execFile (no shell): the comment is an argument, never part of a command line
+    const r = spawnSync("gh", ["pr", "close", url, "--comment", comment], { cwd: this.cfg.repoPath, encoding: "utf8", windowsHide: true });
+    if (r.error) throw new Error(`could not run gh (${r.error.message})`);
+    if (r.status !== 0) throw new Error(`gh pr close failed: ${(r.stderr || r.stdout || "").trim() || `exit code ${r.status}`}`);
   }
 
   reviewPr(url: string, action: "approve" | "request-changes", body: string) {

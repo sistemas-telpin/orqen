@@ -75,7 +75,7 @@ export async function workflowFixture(t: TestContext, deployment = "server") {
   writeFileSync(prScript, "console.log('https://github.example.test/team/project/pull/1');\n");
   const env: NodeJS.ProcessEnv = {
     ...process.env, NO_COLOR: "1", ORQEN_LANG: "en", ORQEN_TOOLS_DIR: catalog, ORQEN_TOOLS_REPO: "@example/catalog",
-    REPO_PATH: repo, ORQEN_STATE_DIR: stateDir, FACTORY_DIR: join(repo, "orqen/work"), BASE_BRANCH: "main",
+    REPO_PATH: repo, ORQEN_STATE_DIR: stateDir, WORQS_DIR: join(repo, "orqen/worqs"), BASE_BRANCH: "main",
     JIRA_URL: `http://127.0.0.1:${port}`, JIRA_DEPLOYMENT: deployment, JIRA_USER: "bot@example.test", JIRA_TOKEN: "test-only",
     ORQEN_AGENT: "e2e", SUPPORT_STAGE: "on",
     APPROVERS_ANALYSIS: "analyst", APPROVERS_CODE: "senior", APPROVERS_CLIENT: "client", APPROVERS_EXECUTION: "dba",

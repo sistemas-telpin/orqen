@@ -35,7 +35,7 @@ function machine(ws: Workspace, labels: string[] = []) {
 }
 
 test("a request this machine does not know is recovered from the snapshot in the repository, and saved here", async () => {
-  const { flow, store } = machine({ ...noWs, snapshotOf: (k) => (k === "REQ-1" ? { snapshot: SNAPSHOT, source: "origin/orqen/req-1:orqen/work/REQ-1/state.json" } : undefined) });
+  const { flow, store } = machine({ ...noWs, snapshotOf: (k) => (k === "REQ-1" ? { snapshot: SNAPSHOT, source: "origin/orqen/req-1:orqen/worqs/REQ-1/state.json" } : undefined) });
   assert.equal(store.get("REQ-1"), undefined);
   const b = (await flow.board())[0];
   assert.deepEqual([b.key, b.state, b.lane, b.recovered], ["REQ-1", "DEVELOPMENT", "direct", undefined]);   // full record: not the label fallback
@@ -47,7 +47,7 @@ test("a request this machine does not know is recovered from the snapshot in the
   assert.equal(saved.artifacts.estimated_hours, 3);
   assert.equal(saved.lock, undefined, "the lock of another machine is not inherited");
   assert.equal((saved as any)._note, undefined);
-  assert.match(store.events("REQ-1").at(-1)!.detail, /record recovered from origin\/orqen\/req-1:orqen\/work\/REQ-1\/state\.json/);
+  assert.match(store.events("REQ-1").at(-1)!.detail, /record recovered from origin\/orqen\/req-1:orqen\/worqs\/REQ-1\/state\.json/);
   // from now on it is local: no more reading of the repository
   let reads = 0;
   const again = machine({ ...noWs, snapshotOf: () => { reads++; return undefined; } });
@@ -69,41 +69,41 @@ test("without a record or a snapshot, the list shows the state from the ticket's
   assert.equal(await machine(noWs).flow.peek("REQ-1"), undefined);
   assert.equal((await flow.review()).length, 0, "and it is not offered as work to an agent");
   // acting on it needs the full record
-  await assert.rejects(flow.take("REQ-1", "implementer"), /has no work for an agent[\s\S]*git fetch origin orqen\/req-1[\s\S]*orqen\/work\/REQ-1\/state\.json/);
+  await assert.rejects(flow.take("REQ-1", "implementer"), /has no work for an agent[\s\S]*git fetch origin orqen\/req-1[\s\S]*orqen\/worqs\/REQ-1\/state\.json/);
   // an unknown or unlabeled request is a new one, as before
   assert.equal((await machine(noWs).flow.board())[0].state, "NEW");
   assert.equal((await machine(noWs, ["orqen-state-bogus"]).flow.board())[0].state, "NEW");
 });
 
-test("GitWorkspace.snapshotOf reads the newest orqen/work/<KEY>/state.json from the working tree or the request branch", () => {
+test("GitWorkspace.snapshotOf reads the newest orqen/worqs/<KEY>/state.json from the working tree or the request branch", () => {
   const base = realpathSync.native(mkdtempSync(join(tmpdir(), "orqen-snap-")));
   const git = (...a: string[]) => execFileSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", ...a], { cwd: base, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
   git("init", "-q", "-b", "main");
   writeFileSync(join(base, "a.txt"), "a");
   git("add", "-A");
   git("commit", "-qm", "init");
-  const cfg = loadConfig({ repoPath: base, stateDir: join(base, "orqen", "state"), factoryDir: join(base, "orqen", "work"), connectors: testConnectors(false), approvers: { code: [], client: [] } });
+  const cfg = loadConfig({ repoPath: base, stateDir: join(base, "orqen", "state"), factoryDir: join(base, "orqen", "worqs"), connectors: testConnectors(false), approvers: { code: [], client: [] } });
   const ws = new GitWorkspace(cfg);
   assert.equal(ws.snapshotOf("REQ-1"), undefined);
   assert.equal(ws.snapshotOf("../etc"), undefined);
 
   // a teammate's request branch, committed with its snapshot (this checkout has nothing)
   git("checkout", "-q", "-b", "orqen/req-1");
-  mkdirSync(join(base, "orqen", "work", "REQ-1"), { recursive: true });
-  writeFileSync(join(base, "orqen", "work", "REQ-1", "state.json"), JSON.stringify({ ...SNAPSHOT, state: "TESTING", updated: "2026-11-19T10:00:00Z" }));
+  mkdirSync(join(base, "orqen", "worqs", "REQ-1"), { recursive: true });
+  writeFileSync(join(base, "orqen", "worqs", "REQ-1", "state.json"), JSON.stringify({ ...SNAPSHOT, state: "TESTING", updated: "2026-11-19T10:00:00Z" }));
   git("add", "-A");
   git("commit", "-qm", "snapshot");
   git("checkout", "-q", "main");
-  assert.equal(existsSync(join(base, "orqen", "work", "REQ-1")), false);
+  assert.equal(existsSync(join(base, "orqen", "worqs", "REQ-1")), false);
   const fromBranch = ws.snapshotOf("REQ-1")!;
-  assert.equal(fromBranch.source, "orqen/req-1:orqen/work/REQ-1/state.json");
+  assert.equal(fromBranch.source, "orqen/req-1:orqen/worqs/REQ-1/state.json");
   assert.equal((fromBranch.snapshot as any).state, "TESTING");
 
   // a newer one in the working tree wins
-  mkdirSync(join(base, "orqen", "work", "REQ-1"), { recursive: true });
-  writeFileSync(join(base, "orqen", "work", "REQ-1", "state.json"), JSON.stringify({ ...SNAPSHOT, state: "CODE_REVIEW", updated: "2026-11-19T12:00:00Z" }));
+  mkdirSync(join(base, "orqen", "worqs", "REQ-1"), { recursive: true });
+  writeFileSync(join(base, "orqen", "worqs", "REQ-1", "state.json"), JSON.stringify({ ...SNAPSHOT, state: "CODE_REVIEW", updated: "2026-11-19T12:00:00Z" }));
   const fromTree = ws.snapshotOf("REQ-1")!;
-  assert.equal(fromTree.source, "orqen/work/REQ-1/state.json");
+  assert.equal(fromTree.source, "orqen/worqs/REQ-1/state.json");
   assert.equal((fromTree.snapshot as any).state, "CODE_REVIEW");
 });
 

@@ -292,7 +292,7 @@ export function pasosTutorial(d: DatosTutorial, i: Idioma): Paso[] {
           tx("git diff                  # los cambios, línea por línea", "git diff                  # the changes, line by line"),
         ] },
         { t: "ul", items: [
-          tx(`El historial del pedido también queda en el archivo orqen/work/${recNum}/log.md.`, `The request history is also in the file orqen/work/${recNum}/log.md.`),
+          tx(`El historial del pedido también queda en el archivo orqen/worqs/${recNum}/log.md (el worq: la unidad de trabajo de orqen).`, `The request history is also in the file orqen/worqs/${recNum}/log.md (the worq: orqen's unit of work).`),
           tx("Si el carril es light o full, en openspec/changes/<nombre>/tasks.md ves qué tareas ya tildó.", "With the light or full lane, openspec/changes/<name>/tasks.md shows which tasks it has checked off."),
           tx("En modo automático (orqen cycle --loop), lo que hace el agente se ve en la terminal donde corre ese comando.", "In automatic mode (orqen cycle --loop), what the agent does shows up in the terminal where that command runs."),
         ] },

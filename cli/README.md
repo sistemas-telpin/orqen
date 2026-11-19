@@ -72,6 +72,7 @@ A planner model (default Opus) splits the task into a dependency graph of small 
 orqen list requests
 orqen analyze SOP-1234
 orqen status DEV-442
+orqen worqs                       # the worqs on this machine: orqen's unit of work, one per request (orqen/worqs/)
 orqen take DEV-442
 orqen complete DEV-442 output.json
 orqen cycle --loop
@@ -81,7 +82,7 @@ orqen cycle --loop
 
 In `TESTING`, taking the stage starts the full environment, runs the configured suite, and shuts everything down. `orqen cycle --loop` dispatches eligible requests using `AGENT_CMD`. Analysis always requires an analyst.
 
-In the full lane, QA runs `/orqen:review <KEY>` in `QA_REVIEW` and records the decision with `orqen review <KEY> approve|reject`; the direct and light lanes skip QA. Run `orqen pr <KEY>` to inspect the integration target or add an explanation file to open the PR to `DEVEL_BRANCH`; testing opens no PR, so this is the PR the senior reviews. In `CODE_REVIEW`, the senior runs `/orqen:code-review <KEY>`, and `orqen code-review <KEY> <report.md> --verdict <approve|minor|reject>` records the report under `orqen/work/<KEY>/round-N/` and comments it on the internal ticket (or the external one) without changing the stage.
+In the full lane, QA runs `/orqen:review <KEY>` in `QA_REVIEW` and records the decision with `orqen review <KEY> approve|reject`; the direct and light lanes skip QA. Run `orqen pr <KEY>` to inspect the integration target or add an explanation file to open the PR to `DEVEL_BRANCH`; testing opens no PR, so this is the PR the senior reviews. In `CODE_REVIEW`, the senior runs `/orqen:code-review <KEY>`, and `orqen code-review <KEY> <report.md> --verdict <approve|minor|reject>` records the report under `orqen/worqs/<KEY>/round-N/` and comments it on the internal ticket (or the external one) without changing the stage.
 
 For an existing checkout, the CLI also reads `cli/.env` and its local state under `cli/.state/`. The flow settings (approvers, code review gate, integration branch) live under `workflow` in `orqen/config.yaml` (English keys; the Spanish ones of earlier versions are still read); a variable such as `APPROVERS_CODE` or `DEVEL_BRANCH` in `.env` or the environment overrides them.
 

@@ -54,7 +54,15 @@ test("CLI: support resolves and the authorized client closes the request without
   await f.human("client", "/approve"); f.state("CLOSED");
   assert.equal(f.jira.created.length, 0);
   assert.equal(f.git("branch", "--show-current"), "main");
-  assert.match(readFileSync(join(f.repo, "orqen/work/REQ-7/round-1/support.md"), "utf8"), /Export CSV/);
+  assert.match(readFileSync(join(f.repo, "orqen/worqs/REQ-7/round-1/support.md"), "utf8"), /Export CSV/);
+  // the worq: open ones by default, closed ones with --all; one worq shows its state and the files of its record
+  assert.doesNotMatch(await f.command(["worqs"]), /REQ-7/);
+  assert.match(await f.command(["worqs", "--all"]), /REQ-7\s+CLOSED[\s\S]*orqen\/worqs\/REQ-7/);
+  const worq = JSON.parse(await f.command(["worq", "REQ-7", "--json"]));
+  assert.deepEqual([worq.key, worq.state, worq.dir], ["REQ-7", "CLOSED", "orqen/worqs/REQ-7"]);
+  assert.ok(worq.files.includes("round-1/support.md") && worq.files.includes("state.json") && worq.files.includes("log.md"));
+  assert.match(await f.command(["worq", "REQ-7"]), /Worq REQ-7[\s\S]*State:\s+CLOSED[\s\S]*Folder:\s+orqen\/worqs\/REQ-7\/[\s\S]*round-1\/support\.md/);
+  await f.command(["worq", "NOPE-1"], { exit: 1 });
   // Initialization supports customer projects other than the default one; every command must resolve them too.
   const cfg = leerConfig(f.repo); cfg.conectores!.requests.filtro = "project = HELP"; escribirConfig(f.repo, cfg);
   f.jira.issues["HELP-8"] = { title: "Find the invoice export" }; f.jira.coms["HELP-8"] = [];
@@ -188,7 +196,7 @@ test("CLI: operational approval, rejected application, failed verification, retr
   assert.equal(f.git("branch", "--show-current"), "main");
   assert.equal(f.git("branch", "--list", "rec/*"), "");
   assert.equal(readFileSync(join(f.repo, "export.mjs"), "utf8"), "export const exportCsv = () => '';\n");
-  assert.equal(readFileSync(join(f.repo, "orqen/work/REQ-7/round-1/execution/script.sql"), "utf8"), proposal.sql_script);
+  assert.equal(readFileSync(join(f.repo, "orqen/worqs/REQ-7/round-1/execution/script.sql"), "utf8"), proposal.sql_script);
   await f.command(["pr", sis], { exit: 1 });
 });
 

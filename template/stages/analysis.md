@@ -38,4 +38,4 @@ When unsure, recommend the more rigorous lane and explain why. Once the analyst 
 - Set `ready: true` and `analyst_ok: true` and provide `route`, `lane`, and `lane_rationale` once confirmed. For operational work, use `lane: "direct"`.
 - For direct development, include the ordered `plan` and `estimated_hours`. For a spec change, include `spec` with its assigned `change`, `summary`, and `assumptions`.
 
-`orqen complete` validates the JSON and any spec and task estimates, then creates and links the issue (if configured), records the analysis in `orqen/work/<KEY>/`, and advances the request. Leave `orqen/state/` and Git operations to orqen.
+`orqen complete` validates the JSON and any spec and task estimates, then creates and links the issue (if configured), records the analysis in `orqen/worqs/<KEY>/`, and advances the request. Leave `orqen/state/` and Git operations to orqen.

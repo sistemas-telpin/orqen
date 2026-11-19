@@ -11,7 +11,7 @@ Analyze the customer request in `$ARGUMENTS` with the analyst who invoked this c
 - **Talk to the person in their system language.** Run `orqen lang` once at the start (`es` = Spanish, `en` = English; the stage context also has it as `language`) and use it for every message, question, and option. Keep commands, state names, and paths as they are. Files and texts posted on the tickets follow their own rules.
 - **Work with the person who invoked this command.** Before each important step, tell them what you are about to do and wait for their OK. When in doubt, ask them (with `AskUserQuestion` when available: concrete options plus your recommendation); never assume what you can ask. After each step, report what you did and what comes next.
 - Read the tickets read-only (an MCP for the ticket tool, or `orqen search`). orqen creates and links the issue and posts comments.
-- Leave Git operations, OpenSpec archiving, and writes to `orqen/state/` and `orqen/work/` to orqen.
+- Leave Git operations, OpenSpec archiving, and writes to `orqen/state/` and `orqen/worqs/` to orqen.
 - Require the analyst's explicit approval of the analysis and lane. Record unknowns as open questions or labeled assumptions.
 
 ## Steps
@@ -30,6 +30,6 @@ Analyze the customer request in `$ARGUMENTS` with the analyst who invoked this c
    orqen complete <KEY> <output.json> --agent analyst
    ```
    Correct validation errors and retry until the command reports success.
-7. Report the lane, the linked issue key (if any), `orqen/work/<KEY>/` record, and next stage. Stop after completing analysis.
+7. Report the lane, the linked issue key (if any), `orqen/worqs/<KEY>/` record, and next stage. Stop after completing analysis.
 
 If you cannot proceed, run `orqen block <KEY> "<specific reason>"`.

@@ -6,6 +6,9 @@ Hay dos formas de recorrer el flujo, y hacen lo mismo:
 - **Con skills** `/orqen:…` en Claude Code, o en cualquier agente al que le pidas lo mismo. La skill lanza al agente, que lee el
   contexto, conversa con la persona y recién después ejecuta los mismos comandos `orqen` (los de las filas "CLI").
 
+Lo que el flujo lleva es un **worq**: la unidad de trabajo de orqen, uno por pedido (el request, su issue, la rama, la spec, el PR y el registro de
+cada etapa), identificado por la clave del request y guardado en `orqen/worqs/<KEY>/`. `orqen worqs` lista los de esta máquina y `orqen worq <KEY>` muestra uno.
+
 El CLI es determinístico: valida, mueve los estados, escribe en los tickets y hace git y PR. El agente solo produce contenido
 (análisis, código, textos) y no toca tickets ni git por su cuenta.
 
@@ -131,7 +134,7 @@ El estado operativo de cada pedido vive en `orqen/state/` (ignorado por git, uno
 clon nuevo no tiene ese registro, orqen lo reconstruye así, de más completo a menos:
 
 1. **El registro local**, si existe.
-2. **La foto del repositorio.** En cada cambio de estado orqen escribe `orqen/work/<KEY>/state.json` con el pedido completo (ronda, carril,
+2. **La foto del repositorio.** En cada cambio de estado orqen escribe `orqen/worqs/<KEY>/state.json` con el pedido completo (ronda, carril,
    análisis, feedback, comentarios ya vistos…; sin el lock) y lo commitea con la rama `orqen/<key>`. Si esa rama está en el repo local o
    se bajó con `git fetch origin orqen/<key>`, orqen la lee, la guarda en `orqen/state/` y sigue desde ahí, con el registro completo. Si
    hay varias copias (el árbol de trabajo, la rama local, `origin/…`), usa la más nueva.
@@ -148,6 +151,8 @@ cambió desde el último commit de la rama.
 
 ```sh
 orqen status GH-4 [--json]      # estado, historial y qué sigue
+orqen worqs [--all]             # los worqs de esta máquina: uno por pedido, con su estado y carpeta
+orqen worq GH-4                 # un worq: estado, request, issue, rama, PR y archivos de su registro
 orqen block GH-4 "motivo"       # escala a una persona; se destraba con /approve <instrucciones> en el ticket
 orqen release GH-4              # libera un pedido tomado por un agente que ya no trabaja
 orqen cancel GH-4 --reason "…"  # cierra sin entregar: cierra el PR sin mergear y el issue

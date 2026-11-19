@@ -17,7 +17,7 @@ import { Process } from "../workflow/process.ts";
 import { Store } from "../workflow/store.ts";
 import { GitWorkspace } from "../workflow/workspace.ts";
 
-export const WORKFLOW_COMMANDS = ["list", "qa", "approve", "merged", "cancel", "pending", "support", "analyze", "lane", "take", "complete", "pr", "review", "code-review", "schema", "block", "release", "search", "status", "cycle", "connectors"];
+export const WORKFLOW_COMMANDS = ["list", "qa", "approve", "merged", "cancel", "pending", "support", "analyze", "lane", "take", "complete", "pr", "review", "code-review", "schema", "block", "release", "search", "status", "worqs", "worq", "cycle", "connectors"];
 
 /** What people run: the 9 steps (as /orqen:* commands in their agent) and the CLI commands meant for a person. */
 export const WORKFLOW_HELP = `The 9 steps (run the /orqen:* commands in your agent: it calls the CLI for you):
@@ -33,6 +33,8 @@ export const WORKFLOW_HELP = `The 9 steps (run the /orqen:* commands in your age
 
 Request commands for people:
   status [KEY] [--json]       Where a request is, who acts and what comes next (no KEY: all of them)
+  worqs [--all] [--json]      The worqs on this machine: orqen's unit of work, one per request (request + issue + branch + PR + record)
+  worq <KEY> [--json]         One worq: state, request, issue, branch, PR and the files of its record in orqen/worqs/<KEY>/
   merged <KEY> [--person N]   Confirm the hand merge of an approved PR when orqen cannot read it from GitHub
   cancel <KEY> --reason T     Close the request without delivering it: closes the PR unmerged, comments both tickets (CANCELLED)
   release <KEY>               Free a request held by an agent that is no longer working on it
@@ -398,6 +400,49 @@ export async function runWorkflow(cmd: string, rest: string[]) {
           return { key: k, title: i.title, status: i.status, url: i.url, description: i.description.slice(0, 500) };
         }));
         return console.log(JSON.stringify(out, null, 2));
+      }
+      case "worqs": {
+        const { isFinal } = await import("../workflow/states.ts");
+        const all = has("all"), json = has("json");
+        const list = store.all().filter((r) => all || !isFinal(r.state)).map((r) => flow.worq(r));
+        if (json) return console.log(JSON.stringify(list, null, 2));
+        if (!list.length) return console.log("No worqs on this machine. `orqen list requests` shows the open requests (a worq starts when orqen takes one).");
+        console.log(`Worqs (orqen's unit of work), ${all ? "all" : "open"}:`);
+        for (const w of list) console.log(`  ${w.key.padEnd(10)} ${(w.issue ?? "").padEnd(10)} ${w.state.padEnd(15)} ${(w.lane ?? "").padEnd(7)} ${w.dir}${w.pr ? `  PR ${w.pr}` : w.branch ? `  ${w.branch}` : ""}`);
+        return;
+      }
+      case "worq": {
+        try {
+          const key = toKey(rest[0]);
+          const json = has("json");
+          if (!key) throw new Error("Usage: orqen worq <KEY> [--json]");
+          const item = flow.item(key) ?? await flow.peek(key);
+          if (!item) throw new Error(`${key} is not a worq on this machine. \`orqen list requests\` shows the open requests; a worq starts when orqen takes one.`);
+          const { worqFiles } = await import("../lib/worqs.ts");
+          const w = flow.worq(item);
+          const files = item.recovered ? [] : worqFiles(join(cfg.factoryDir, item.key));
+          const events = store.events(item.key);
+          if (json) return console.log(JSON.stringify({ ...w, files, events: events.slice(-10) }, null, 2));
+          console.log(`Worq ${w.key}${w.title ? ` — ${w.title}` : ""}`);
+          console.log(`  State:    ${w.state}${w.round > 1 ? ` (round ${w.round})` : ""}${w.lane ? ` · lane ${w.lane}` : ""}${w.route && w.route !== "development" ? ` · ${w.route}` : ""}`);
+          if (w.next[0]) console.log(`  Next:     ${w.next[0].command}  (${w.role}: ${w.next[0].what})`);
+          console.log(`  Request:  ${w.key}  ${w.request_url}`);
+          if (w.issue) console.log(`  Issue:    ${w.issue}${w.issue_url ? `  ${w.issue_url}` : ""}`);
+          if (w.branch) console.log(`  Branch:   ${w.branch}`);
+          if (w.pr) console.log(`  PR:       ${w.pr}${w.merged ? " (merged)" : ""}`);
+          if (w.supporter || w.analyst) console.log(`  People:   ${[w.supporter && `support ${w.supporter}`, w.analyst && `analyst ${w.analyst}`].filter(Boolean).join(" · ")}`);
+          if (item.recovered) console.log("  The state is read from the ticket's label: this machine has no record. Fetch its branch to recover the worq (git fetch origin " + (w.branch ?? `orqen/${key.toLowerCase()}`) + ").");
+          else {
+            console.log(`  Folder:   ${w.dir}/`);
+            for (const f of files) console.log(`            ${f}`);
+            if (!files.length) console.log(`            (no files in this checkout${w.branch ? `: they are in the branch ${w.branch}` : ""})`);
+          }
+          for (const ev of events.slice(-5)) console.log(`  ${ev.ts.slice(0, 16).replace("T", " ")}  ${ev.from} → ${ev.to}  ${ev.detail}`);
+        } catch (e) {
+          console.error(`✘ ${(e as Error).message}`);
+          process.exitCode = 1;
+        }
+        return;
       }
       case "status": {
         if (has("json")) {

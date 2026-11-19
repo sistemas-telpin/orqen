@@ -69,7 +69,7 @@ export interface Workspace {
   closePr?(url: string, comment: string): void;
   /** Posts the senior's review on the PR with their own GitHub session (gh). */
   reviewPr?(url: string, action: "approve" | "request-changes", body: string): void;
-  /** The newest orqen/work/<KEY>/state.json snapshot of a request, from the working tree or from its branch (local or origin/). */
+  /** The newest orqen/worqs/<KEY>/state.json snapshot of a worq (also orqen/work/ of earlier versions), from the working tree or from its branch (local or origin/). */
   snapshotOf?(key: string): { snapshot: unknown; source: string } | undefined;
 }
 
@@ -115,7 +115,7 @@ export class GitWorkspace implements Workspace {
     catch { return false; }
   }
 
-  /** Pathspec that excludes orqen/work/ (the process record must not prevent switching branches). */
+  /** Pathspec that excludes orqen/worqs/ (the process record must not prevent switching branches). */
   private excludeFactory(): string[] {
     const r = relative(this.cfg.repoPath, this.cfg.factoryDir).replaceAll("\\", "/");
     return r && !r.startsWith("..") ? ["--", ".", `:(exclude)${r}`] : [];
@@ -205,14 +205,17 @@ export class GitWorkspace implements Workspace {
     if (!/^[\w.-]+$/.test(key)) return undefined;
     const file = join(this.cfg.factoryDir, key, "state.json");
     const rel = relative(this.cfg.repoPath, file).split(sep).join("/");
-    if (rel.startsWith("..")) return undefined;   // orqen/work outside the repository: nothing to read from git
+    if (rel.startsWith("..")) return undefined;   // the worqs folder is outside the repository: nothing to read from git
+    // where the worq can be: the configured folder, orqen/worqs/ and (branches of earlier versions) orqen/work/
+    const rels = [...new Set([rel, `orqen/worqs/${key}/state.json`, `orqen/work/${key}/state.json`])];
     const found: Array<{ snapshot: any; source: string }> = [];
     const add = (source: string, text: () => string) => {
       try { found.push({ snapshot: JSON.parse(text()), source }); } catch { /* not there, or not valid */ }
     };
-    if (existsSync(file)) add(rel, () => readFileSync(file, "utf8"));
+    for (const p of rels) { const disk = join(this.cfg.repoPath, p); if (existsSync(disk)) add(p, () => readFileSync(disk, "utf8")); }
     for (const ref of [branchFor(key), legacyBranchFor(key)])
-      for (const r of [ref, `origin/${ref}`]) add(`${r}:${rel}`, () => this.git("show", `${r}:${rel}`));
+      for (const r of [ref, `origin/${ref}`])
+        for (const p of rels) add(`${r}:${p}`, () => this.git("show", `${r}:${p}`));
     const time = (x: { snapshot: any }) => Date.parse(x.snapshot?.updated ?? "") || 0;
     return found.sort((a, b) => time(b) - time(a))[0];
   }

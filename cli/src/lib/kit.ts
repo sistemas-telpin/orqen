@@ -79,7 +79,7 @@ export function archivosDelKit(vars: VariablesKit, repo: string): Record<string,
   const out: Record<string, string> = {};
   for (const f of listar(join(TEMPLATES_DIR, "stages"))) out[`${DIR_ORQEN}/stages/${stageGuideFile(join(repo, DIR_ORQEN, "stages"), f)}`] = render(readFileSync(join(TEMPLATES_DIR, "stages", f), "utf8"), vars);
   for (const f of listar(join(TEMPLATES_DIR, ".agents"))) out[`${DIR_ORQEN}/plugin/${f}`] = render(readFileSync(join(TEMPLATES_DIR, ".agents", f), "utf8"), vars);
-  out[`${DIR_ORQEN}/work/README.md`] = render(readFileSync(join(TEMPLATES_DIR, "orqen", "work", "README.md"), "utf8"), vars);
+  out[`${DIR_ORQEN}/worqs/README.md`] = render(readFileSync(join(TEMPLATES_DIR, "orqen", "worqs", "README.md"), "utf8"), vars);
   return out;
 }
 

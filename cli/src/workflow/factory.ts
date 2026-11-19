@@ -1,5 +1,5 @@
 /**
- * Process record inside the repo: orqen/work/<KEY>/
+ * The worq of a request (orqen's unit of work) inside the repo: orqen/worqs/<KEY>/
  *
  *   state.json                   snapshot of the whole request at its last transition: what orqen recovers from when another
  *                                machine (or a deleted orqen/state) has no record of it
@@ -25,7 +25,7 @@ export class Factory {
   roundDir = (key: string, round: number) => join(this.dir, key, `round-${round}`);
 
   private safe(fn: () => void) {
-    try { fn(); } catch (e) { console.error(`[orqen] warning: could not write to orqen/work/: ${(e as Error).message}`); }
+    try { fn(); } catch (e) { console.error(`[orqen] warning: could not write to the worqs folder: ${(e as Error).message}`); }
   }
 
   /** Writes `round-N/<file>` (creates the directories). */

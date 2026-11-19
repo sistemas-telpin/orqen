@@ -1,4 +1,4 @@
-/** Analysis with analyst, lanes, issue, orqen/work/, gates, permissions, locks and blocks, with everything simulated. */
+/** Analysis with analyst, lanes, issue, orqen/worqs/, gates, permissions, locks and blocks, with everything simulated. */
 import assert from "node:assert/strict";
 import { existsSync, mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -46,7 +46,7 @@ const ANALYSIS_OK = (over: Record<string, unknown> = {}) => ({
   decisions: [{ question: "¿Qué formato?", answer: "CSV" }], ...over,
 });
 
-test("analyst: client questions, mandatory OK, direct lane, issue and orqen/work/", async () => {
+test("analyst: client questions, mandatory OK, direct lane, issue and orqen/worqs/", async () => {
   const { p, jira, est, cfg } = setup();
   const pend = await p.review();
   assert.deepEqual(pend.map((x) => [x.key, x.state, x.for]), [["REQ-1", "NEW", "analyst"]]);
@@ -85,7 +85,8 @@ test("analyst: client questions, mandatory OK, direct lane, issue and orqen/work
 
   const { context } = await p.analyze("REQ-1", "codex", "Ana");
   assert.deepEqual(context.human_feedback, [{ from: "client", text: "CSV" }]);
-  assert.equal(context.factory, "orqen/work/REQ-1/round-1");
+  assert.equal(context.worq, "orqen/worqs/REQ-1/round-1");
+  assert.equal(context.factory, "orqen/worqs/REQ-1/round-1");   // old name of worq
 
   assert.deepEqual(await p.lane("REQ-1", "direct", "codex"), { lane: "direct", openspec: undefined, branch: undefined });
   assert.deepEqual(await p.complete("REQ-1", ANALYSIS_OK(), "codex"), { ok: true, next: "DEVELOPMENT" });
@@ -102,7 +103,7 @@ test("analyst: client questions, mandatory OK, direct lane, issue and orqen/work
   assert.equal(est().issue, "DEV-1");
   assert.match(jira.coms["REQ-1"].map((c) => c.body).join("\n"), /Track implementation in DEV-1/);
 
-  // record in orqen/work/REQ-1
+  // record in orqen/worqs/REQ-1
   const f = join(cfg.factoryDir, "REQ-1");
   const md = readFileSync(join(f, "round-1", "analysis.md"), "utf8");
   assert.match(md, /Analyst:\*\* Ana/);
@@ -264,7 +265,7 @@ test("review: records the code review in CODE_REVIEW with an open PR, numbered p
   await assert.rejects(flow.codeReview("REQ-1", "corto", "reject"), /too short/);
 
   const r1 = await flow.codeReview("REQ-1", report, "reject");
-  assert.deepEqual([r1.n, r1.path, r1.commentedOn], [1, "orqen/work/REQ-1/round-1/code-review-1.md", "DEV-9"]);
+  assert.deepEqual([r1.n, r1.path, r1.commentedOn], [1, "orqen/worqs/REQ-1/round-1/code-review-1.md", "DEV-9"]);
   assert.match(readFileSync(join(cfg.factoryDir, "REQ-1", "round-1", "code-review-1.md"), "utf8"), /rango de fechas/);
   assert.match(jira.last("DEV-9"), /Code review #1.*verdict: \*Reject\*/);
   assert.deepEqual(commits, [["code review #1", "orqen/req-1"]]);
@@ -359,7 +360,7 @@ test("pr: sends the branch to the devel branch, records the explanation and is i
   const r = await flow.pr("REQ-1", body);
   assert.deepEqual([r.created, r.url, r.base], [true, "https://example.test/pr/7", "desarrollo"]);
   assert.deepEqual(calls, ["commit", "push", "pr"]);
-  assert.ok(cmd.endsWith("|desarrollo|orqen/work/REQ-1/round-1/devel-pr.md"));
+  assert.ok(cmd.endsWith("|desarrollo|orqen/worqs/REQ-1/round-1/devel-pr.md"));
   assert.match(readFileSync(join(cfg.factoryDir, "REQ-1", "round-1", "devel-pr.md"), "utf8"), /exportación a CSV/);
   assert.match(jira.last("REQ-1"), /PR to \*desarrollo\*/);
   assert.match(jira.last("DEV-9"), /PR to \*desarrollo\*/);

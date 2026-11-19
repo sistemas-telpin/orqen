@@ -47,7 +47,10 @@ export interface Config {
   supportStage: boolean;
   /** analysis = analysts (they also unblock BLOCKED together with code). qa = who decides QA_REVIEW (full lane). Accounts of the requests system. */
   approvers: { analysis?: string[]; qa?: string[]; code: string[]; client: string[]; execution?: string[] };
-  factoryDir: string;       // record and state of each request: orqen/work/<KEY>/ (committed with the branch)
+  /** Where the worqs live: orqen/worqs/<KEY>/ (committed with the request branch). The record and snapshot of each worq. */
+  factoryDir: string;
+  /** The repository still uses orqen/work/ (earlier versions): it keeps working, `orqen update` moves it to orqen/worqs/. */
+  legacyWorkDir?: boolean;
   repoPath: string; baseBranch: string; testCommand: string;
   /** `orqen pr`: integration branch ("desarrollo"/"devel") the request branch is sent to, and the command that opens that PR. */
   develBranch: string; develPrCommand: string;
@@ -71,6 +74,8 @@ export function loadConfig(over: Partial<Config> = {}): Config {
   const localOpenSpec = join(repoPath, "node_modules", ".bin", process.platform === "win32" ? "openspec.cmd" : "openspec");
   const localState = join(main, "cli", ".state");
   const baseBranch = env("BASE_BRANCH", project?.proyecto.rama_base ?? "main");
+  // WORQS_DIR (or FACTORY_DIR, its old name) wins; then orqen/worqs/; a repository that only has orqen/work/ keeps using it
+  const worqsDir = worqsDirOf(repoPath, env("WORQS_DIR") || env("FACTORY_DIR"));
   const credentials = providerEnv(existsSync(join(repoPath, "orqen", ".env")) ? repoPath : main);
   // orqen/config.yaml (workflow) is the shared configuration; a variable in orqen/.env or the environment overrides it
   const f = project?.flujo;
@@ -87,7 +92,8 @@ export function loadConfig(over: Partial<Config> = {}): Config {
       client: list("APPROVERS_CLIENT", f?.aprobadores.cliente),
       execution: list("APPROVERS_EXECUTION", f?.aprobadores.ejecucion),
     },
-    factoryDir: env("FACTORY_DIR") || join(repoPath, "orqen", "work"),
+    factoryDir: worqsDir.dir,
+    ...(worqsDir.legacy ? { legacyWorkDir: true } : {}),
     repoPath,
     baseBranch,
     testCommand: env("TEST_COMMAND") || f?.comando_tests || "npm test",
@@ -108,9 +114,22 @@ export function loadConfig(over: Partial<Config> = {}): Config {
   };
 }
 
+/** Folder of the worqs: the explicit one, orqen/worqs/, or (earlier versions) orqen/work/ when only that exists. */
+export function worqsDirOf(repoPath: string, explicit = ""): { dir: string; legacy: boolean } {
+  if (explicit) return { dir: explicit, legacy: false };
+  const dir = join(repoPath, "orqen", "worqs"), old = join(repoPath, "orqen", "work");
+  return !existsSync(dir) && existsSync(old) ? { dir: old, legacy: true } : { dir, legacy: false };
+}
+
+let warnedWork = false;
 let warned = false;
-/** Warns once when orqen/.env still uses the variables of earlier versions. */
+/** Warns once when orqen/.env still uses the variables of earlier versions, or the worqs are still in orqen/work/. */
 export function warnLegacy(cfg: Config) {
+  if (cfg.legacyWorkDir && !warnedWork) {
+    warnedWork = true;
+    console.error("[orqen] The worqs are now in orqen/worqs/ and this repository still has them in orqen/work/. It keeps working; " +
+      "run `orqen update` to move them.");
+  }
   const used = cfg.connectors.legacy ?? [];
   if (warned || !used.length) return;
   warned = true;

@@ -10,7 +10,7 @@
  *
  * The request is what the client sees (requests system); the issue (optional) is the team's (issues system). Both are reached through connectors/.
  */
-import { join } from "node:path";
+import { join, relative } from "node:path";
 import { detectarIdioma } from "../lib/lang.ts";
 import type { Config } from "./config.ts";
 import { SCHEMAS } from "./schemas.ts";
@@ -65,7 +65,7 @@ export class Process {
   // ================================================================ the record of a request on this machine
   /**
    * The request as this machine knows it. The source of truth is orqen/state (ignored by git, one per machine); when it has no
-   * record, the full snapshot that orqen commits with the request branch (orqen/work/<KEY>/state.json) is used and saved here.
+   * record, the full snapshot that orqen commits with the request branch (orqen/worqs/<KEY>/state.json) is used and saved here.
    * The snapshot is read from the working tree or from a local or fetched branch: `git fetch origin orqen/<key>` is enough.
    */
   item(key: string): WorkItem | undefined {
@@ -108,8 +108,27 @@ export class Process {
     return item;
   }
 
+  /** The worq of a request, as `orqen worq` and `orqen worqs` show it: orqen's unit of work (request + issue + branch + PR + record). */
+  worq(item: WorkItem) {
+    const b = this.boardItem(item);
+    return {
+      key: item.key, title: item.title ?? (item.artifacts.ANALYSIS?.summary as string | undefined)?.slice(0, 90), issue: item.issue,
+      state: item.state, role: b.role, lane: item.lane, route: item.route, round: item.round, branch: item.branch || undefined,
+      pr: item.artifacts.devel_pr as string | undefined, merged: item.artifacts.devel_pr_merged ? true : undefined,
+      analyst: item.analyst, supporter: item.supporter, request_url: this.requests.url(item.key),
+      issue_url: item.issue && this.issues ? this.issues.url(item.issue) : undefined,
+      dir: this.worqRel(item.key), updated: this.store.events(item.key).at(-1)?.ts, next: b.next,
+    };
+  }
+
+  /** Folder of a worq inside the repository, as written in tickets and messages (orqen/worqs/<KEY>); the default when the folder is elsewhere. */
+  worqRel(key: string): string {
+    const rel = relative(this.cfg.repoPath, join(this.cfg.factoryDir, key)).replaceAll("\\", "/");
+    return rel.startsWith("..") || /^[a-zA-Z]:/.test(rel) ? `orqen/worqs/${key}` : rel;
+  }
+
   private fetchHint(key: string) {
-    return `If someone worked on it elsewhere, fetch its branch (git fetch origin ${branchFor(key)}) so orqen can recover it from orqen/work/${key}/state.json.`;
+    return `If someone worked on it elsewhere, fetch its branch (git fetch origin ${branchFor(key)}) so orqen can recover its worq from ${this.worqRel(key)}/state.json.`;
   }
   private unknownMsg(key: string) { return `${key} is unknown to orqen on this machine. ${this.fetchHint(key)}`; }
 
@@ -368,7 +387,7 @@ export class Process {
         human_present: agent !== "cycle",
         // The person's language, from the operating system: talk to them in it (artifacts keep their own rules).
         language: detectarIdioma(),
-        supporter: item.supporter, analyst: item.analyst, lane: item.lane, factory: `orqen/work/${key}/round-${item.round}`,
+        supporter: item.supporter, analyst: item.analyst, lane: item.lane, worq: `${this.worqRel(key)}/round-${item.round}`, factory: `${this.worqRel(key)}/round-${item.round}`,   // factory: old name of worq
         request: ticket, issue: item.issue, comments, environment,
         openspec,
         ...(["DEVELOPMENT", "TESTING"].includes(state) ? { tasks: this.tasksOf(item) } : {}),
@@ -390,7 +409,7 @@ export class Process {
       throw new Error(`${key} is in ${item.state}: the PR to ${this.cfg.develBranch} is opened once development is done (TESTING or later).`);
     return {
       key, state: item.state, branch: item.branch, base: this.cfg.develBranch, lane: item.lane, issue: item.issue,
-      analysis: `orqen/work/${key}/round-${item.round}/analysis.md`,
+      analysis: `${this.worqRel(key)}/round-${item.round}/analysis.md`,
       change: item.change ? `openspec/changes/${item.change}` : undefined,
       existing: item.artifacts.devel_pr as string | undefined,
     };
@@ -408,7 +427,7 @@ export class Process {
     const current = this.ws.currentBranch();
     if (current !== item.branch)
       throw new Error(`The repo is on "${current}", not on the request branch "${item.branch}": switch to it (git checkout ${item.branch}) and run again.`);
-    const bodyFile = `orqen/work/${key}/round-${item.round}/devel-pr.md`;
+    const bodyFile = `${this.worqRel(key)}/round-${item.round}/devel-pr.md`;
     this.fac.write(item, "devel-pr.md", body.trim() + "\n");
     this.ws.commit(key, `PR explanation for ${info.base}`, { branch: item.branch });
     this.ws.push(item.branch);
@@ -444,7 +463,7 @@ export class Process {
     const reviews: { round: number; n: number; verdict: string; file: string; ts: string }[] = (item.artifacts.code_reviews ??= []);
     const n = reviews.filter((r) => r.round === item.round).length + 1;
     const file = `code-review-${n}.md`;
-    const path = `orqen/work/${key}/round-${item.round}/${file}`;
+    const path = `${this.worqRel(key)}/round-${item.round}/${file}`;
     this.fac.write(item, file, body.trim() + "\n");
     reviews.push({ round: item.round, n, verdict, file: path, ts: new Date().toISOString() });
     this.store.save(item);
@@ -484,7 +503,7 @@ export class Process {
     const n = reviews.filter((r) => r.round === item.round).length + 1;
     let path: string | undefined;
     if (report.trim()) {
-      path = `orqen/work/${key}/round-${item.round}/qa-review-${n}.md`;
+      path = `${this.worqRel(key)}/round-${item.round}/qa-review-${n}.md`;
       this.fac.write(item, `qa-review-${n}.md`, report.trim() + "\n");
     }
     reviews.push({ round: item.round, n, decision, by, file: path, ts: new Date().toISOString() });
@@ -597,7 +616,7 @@ export class Process {
   }
 
   // ================================================================ analysis closing
-  /** With the analyst's OK: estimate, record in orqen/work/, spec commit (if any) and issue linked to the request. */
+  /** With the analyst's OK: estimate, record in orqen/worqs/, spec commit (if any) and issue linked to the request. */
   private async closeAnalysis(item: WorkItem, s: Record<string, any>) {
     item.artifacts.estimated_hours = item.change
       ? this.os.tasks(item.change).reduce((a, t) => a + (t.hours ?? 0), 0)
@@ -843,7 +862,7 @@ export class Process {
             `*Acceptance criteria:*\n${bullets(a.acceptance_criteria ?? [])}\n\nThe execution stage prepares the script, rollback, and verification and posts them on the request.`
           : `Development for request ${item.key}. *Lane:* ${a.lane} — ${a.lane_rationale}\n${this.requests.url(item.key)}\n\n` +
             `*Summary:* ${item.artifacts.ANALYSIS?.spec?.summary ?? a.summary}\n\n` +
-            `*Branch:* ${item.branch || branchFor(item.key)}\n` + (item.change ? `*OpenSpec change:* openspec/changes/${item.change}/\n` : `*Direct-lane analysis:* orqen/work/${item.key}/round-${item.round}/analysis.md\n`) +
+            `*Branch:* ${item.branch || branchFor(item.key)}\n` + (item.change ? `*OpenSpec change:* openspec/changes/${item.change}/\n` : `*Direct-lane analysis:* ${this.worqRel(item.key)}/round-${item.round}/analysis.md\n`) +
             `*Estimate:* ${item.artifacts.estimated_hours ?? "?"} h\n\n` +
             `*${item.change ? "Tasks" : "Plan"}:*\n${bullets(tasks.map((t) => t.description))}\n\n` +
             `*${item.change ? "Acceptance scenarios" : "Acceptance criteria"}:*\n${bullets(sc.map((e) => item.change ? `${e.requirement} › ${e.scenario}` : e.scenario))}`,
@@ -855,7 +874,7 @@ export class Process {
       if (native) await this.issues.link!(item.issue, item.key);
       const where = native ? item.issue : `${item.issue} (${this.issues.url(item.issue)})`;
       await this.requests.comment(item.key, `Analysis complete${item.analyst ? ` with ${item.analyst}` : ""}. Track implementation in ${where} (${lane} lane). Milestones will also be posted on this request.`);
-      await this.issues.comment(item.issue, `Created from ${item.key}${native ? "" : ` (${this.requests.url(item.key)})`} after analysis. Request record: orqen/work/${item.key}/.`);
+      await this.issues.comment(item.issue, `Created from ${item.key}${native ? "" : ` (${this.requests.url(item.key)})`} after analysis. Worq: ${this.worqRel(item.key)}/`);
       item.artifacts.issue_linked = true;
       this.store.save(item);
     }

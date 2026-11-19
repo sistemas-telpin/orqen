@@ -10,6 +10,10 @@ A **request** is the client's ticket in the requests system; its **issue** is th
 issues system when the analysis closes (optional). Each system can be any supported tool (Jira, GitHub, or Asana, set in
 `connectors` in `orqen/config.yaml`). Commands accept either key.
 
+A **worq** is orqen's unit of work: everything orqen carries for one request (the request, its issue, the branch, the spec, the PR and the
+record of every stage). It is identified by the request key and lives in `orqen/worqs/<KEY>/`. `orqen worqs` lists the worqs on this machine and
+`orqen worq <KEY>` shows one.
+
 The 9 steps, one command each (the person runs it; you follow it):
 
 | # | Role | Command | What it does |
@@ -70,7 +74,7 @@ The analyst can still take a `NEW` request directly with `orqen analyze`, and ca
    | `full` | Broader changes involving architecture, data, integrations, security, or billing | Full OpenSpec proposal, specs, design, and tasks |
 
    With `light` or `full`, `orqen lane <KEY> <lane>` prepares a branch and change. Write the spec with the analyst under `openspec/changes/`.
-4. Run `orqen complete <KEY> <output.json>`. Once validation passes, orqen creates the issue (when `connectors.issues` is configured), links it to the request, and writes the record under `orqen/work/<KEY>/`. The request is the conversation with the customer; the issue tracks implementation (`connectors.issues.transitions`). Rejected customer acceptance starts a new analysis round and a new issue.
+4. Run `orqen complete <KEY> <output.json>`. Once validation passes, orqen creates the issue (when `connectors.issues` is configured), links it to the request, and writes the record under `orqen/worqs/<KEY>/`. The request is the conversation with the customer; the issue tracks implementation (`connectors.issues.transitions`). Rejected customer acceptance starts a new analysis round and a new issue.
 
 ### Operational work
 
@@ -88,7 +92,7 @@ Propose the steps, rollback, and read-only verification. A person authorized by 
 - `orqen take <KEY>` claims an agent stage and prints its instructions, request context, feedback, and JSON output schema. Use `orqen support` for support and `orqen analyze` for analysis.
 - Run `orqen complete <KEY> <output.json>` when the output is ready. Correct validation errors and retry until the command reports success. Stop after completing the stage.
 - If you cannot proceed, run `orqen block <KEY> "<specific reason>"`. Human reviewers use `/approve` or `/reject <reason>` on the ticket.
-- orqen writes `state.json`, `log.md`, and `round-N/analysis.md` and `.json` under `orqen/work/<KEY>/`. Operational rounds also record execution details under `execution/`. The authoritative workflow state is stored under `orqen/state/` or `cli/.state/`, depending on how the project is configured.
+- orqen writes `state.json`, `log.md`, and `round-N/analysis.md` and `.json` under `orqen/worqs/<KEY>/`. Operational rounds also record execution details under `execution/`. The authoritative workflow state is stored under `orqen/state/` or `cli/.state/`, depending on how the project is configured.
 
 ### Implementation execution
 
@@ -110,7 +114,7 @@ Propose the steps, rollback, and read-only verification. A person authorized by 
 ### Rules
 
 - Read the tickets read-only. orqen handles ticket writes, Git commits, branch changes, pushes, and OpenSpec archiving. Do not run `git commit/push/checkout/reset/rebase` or `openspec archive`.
-- Do not edit `orqen/state/`, `orqen/work/`, or orqen configuration as part of a request.
+- Do not edit `orqen/state/`, `orqen/worqs/`, or orqen configuration as part of a request.
 - Obtain explicit analyst approval before closing analysis, including approval of the selected lane.
 - Record unanswered questions and label assumptions. Read `openspec/specs/` for current behavior before proposing changes.
 - Write in clear, professional English (this is for artifacts; talk to the person in their system language). Follow OpenSpec's structural headings and use SHALL/MUST where required.

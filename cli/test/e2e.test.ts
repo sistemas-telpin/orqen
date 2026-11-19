@@ -92,14 +92,14 @@ test("full request with real OpenSpec", { skip: !existsSync(OPENSPEC) && "opensp
   assert.match(jira.coms["REQ-7"].map((x) => x.body).join("\n"), /3 estimated hours/);
   assert.match(git("log", "--format=%s"), /spec OpenSpec/);
 
-  // ---- orqen/work/REQ-7 was committed on the branch and the tree is clean (branches can be switched)
-  const tracked = git("ls-files", "orqen/work/REQ-7").split("\n");
-  assert.ok(tracked.includes("orqen/work/REQ-7/round-1/analysis.md"));
-  assert.ok(tracked.includes("orqen/work/REQ-7/log.md"));
-  assert.ok(tracked.includes("orqen/work/REQ-7/state.json"));
+  // ---- orqen/worqs/REQ-7 was committed on the branch and the tree is clean (branches can be switched)
+  const tracked = git("ls-files", "orqen/worqs/REQ-7").split("\n");
+  assert.ok(tracked.includes("orqen/worqs/REQ-7/round-1/analysis.md"));
+  assert.ok(tracked.includes("orqen/worqs/REQ-7/log.md"));
+  assert.ok(tracked.includes("orqen/worqs/REQ-7/state.json"));
   assert.equal(git("status", "--porcelain", "--untracked-files=no").trim(), "");
-  assert.match(readFileSync(join(dir, "orqen", "work", "REQ-7", "round-1", "analysis.md"), "utf8"), /Excel queda fuera/);
-  assert.equal(JSON.parse(readFileSync(join(dir, "orqen", "work", "REQ-7", "state.json"), "utf8")).state, "DEVELOPMENT");
+  assert.match(readFileSync(join(dir, "orqen", "worqs", "REQ-7", "round-1", "analysis.md"), "utf8"), /Excel queda fuera/);
+  assert.equal(JSON.parse(readFileSync(join(dir, "orqen", "worqs", "REQ-7", "state.json"), "utf8")).state, "DEVELOPMENT");
 
   // ---- when the analysis closes the issue is born, linked to the request
   assert.equal(jira.created.length, 1);

@@ -12,7 +12,7 @@ Implement the request identified by `$ARGUMENTS` from the repository root. It ca
 - **Work with the person who invoked this command.** Before each important step, tell them what you are about to do and wait for their OK. When in doubt, ask them (with `AskUserQuestion` when available: concrete options plus your recommendation); never assume what you can ask. After each step, report what you did and what comes next.
 - **Use `orqen swarm` internally for implementation.** Do not ask the person to run it, announce the engine, or request a separate approval for choosing it. Discuss the scope, plan, decisions and results in normal terms. Capture its JSON output instead of forwarding worker logs. Never silently replace a failed run with manual implementation.
 - Read the tickets read-only. orqen posts comments and moves the tickets.
-- Leave Git operations, branch changes, OpenSpec archiving, and writes to `orqen/state/`, `orqen/work/`, and orqen configuration to orqen.
+- Leave Git operations, branch changes, OpenSpec archiving, and writes to `orqen/state/`, `orqen/worqs/`, and orqen configuration to orqen.
 - Follow the approved scope, specifications or plan, and acceptance criteria. Ask the user or block the request if you need a decision to proceed.
 - **Testing is your job, not the person's.** When development closes, the request moves to `TESTING`: run that stage yourself right away (step 6), without asking for an OK at each step, and report the result. The human review of the e2e is QA's, later, in `QA_REVIEW` (full lane).
 - Stop once `TESTING` advances the request, or when it sends the request back to development and the person decides how to continue.

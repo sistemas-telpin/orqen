@@ -31,4 +31,4 @@ A person from support leads this stage (first line). The goal is to answer the c
 
 Show the person the outcome and the exact text that will reach the customer, and ask for their explicit approval. Only then set `support_ok: true`. Include `summary`, `checked`, `outcome`, `client_response`, and `escalation_summary` as required by the JSON schema.
 
-`orqen complete` validates the JSON, comments on the request, records `support.md` under `orqen/work/<KEY>/`, and advances it: `resolved` waits for the customer's `/approve` or `/reject <reason>`, and `escalate` moves to the analyst. A resolved request creates no issue. Leave `orqen/state/` and Git operations to orqen.
+`orqen complete` validates the JSON, comments on the request, records `support.md` under `orqen/worqs/<KEY>/`, and advances it: `resolved` waits for the customer's `/approve` or `/reject <reason>`, and `escalate` moves to the analyst. A resolved request creates no issue. Leave `orqen/state/` and Git operations to orqen.

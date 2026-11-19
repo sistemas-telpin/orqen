@@ -2,7 +2,7 @@
 
 > If `human_present` is `true`, tell the person what you are about to do, wait for their OK at each important step, and ask them about any doubt (see "Working with the person" in AGENTS.md). If it is `false`, run `orqen block` for any doubt that changes the outcome.
 
-For the lightweight and full lanes, orqen has archived the change and merged its deltas into `openspec/specs/`. The context identifies the archived change in `openspec.dir`. For the direct lane, refer to `orqen/work/<KEY>/` and `previous_stages.ANALYSIS`.
+For the lightweight and full lanes, orqen has archived the change and merged its deltas into `openspec/specs/`. The context identifies the archived change in `openspec.dir`. For the direct lane, refer to `orqen/worqs/<KEY>/` and `previous_stages.ANALYSIS`.
 
 1. Read the development summary in `previous_stages` and any archived proposal, specs, and tasks.
 2. In `release_notes`, give the team technical release notes covering changes, migrations, flags, and risks.

@@ -1,5 +1,6 @@
 /** Update the CLI, compatible OpenSpec installation, and managed kit files. */
-import { resolve } from "node:path";
+import { existsSync } from "node:fs";
+import { join, resolve } from "node:path";
 import semver from "semver";
 import { actualizarVersiones, ARCHIVO_CONFIG, ARCHIVO_ENTORNO, configVieja, escribirConfig, leerConfig } from "../lib/config.ts";
 import { leerEnv } from "../lib/env.ts";
@@ -15,6 +16,7 @@ import { resumenStack } from "../lib/stack.ts";
 import { mostrarLogo } from "../ui/logo.ts";
 import { azul, confirmar, gris, interactivo, magenta, p, pc } from "../ui/console.ts";
 import { resolverConflicto } from "./init.ts";
+import { moveWorkToWorqs } from "../lib/worqs.ts";
 
 export interface OpcionesUpdate { dir?: string; yes?: boolean; sinCli?: boolean; sinOpenspec?: boolean; sinKit?: boolean; sinAnimacion?: boolean }
 
@@ -72,6 +74,15 @@ export async function update(o: OpcionesUpdate) {
           actualizarVersiones(repo, { openspec: ultima });
         } catch (e) { s.error((e as Error).message); }
       }
+    }
+  }
+
+  // 2b. The worqs (the record of each request): orqen/work/ of earlier versions → orqen/worqs/
+  if (existsSync(join(repo, "orqen", "work")) && !existsSync(join(repo, "orqen", "worqs"))) {
+    p.log.info("The worqs (orqen's unit of work: one folder per request) are now in orqen/worqs/; this repository still has them in orqen/work/.");
+    if (await confirmar("Move orqen/work/ to orqen/worqs/ (git mv)? Branches of requests in progress keep their old path and are still read", true, yes)) {
+      const m = moveWorkToWorqs(repo);
+      if (m.moved) p.log.success(`${m.detail} ${gris("(commit the move with the rest of the update)")}`); else p.log.warn(m.detail);
     }
   }
 

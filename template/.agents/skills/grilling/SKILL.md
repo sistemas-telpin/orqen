@@ -21,7 +21,7 @@ The analyst makes the decisions. Ask questions that uncover ambiguities affectin
    - Data, migrations, integrations, performance, auditing, and security.
    - Whether an operational change can resolve the issue, plus risks and rollback.
 5. Record up to five design-blocking questions only the customer can answer. Do not invent answers.
-6. Record decisions as question-and-answer pairs in `decisions` for `orqen/work/<KEY>/`.
+6. Record decisions as question-and-answer pairs in `decisions` for `orqen/worqs/<KEY>/`.
 7. Summarize the scope, exclusions, risks, assumptions, and Given/When/Then acceptance criteria. Ask for explicit approval before proposing a lane or creating the issue.
 
 Use clear, direct English and closed questions where possible. If the analyst delegates a decision, record the recommended answer as an assumption. Resolve open design decisions before proposing the lane.

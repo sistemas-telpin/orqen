@@ -9,6 +9,8 @@ Su arquitectura permite que múltiples agentes colaboren de manera coordinada en
 Uno de sus pilares es el aprendizaje continuo a partir de la experiencia: aprovechar los resultados de desarrollos anteriores para enriquecer una base de conocimiento reutilizable y mejorar progresivamente los procesos de trabajo.
 
 El flujo completo son **9 pasos**, uno por comando: `list requests` · `support` · `analyze` · `list issues` · `implement` · `pr` · `review` (QA, solo carril completo) · `list prs` · `approve` (senior). En la [app de escritorio](https://github.com/sistemas-telpin/orqen-gui), al elegir un pedido se abre una terminal para chatear con el agente con el comando que sigue ya sugerido.
+Cada pedido que orqen toma es un **worq**, su unidad de trabajo: el request del cliente, su issue, la rama, la spec, el PR y el registro de cada etapa,
+todo identificado por la clave del request y guardado en `orqen/worqs/<KEY>/`. `orqen worqs` los lista y `orqen worq <KEY>` muestra uno.
 El recorrido completo, con los comandos `orqen`, las skills `/orqen:*` y qué hace cada una: [docs/flujo-paso-a-paso.md](docs/flujo-paso-a-paso.md).
 
 Opcionalmente, una persona de **soporte** atiende primero el reclamo con el agente (`/orqen:support SOP-1234`) e intenta responderle al cliente. Si no alcanza, lo escala al analista. El análisis lo conduce un **analista** con el agente (`/orqen:analyze SOP-1234`); el resto lo lleva el agente con aprobaciones humanas.
@@ -32,7 +34,7 @@ Opcionalmente, una persona de **soporte** atiende primero el reclamo con el agen
 - **`AGENTS.md` / `CLAUDE.md`**: lo que lee el agente. Explican el proceso y las reglas, y le indican que use la CLI.
 - **Plugin de Claude Code** (`orqen/plugin/`): los comandos `/orqen:tutorial`, `/orqen:support`, `/orqen:analyze`, `/orqen:list`, `/orqen:implement`, `/orqen:pr`, `/orqen:review` (QA), `/orqen:approve` (`/orqen:e2e-review` y `/orqen:code-review` quedan como nombres viejos que redirigen), y el skill `orqen:grilling`.
 - **`orqen/stages/`**: las guías de cada etapa (soporte, análisis, especificación, desarrollo, testing, entrega, ejecución y verificación). Se pueden editar.
-- **`orqen/work/<KEY>/`**: registro y estado de cada pedido dentro del repo (lo escribe `orqen`).
+- **`orqen/worqs/<KEY>/`**: registro y estado de cada pedido dentro del repo (lo escribe `orqen`).
 - **`openspec/config.yaml`**: reglas del proceso de pedidos aplicadas a los artefactos de OpenSpec.
 
 ## Tutorial para personas nuevas: `/orqen:tutorial`
@@ -72,7 +74,7 @@ un desarrollo. `workflow.support` (en `orqen/config.yaml`, apagada por defecto) 
 
 ```mermaid
 flowchart TD
-    A["/orqen:support SOP-1234"] --> B["orqen support: reserva el pedido (NEW → SUPPORT),<br/>carga el contexto y crea orqen/work/SOP-1234/"]
+    A["/orqen:support SOP-1234"] --> B["orqen support: reserva el pedido (NEW → SUPPORT),<br/>carga el contexto y crea orqen/worqs/SOP-1234/"]
     B --> C["El agente busca la respuesta<br/>(reclamo, pedidos parecidos, specs, código; solo lectura)"]
     C --> D{"Resultado<br/>(lo acuerda la persona de soporte)"}
     D -->|"resuelto"| E["Redacta la respuesta al cliente<br/>→ la persona la aprueba"]
@@ -100,25 +102,25 @@ analista. El agente nunca promete fechas, alcance ni cambios al cliente.
 - El agente no escribe en el ticket: los comentarios los publica `orqen` en `complete`, solo con el OK de la persona.
 - Es una etapa de persona: `orqen cycle` (modo desatendido) nunca la toma.
 
-**Qué queda registrado.** `orqen/work/SOP-1234/round-1/support.md` (resultado, qué se revisó, respuesta al cliente y escalación) y
+**Qué queda registrado.** `orqen/worqs/SOP-1234/round-1/support.md` (resultado, qué se revisó, respuesta al cliente y escalación) y
 `support.json` (la salida validada). Cuando el analista abre el pedido escalado, recibe todo eso en `previous_stages.SUPPORT`, y la guía de
 análisis le indica partir de ahí en vez de repetir el trabajo. La guía de la etapa está en `orqen/stages/support.md` y se puede editar.
 
 `orqen list requests` lista los pedidos para soporte aparte de los del analista y los del agente. Un pedido resuelto por soporte no tiene rama, así que su
-registro en `orqen/work/` no se commitea solo (como pasa con el carril operativo).
+registro en `orqen/worqs/` no se commitea solo (como pasa con el carril operativo).
 
 ## Análisis: `/orqen:analyze SOP-1234`
 
 ```mermaid
 flowchart TD
-    A["/orqen:analyze SOP-1234"] --> B["orqen analyze: reserva el pedido,<br/>carga el contexto y crea orqen/work/SOP-1234/"]
+    A["/orqen:analyze SOP-1234"] --> B["orqen analyze: reserva el pedido,<br/>carga el contexto y crea orqen/worqs/SOP-1234/"]
     B --> C["Grilling con el analista<br/>(skill orqen:grilling + repo + ticket por MCP, solo lectura)"]
     C -->|"lo contesta el cliente"| W["WAITING_CLIENT"] -->|"responde"| C
     C -->|"OK del analista"| D{"Propuesta de carril<br/>(el analista confirma)"}
     D -->|"directo<br/>sin spec"| G
     D -->|"liviano / completo"| E["orqen lane: rama + change de OpenSpec<br/>→ el agente escribe la spec con el analista"] --> G
     D -->|"operativa<br/>(sin código)"| G
-    G["orqen complete: valida · crea el issue · lo vincula al pedido<br/>· registra en orqen/work/ · commit de la spec"] --> H(["DEVELOPMENT · o EXECUTION si es operativa"])
+    G["orqen complete: valida · crea el issue · lo vincula al pedido<br/>· registra en orqen/worqs/ · commit de la spec"] --> H(["DEVELOPMENT · o EXECUTION si es operativa"])
 ```
 
 El agente **no escribe en el ticket** (el MCP es solo lectura): la creación del issue, el vínculo entre el issue y el request, los comentarios y los
@@ -133,10 +135,10 @@ labels los hace `orqen` en `complete`, solo si el análisis tiene el OK del anal
 | `full`                           | Varias capacidades, datos/integraciones, seguridad/facturación, > 2 días, arquitectura | Change completo: proposal + specs + design + tasks                                                       |
 | operativa (`route: operational`) | Se resuelve sin cambiar código (SQL, datos, reinicio, config)                          | Sin spec ni rama; flujo EXECUTION → aprobación → aplicación → verificación                               |
 
-### Qué queda en `orqen/work/SOP-1234/`
+### Qué queda en `orqen/worqs/SOP-1234/`
 
 ```
-orqen/work/SOP-1234/
+orqen/worqs/SOP-1234/
 ├── state.json             proyección del estado (state, lane, issue, branch, change, analyst)
 ├── log.md                 una línea por transición
 └── round-1/
@@ -152,7 +154,7 @@ orqen/work/SOP-1234/
 
 Se commitea con la rama del pedido (`orqen` commitea el registro en cada transición mientras esa rama está activa), así la
 trazabilidad viaja con el código y la spec. La **fuente de verdad operativa** está en `orqen/state/` (ignorado por git);
-`orqen/work/` es la proyección legible. Cada ronda nueva (rechazo de conformidad) agrega `round-2/`, etc.
+`orqen/worqs/` es la proyección legible. Cada ronda nueva (rechazo de conformidad) agrega `round-2/`, etc.
 
 ## Implementación: `/orqen:implement DEV-442`
 
@@ -176,7 +178,7 @@ flowchart TD
     G -.->|"no se puede avanzar"| Z{{"orqen block DEV-442 'motivo'"}}
 ```
 
-El agente usal ticket solo para leer y no hace `git commit/push/checkout`, ni `openspec archive`, ni toca `orqen/state/`, `orqen/work/` ni la
+El agente usal ticket solo para leer y no hace `git commit/push/checkout`, ni `openspec archive`, ni toca `orqen/state/`, `orqen/worqs/` ni la
 configuración de `orqen`. Si el contexto trae un test fallido o un rechazo de revisión (`human_feedback`), se corrige eso primero.
 
 ## Testing
@@ -238,7 +240,7 @@ flowchart TD
 ```
 
 El agente solo redacta: el commit, el push y el PR los hace `orqen` (`DEVEL_PR_COMMAND`, con `{base}`, `{branch}`, `{key}`, `{title}`, `{body}`).
-La explicación queda en `orqen/work/<KEY>/round-N/devel-pr.md`. Es idempotente: si el PR ya existe, solo empuja los commits nuevos.
+La explicación queda en `orqen/worqs/<KEY>/round-N/devel-pr.md`. Es idempotente: si el PR ya existe, solo empuja los commits nuevos.
 Como `orqen` commitea lo pendiente de la rama antes de empujar, los ajustes manuales (p. ej. los del diseñador de e2e) viajan con el PR.
 Si el repo no está en la rama del pedido, `orqen pr` falla antes de escribir, commitear o empujar nada.
 
@@ -267,7 +269,7 @@ Cada hallazgo tiene severidad (`blocking`, `important`, `minor` o `to verify`) y
 Si el veredicto no es aprobable, el agente deja redactado el texto del pedido de cambios.
 
 Cuando el senior da el informe por cerrado, el agente lo registra con `orqen code-review <KEY> <informe.md> --verdict <approve|minor|reject>`
-(solo en `CODE_REVIEW` y con el PR abierto). Queda en `orqen/work/<KEY>/round-N/code-review-<n>.md` (numerado: un segundo review después
+(solo en `CODE_REVIEW` y con el PR abierto). Queda en `orqen/worqs/<KEY>/round-N/code-review-<n>.md` (numerado: un segundo review después
 de un pedido de cambios no pisa al primero), se commitea si el repo está en la rama del pedido (viaja con el próximo push) y se comenta en el issue.
 
 ### Cómo se decide el gate: review en GitHub
@@ -438,7 +440,7 @@ actualizan solos; para los editados elegís conservar, reemplazar o dejar una co
 | `~/.orqen/credentials.env`        | Credenciales de los proveedores (tokens), del usuario y compartidas entre repositorios; antes `providers.env`, que se sigue leyendo |
 | `orqen/stages/`                  | Guías de cada etapa (editables)                                                                |
 | `orqen/plugin/`                  | Comandos de Claude Code y el skill de grilling                                                 |
-| `orqen/work/<KEY>/`              | Registro versionado de cada pedido; `state.json` es una foto completa del pedido que sirve para recuperarlo en otra máquina |
+| `orqen/worqs/<KEY>/`              | Registro versionado de cada pedido; `state.json` es una foto completa del pedido que sirve para recuperarlo en otra máquina |
 | `orqen/state/` y `orqen/tmp/`    | Estado operativo, procesos corriendo y sus logs (ignorados por git; si falta el registro, orqen lo recupera de la foto de la rama o, para mostrarlo, de la etiqueta del ticket: ver `docs/flujo-paso-a-paso.md`) |
 | `orqen/manifest.json`            | Hashes de los archivos del kit, para que `orqen update` detecte tus cambios                    |
 | `AGENTS.md` y `CLAUDE.md`        | Instrucciones del proceso para los agentes                                                     |
@@ -716,6 +718,8 @@ orqen swarm "<tarea>" [--parallel N] [--plan-only | --plan plan.json] [--small C
 # Para personas (los pasos 2, 3, 5, 6, 7 y 9 se corren como /orqen:* en el agente)
 orqen list requests|issues|prs [--json] Pasos 1, 4 y 8: las colas de trabajo (no toma nada)
 orqen status [KEY] [--json]            Dónde está un pedido, quién actúa y qué sigue
+orqen worqs [--all] [--json]           Los worqs de esta máquina (la unidad de trabajo de orqen, uno por pedido), con estado y carpeta
+orqen worq <KEY> [--json]              Un worq: estado, request, issue, rama, PR y los archivos de su registro en orqen/worqs/<KEY>/
 orqen merged <KEY> [--person NOMBRE]   Confirma el merge manual del PR cuando orqen no puede leerlo (sin gh)
 orqen cancel <KEY> --reason <texto>    Cancela el pedido sin entregar: cierra el PR sin mergear y comenta en los tickets
 orqen release <KEY>                    Libera la reserva de un pedido
@@ -756,7 +760,7 @@ Nombres viejos que siguen andando con un aviso: `orqen pending` → `orqen list 
   al ser agnóstico **no hay un hook que lo impida a la fuerza**. Hay que reforzarlo con el sandbox o los permisos de
   cada herramienta (por ejemplo, denegar `git push` en `.claude/settings.json`, o permitir del MCP de tickets solo las herramientas de lectura).
 - Con `CODE_REVIEW_GATE=github`, sin PR abierto el pedido espera en CODE_REVIEW: no avanza hasta que se corra `/orqen:pr` y el senior revise. La aprobación sale de GitHub, así que `orqen` necesita `gh` autenticado; con `ticket` el gate sigue aceptando `/approve` aunque no exista el PR.
-- El estado vive en `orqen/state/` (ignorado por git, sobrevive a los cambios de rama) y en una etiqueta `orqen-state-*` del ticket (Jira y GitHub) o la sección (Asana); `orqen/work/<KEY>/` es su proyección versionada.
+- El estado vive en `orqen/state/` (ignorado por git, sobrevive a los cambios de rama) y en una etiqueta `orqen-state-*` del ticket (Jira y GitHub) o la sección (Asana); `orqen/worqs/<KEY>/` es su proyección versionada.
 - Usa un solo checkout, así que procesa un pedido por vez por clon. Para trabajar en paralelo: un clon o worktree por agente.
 
 ## Desarrollo del kit

@@ -11,9 +11,15 @@ function sharedProviders(): Record<string, string> {
   return existsSync(providerFile()) ? parsearEnv(readFileSync(providerFile(), "utf8")) : {};
 }
 
-/** Shared credentials take precedence over old repository copies; drafts can still override them for testing. */
+/**
+ * Credentials by precedence: the environment (CI, a shell export) → the shared provider file → old copies in the repository's
+ * orqen/.env. loadConfig loads orqen/.env into process.env, so a variable whose value is the one in orqen/.env counts as that
+ * old copy, not as the environment. Drafts can still override all of them for testing.
+ */
 export function providerEnv(repo: string, environment: NodeJS.ProcessEnv = process.env): Record<string, string | undefined> {
-  return { ...environment, ...(leerEnv(repo) ?? {}), ...sharedProviders() };
+  const local = leerEnv(repo) ?? {};
+  const real = Object.fromEntries(Object.entries(environment).filter(([k, v]) => v !== undefined && v !== "" && local[k] !== v));
+  return { ...environment, ...local, ...sharedProviders(), ...real };
 }
 
 export function saveProviders(connectors: ConectoresYaml, draft: Record<string, string>, current: Record<string, string | undefined>) {

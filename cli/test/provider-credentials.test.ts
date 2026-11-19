@@ -33,6 +33,12 @@ test("provider accounts are shared between repositories without storing tokens i
     saveProviders({ requests: { tipo: "jira", credenciales: "CLIENT" } }, { CLIENT_TOKEN: "client-secret", CLIENT_URL: "https://client.example", CLIENT_USER: "bot" }, {});
     assert.equal(providerEnv(second, {}).CLIENT_TOKEN, "client-secret");
     assert.equal(providerEnv(second, {}).GITHUB_TOKEN, "shared-provider-token");
+
+    // the environment (CI, a shell export) wins over the shared file; orqen/.env loaded into the environment does not
+    assert.equal(providerEnv(second, { GITHUB_TOKEN: "ci-token" }).GITHUB_TOKEN, "ci-token");
+    assert.equal(providerEnv(second, { GITHUB_TOKEN: "" }).GITHUB_TOKEN, "shared-provider-token");
+    assert.equal(providerEnv(first, { GITHUB_TOKEN: "legacy-local" }).GITHUB_TOKEN, "shared-provider-token");
+    assert.equal(providerEnv(first, { GITHUB_TOKEN: "ci-token" }).GITHUB_TOKEN, "ci-token");
   } finally {
     if (previous === undefined) delete process.env.ORQEN_USER_CONFIG_DIR;
     else process.env.ORQEN_USER_CONFIG_DIR = previous;

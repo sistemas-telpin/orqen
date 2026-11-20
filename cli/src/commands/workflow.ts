@@ -224,7 +224,7 @@ export async function runWorkflow(cmd: string, rest: string[]) {
           const xs = board.filter((b) => b.role === role);
           if (!xs.length) continue;
           console.log(`${titles[role]}:`);
-          for (const b of xs) console.log(`  ${b.work.padEnd(12)} ${b.state.padEnd(15)} ${(b.next[0]?.command ?? "").padEnd(28)} ${b.takenBy ? `(taken by ${b.takenBy} since ${b.since?.slice(0, 16).replace("T", " ")})` : ""}${b.recovered ? "  ← state read from the ticket; this machine has no record" : ""}`);
+          for (const b of xs) console.log(`  ${b.work.padEnd(12)} ${b.state.padEnd(15)} ${(b.next[0]?.command ?? "").padEnd(28)} ${b.takenBy ? `(taken by ${b.takenBy} since ${b.since?.slice(0, 16).replace("T", " ")})` : ""}${b.recovered ? `  ← state read from the ticket; this machine has no record${b.next[0]?.command ? "" : " and its branch is not on origin yet (it appears when whoever started it pushes)"}` : ""}`);
         }
         return;
       }
@@ -474,7 +474,7 @@ export async function runWorkflow(cmd: string, rest: string[]) {
           if (w.branch) console.log(`  Branch:   ${w.branch}`);
           if (w.pr) console.log(`  PR:       ${w.pr}${w.merged ? " (merged)" : ""}`);
           if (w.supporter || w.analyst) console.log(`  People:   ${[w.supporter && `support ${w.supporter}`, w.analyst && `analyst ${w.analyst}`].filter(Boolean).join(" · ")}`);
-          if (item.recovered) console.log("  The state is read from the ticket's label: this machine has no record. Fetch its branch to recover the worq (git fetch origin " + (w.branch ?? `orqen/${key.toLowerCase()}`) + ").");
+          if (item.recovered) console.log(`  ${flow.recoveredHint(key).text}`);
           else {
             console.log(`  Folder:   ${w.dir}/`);
             for (const f of files) console.log(`            ${f}`);
@@ -505,7 +505,7 @@ export async function runWorkflow(cmd: string, rest: string[]) {
           const key = toKey(rest[0]);
           const item = flow.item(key) ?? await flow.peek(key);
           console.log(item ? JSON.stringify({ ...item, artifacts: Object.keys(item.artifacts) }, null, 2) : "unknown");
-          if (item?.recovered) console.log(`State read from the ticket's label: this machine has no record of ${key}. Fetch its branch (git fetch origin orqen/${key.toLowerCase()}) to recover the full record.`);
+          if (item?.recovered) console.log(flow.recoveredHint(key).text);
           for (const ev of store.events(key)) console.log(`  ${ev.ts}  ${ev.from} → ${ev.to}  ${ev.detail}`);
         } else for (const r of store.all()) console.log(`${r.key.padEnd(12)} ${r.state.padEnd(15)} ${(r.issue ?? "").padEnd(12)} ${r.change ?? ""}`);
         return;

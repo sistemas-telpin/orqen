@@ -136,6 +136,13 @@ test("another machine with no record finds the worq by its issue label and reads
   assert.match(item.next[0].command, /git fetch origin orqen\/dev-1/);
   assert.equal((await b.peek("DEV-1"))?.origin, "internal", "known as a worq of the team");
   assert.deepEqual(a.jira.coms, { "REQ-1": [] }, "the requests connector is not touched");
+
+  // the branch was never pushed: no fetch that would fail, but when it will appear
+  const c = new Process(cfg, { requests: a.jira, issues: a.tracker }, new Store(cfg.stateDir), { ...ws, remoteBranchExists: () => false }, os);
+  const notPushed = (await c.board()).find((x) => x.key === "DEV-1")!;
+  assert.equal(notPushed.next[0].command, "");
+  assert.match(notPushed.next[0].what, /orqen\/dev-1 is not on origin yet[\s\S]*pushes it/);
+  assert.match(c.recoveredHint("DEV-1").text, /not on origin yet/);
 });
 
 test("--issue takes an issue that already exists instead of creating one", async () => {
@@ -147,7 +154,9 @@ test("--issue takes an issue that already exists instead of creating one", async
   assert.equal(tracker.created.length, 0, "no new issue");
   assert.equal(store.get("DEV-7")!.title, "Actualizar la librería de PDF", "the title comes from the issue");
   assert.deepEqual(tracker.issues["DEV-7"].labels, ["deuda", "orqen-worq"], "labelled so other machines find it");
-  assert.match(tracker.coms["DEV-7"].map((c) => c.body).join("\n"), /Taken by orqen as a worq of the team[\s\S]*una sola función pública/);
+  const bodies = tracker.coms["DEV-7"].map((c) => c.body);
+  assert.equal(bodies.filter((b) => /una sola función pública/.test(b)).length, 1, "the brief is commented once (the analysis), not twice");
+  assert.match(bodies.join("\n"), /Taken by orqen as a worq of the team[\s\S]*started by Ana/);
   await assert.rejects(flow.newWorq("", BRIEF, "Ana", "DEV-7"), /DEV-7 is already a worq \(DEVELOPMENT\)/);
 });
 

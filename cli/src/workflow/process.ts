@@ -138,6 +138,29 @@ export class Process {
     return rel.startsWith("..") || /^[a-zA-Z]:/.test(rel) ? `orqen/worqs/${key}` : rel;
   }
 
+  private branchOnOrigin = new Map<string, boolean | undefined>();
+
+  /**
+   * A worq this machine knows only from its ticket's label: fetch its branch to recover it, or, when the branch is not on
+   * origin yet (whoever started it has not pushed), say so instead of suggesting a fetch that fails. Asked once per branch.
+   */
+  recoveredHint(key: string): { command: string; what: string; text: string } {
+    const branch = branchFor(key);
+    if (!this.branchOnOrigin.has(branch)) {
+      let on: boolean | undefined;
+      try { on = this.ws.remoteBranchExists?.(branch); } catch { on = undefined; }
+      this.branchOnOrigin.set(branch, on);
+    }
+    if (this.branchOnOrigin.get(branch) === false) return {
+      command: "", what: `Its branch ${branch} is not on origin yet: it appears once whoever started it pushes it (orqen pr)`,
+      text: `The state is read from the ticket's label: this machine has no record, and its branch ${branch} is not on origin yet. It appears once whoever started it pushes it (orqen pr); then git fetch origin ${branch} recovers the worq.`,
+    };
+    return {
+      command: `git fetch origin ${branch}`, what: "The state comes from the ticket only: fetch the request branch so orqen recovers its full record, then continue",
+      text: `The state is read from the ticket's label: this machine has no record. Fetch its branch to recover the worq (git fetch origin ${branch}).`,
+    };
+  }
+
   private fetchHint(key: string) {
     return `If someone worked on it elsewhere, fetch its branch (git fetch origin ${branchFor(key)}) so orqen can recover its worq from ${this.worqRel(key)}/state.json.`;
   }
@@ -215,7 +238,7 @@ export class Process {
       qa: needsQa(item) && item.state === "QA_REVIEW" ? "pending" : needsQa(item) && item.state === "CODE_REVIEW" ? "approved" : undefined,
       recovered: item.recovered,
       next: item.recovered
-        ? [{ step: 0, role: roleOf(item, this.cfg), command: `git fetch origin ${branchFor(item.key)}`, what: "The state comes from the ticket only: fetch the request branch so orqen recovers its full record, then continue" }]
+        ? (({ command, what }) => [{ step: 0, role: roleOf(item, this.cfg), command, what }])(this.recoveredHint(item.key))
         : nextSteps(item, this.cfg),
       updated: this.store.events(item.key).at(-1)?.ts,
       merge: item.state === "DELIVERY" && item.artifacts.devel_pr ? (item.artifacts.devel_pr_merged ? "merged" : "pending") : undefined,
@@ -954,7 +977,9 @@ export class Process {
     const analysis = {
       summary: typeof b.summary === "string" && b.summary.trim() ? b.summary.trim() : description || t,
       type: "change", acceptance_criteria: b.acceptance_criteria, affected_capabilities: [], open_questions: [], risks: Array.isArray(b.risks) ? b.risks : [],
-      ready: true, analyst_ok: true, route: "development", lane: "direct", lane_rationale: "Started by the team: no client request, direct lane.",
+      ready: true, analyst_ok: true, route: "development", lane: "direct", lane_rationale: existing
+        ? `Taken by orqen as a worq of the team (no client request), started by ${person}: direct lane.`
+        : "Started by the team: no client request, direct lane.",
       plan: b.plan, estimated_hours: b.estimated_hours,
     };
     // validated before creating anything: an invalid brief must not leave an issue behind
@@ -982,7 +1007,6 @@ export class Process {
       throw new Error(`The issue ${key} ${existing ? "is there" : "was created"}, but the worq could not start:\n${r.errors.map((e) => "  " + e).join("\n")}\n` +
         `Fix it and take that issue with: orqen new_worq --issue ${key} <brief.json>`);
     }
-    if (existing) await this.attemptAsync(() => this.requests.comment(key, `Taken by orqen as a worq of the team (no client request), in development.\n\n${brief}`));
     if (description) this.fac.write(item, "brief.md", `# ${key} — ${t}\n\n${description}\n`);
     return { key, state: this.item(key)!.state, dir: this.worqRel(key), url: this.requests.url(key) };
   }

@@ -118,6 +118,7 @@ export async function workflowFixture(t: TestContext, deployment = "server") {
   const remote = join(root, "remote.git");
   execFileSync("git", ["init", "--bare", "-q", remote]);
   git("remote", "add", "origin", remote); git("push", "-qu", "origin", "main");
+  git("push", "-q", "origin", "main:desarrollo");   // the branch where the PRs go must exist on the remote
   return { root, repo, remote, git, jira, env, command, complete, context, record, state, file, human, requests, failNextLink: () => { failLinks = 1; } };
 }
 

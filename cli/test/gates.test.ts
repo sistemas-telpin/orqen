@@ -8,7 +8,7 @@ import { loadConfig } from "../src/workflow/config.ts";
 import type { OpenSpecApi } from "../src/workflow/openspec.ts";
 import { Process, changeName } from "../src/workflow/process.ts";
 import { Store, newWorkItem } from "../src/workflow/store.ts";
-import { parsePrChecks, type Workspace } from "../src/workflow/workspace.ts";
+import { ghFailure, parsePrChecks, type Workspace } from "../src/workflow/workspace.ts";
 import { both, FakeTracker, testConnectors } from "./fakes.ts";
 
 const fakeOs: OpenSpecApi = {
@@ -511,8 +511,39 @@ test("the senior cannot approve a PR with red CI or conflicts (unless --force); 
   const noGh = new Process(cfg, both(jira, false), store, { ...failingTests, prChecks: () => { throw new Error("spawn gh ENOENT"); } }, fakeOs);
   store.save({ ...newWorkItem("REQ-1"), state: "CODE_REVIEW", artifacts: { devel_pr: "https://gh/pr/1" } });
   assert.equal((await noGh.prQueue())[0].checks?.ci, "unknown");
-  await noGh.decide("REQ-1", "approve", "", "Seni");
+  const r = await noGh.decide("REQ-1", "approve", "", "Seni");
   assert.equal(store.get("REQ-1")!.state, "DELIVERY");
+  assert.match(r.warning!, /could not be checked \(spawn gh ENOENT\)[\s\S]*look at them on GitHub/);
+  assert.equal(r.onGitHub, false, "the ticket gate records the approval in the tickets, not on GitHub");
+  // readable PR: no warning
+  store.save({ ...newWorkItem("REQ-1"), state: "CODE_REVIEW", artifacts: { devel_pr: "https://gh/pr/1" } });
+  checks = { mergeable: "MERGEABLE", statusCheckRollup: [] };
+  assert.equal((await flow.decide("REQ-1", "approve", "", "Seni")).warning, undefined);
+});
+
+test("ghFailure says what to do when gh is missing or not logged in", () => {
+  assert.match(ghFailure(Object.assign(new Error("spawn gh ENOENT"), { code: "ENOENT" })), /not installed or is not in the PATH[\s\S]*gh auth login/);
+  assert.match(ghFailure(Object.assign(new Error("x"), { stderr: "To get started with GitHub CLI, please run:  gh auth login\n" })), /not logged in: run `gh auth login`/);
+  assert.equal(ghFailure(Object.assign(new Error("Command failed"), { stderr: "GraphQL: Could not resolve to a PullRequest\nmore" })), "GraphQL: Could not resolve to a PullRequest");
+});
+
+test("pr: a base branch that is not on origin is reported before writing, committing or pushing anything", async () => {
+  const { jira, cfg } = setup();
+  const calls: string[] = [];
+  let remote: boolean | undefined = false;
+  const ws: Workspace = {
+    ...failingTests, currentBranch: () => "orqen/req-1", remoteBranchExists: () => remote,
+    commit: () => { calls.push("commit"); return true; }, push: () => { calls.push("push"); }, openPr: () => { calls.push("pr"); return "https://example.test/pr/7"; },
+  };
+  const store = new Store(cfg.stateDir);
+  const flow = new Process(cfg, both(jira), store, ws, fakeOs);
+  store.save({ ...newWorkItem("REQ-1"), state: "CODE_REVIEW", branch: "orqen/req-1" });
+  const body = "## Qué cambió\nSe agregó la exportación a CSV.\n\n## Cómo verificarlo\nProbar la pantalla de reportes y descargar el archivo.";
+  await assert.rejects(flow.pr("REQ-1", body), /base branch "desarrollo" does not exist on origin[\s\S]*workflow\.devel_branch/);
+  assert.deepEqual(calls, []);
+  assert.equal(existsSync(join(cfg.factoryDir, "REQ-1", "round-1", "devel-pr.md")), false);
+  remote = undefined;   // cannot be known (offline): does not block
+  assert.equal((await flow.pr("REQ-1", body)).created, true);
 });
 
 test("parsePrChecks reads check runs and commit statuses", () => {

@@ -244,6 +244,7 @@ export class Process {
     if (!item) throw new Error(this.unknownMsg(key));
     if (item.state !== "CODE_REVIEW") throw new Error(`${key} is in ${item.state}: the senior decides in CODE_REVIEW.`);
     const url = item.artifacts.devel_pr as string | undefined;
+    let warning: string | undefined;
     if (!url) throw new Error(`${key} has no PR yet: it is opened with /orqen:pr ${workKey(item)}.`);
     if (action === "changes" && body.trim().length < 10) throw new Error("Say which changes are needed: the comment goes back to development as the indication.");
     if (action === "approve") {
@@ -258,6 +259,8 @@ export class Process {
           : h.ci === "pending" ? "Wait for it to finish and approve again." : "Request changes with what failed, or fix the CI first.")
           + " Use --force only if you know why it can be approved anyway.");
       if (problem) body = `${body.trim()}${body.trim() ? "\n\n" : ""}Approved with --force although ${problem}.`;
+      // not read (no gh, not logged in...): it does not block, but the senior has to know that nobody checked it
+      if (h.ci === "unknown") warning = `The CI and the conflicts of the PR could not be checked (${h.detail || "unknown reason"}): look at them on GitHub before merging.`;
     }
     if (this.cfg.codeReviewGate === "github") {
       if (!this.ws.reviewPr) throw new Error("This workspace cannot review PRs; use CODE_REVIEW_GATE=ticket.");
@@ -266,7 +269,7 @@ export class Process {
       const after = this.item(key)!;
       if (after.state === "CODE_REVIEW")
         throw new Error(`The review was posted on ${url} but did not count${this.cfg.githubReviewers.length ? ` (GITHUB_REVIEWERS: ${this.cfg.githubReviewers.join(", ")})` : ""}. Check it on GitHub.`);
-      return { state: after.state, url };
+      return { state: after.state, url, onGitHub: true, warning };
     }
     if (action === "approve") {
       await this.commentBoth(item, `Code review: PR approved by ${person}: ${url}${body.trim() ? `\n\n${body.trim()}` : ""}\nMoving to delivery.`);
@@ -277,7 +280,7 @@ export class Process {
       await this.commentBoth(item, `Code review: changes requested by ${person} on ${url}\n\n${body.trim()}\n\nReturning to development.`);
       await this.move(item, "DEVELOPMENT", `changes requested by ${person}`, agent);
     }
-    return { state: item.state, url };
+    return { state: item.state, url, onGitHub: false, warning };
   }
 
   // ================================================================ support
@@ -451,6 +454,9 @@ export class Process {
     const current = this.ws.currentBranch();
     if (current !== item.branch)
       throw new Error(`The repo is on "${current}", not on the request branch "${item.branch}": switch to it (git checkout ${item.branch}) and run again.`);
+    // the PR needs its base branch on the remote: better to say so now than after pushing and failing to open it
+    if (!info.existing && this.ws.remoteBranchExists?.(info.base) === false)
+      throw new Error(`The base branch "${info.base}" does not exist on origin, so the PR cannot be opened. Push it (git push origin <branch>:${info.base}) or set workflow.devel_branch in orqen/config.yaml to the branch where the team integrates.`);
     const bodyFile = `${this.worqRel(key)}/round-${item.round}/devel-pr.md`;
     this.fac.write(item, "devel-pr.md", body.trim() + "\n");
     this.ws.commit(key, `PR explanation for ${info.base}`, { branch: item.branch });

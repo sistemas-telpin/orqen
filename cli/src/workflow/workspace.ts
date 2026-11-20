@@ -29,6 +29,16 @@ export interface PrChecks {
 }
 
 /** Reads `gh pr view --json mergeable,statusCheckRollup` (check runs and commit statuses). */
+/** What went wrong running gh, as a sentence that tells the person what to do. */
+export function ghFailure(e: unknown): string {
+  const err = e as NodeJS.ErrnoException & { stderr?: string | Buffer };
+  if (err.code === "ENOENT")
+    return "the GitHub CLI (gh) is not installed or is not in the PATH: install it from https://cli.github.com, open a new terminal and log in with `gh auth login`";
+  const stderr = String(err.stderr ?? "").trim();
+  if (/auth login|not logged in|authentication/i.test(stderr)) return `gh is not logged in: run \`gh auth login\` (${stderr.split("\n")[0]})`;
+  return (stderr || err.message || "gh failed").split("\n")[0];
+}
+
 export function parsePrChecks(j: { mergeable?: string; statusCheckRollup?: Array<Record<string, any>> }): PrChecks {
   const failing: string[] = [], pending: string[] = [];
   let total = 0;
@@ -59,6 +69,8 @@ export interface Workspace {
   runTests(): { ok: boolean; output: string };
   push(branch: string): void;
   openPr(vars: Record<string, string>, command: string): string;
+  /** Whether the branch exists on the remote; undefined when it cannot be known. The PR needs its base branch there. */
+  remoteBranchExists?(branch: string): boolean | undefined;
   /** Reviews of the PR and its head commit; the senior's decision when CODE_REVIEW_GATE=github. */
   prReviews?(url: string): { head: string; reviews: PrReview[] };
   /** State of the PR (gh): whether a person already merged it, and who. */
@@ -190,11 +202,23 @@ export class GitWorkspace implements Workspace {
 
   push(branch: string) { this.git("push", "-u", "origin", branch); }
 
+  /** Runs gh (execFile, no shell) and fails with a message that says what to do: not installed, not logged in... */
+  private gh(args: string[]): string {
+    try {
+      return execFileSync("gh", args, { cwd: this.cfg.repoPath, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+    } catch (e) { throw new Error(ghFailure(e)); }
+  }
+
+  /** Whether the branch exists on origin; undefined when it cannot be known (no remote, offline): that never blocks. */
+  remoteBranchExists(branch: string): boolean | undefined {
+    const r = spawnSync("git", ["ls-remote", "--exit-code", "--heads", "origin", branch], { cwd: this.cfg.repoPath, encoding: "utf8", windowsHide: true });
+    if (r.status === 0) return true;
+    return r.status === 2 ? false : undefined;   // 2: the remote answered and the branch is not there
+  }
+
   prReviews(url: string) {
-    // execFile (no shell): the url comes from the PR output stored by orqen, but it is never interpolated into a command line
-    const out = execFileSync("gh", ["pr", "view", url, "--json", "headRefOid,reviews"], {
-      cwd: this.cfg.repoPath, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"],
-    });
+    // the url comes from the PR output stored by orqen, but it is never interpolated into a command line
+    const out = this.gh(["pr", "view", url, "--json", "headRefOid,reviews"]);
     const j = JSON.parse(out) as { headRefOid: string; reviews?: Array<{ id: string; author?: { login?: string }; state: string; body?: string; commit?: { oid?: string } }> };
     return {
       head: j.headRefOid,
@@ -222,17 +246,13 @@ export class GitWorkspace implements Workspace {
   }
 
   prState(url: string): PrState {
-    const out = execFileSync("gh", ["pr", "view", url, "--json", "state,mergedAt,mergedBy"], {
-      cwd: this.cfg.repoPath, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"],
-    });
+    const out = this.gh(["pr", "view", url, "--json", "state,mergedAt,mergedBy"]);
     const j = JSON.parse(out) as { state: string; mergedAt?: string; mergedBy?: { login?: string } };
     return { state: j.state === "MERGED" ? "MERGED" : j.state === "CLOSED" ? "CLOSED" : "OPEN", mergedAt: j.mergedAt || undefined, mergedBy: j.mergedBy?.login || undefined };
   }
 
   prChecks(url: string): PrChecks {
-    const out = execFileSync("gh", ["pr", "view", url, "--json", "mergeable,statusCheckRollup"], {
-      cwd: this.cfg.repoPath, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"],
-    });
+    const out = this.gh(["pr", "view", url, "--json", "mergeable,statusCheckRollup"]);
     return parsePrChecks(JSON.parse(out));
   }
 

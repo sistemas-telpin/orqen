@@ -248,7 +248,10 @@ export async function runWorkflow(cmd: string, rest: string[]) {
           if (!key) throw new Error("Usage: orqen approve <KEY> [--changes <comment.md|->] [--comment <text>]");
           const body = changes !== undefined ? (changes === "-" || changes === "" ? readFileSync(0, "utf8") : readFileSync(changes, "utf8")) : (comment ?? "");
           const r = await flow.decide(key, changes !== undefined ? "changes" : "approve", body, me || "senior", agent, force);
-          console.log(r.state === "DEVELOPMENT" ? `✔ changes requested on ${r.url}: back to development` : `✔ PR approved (${r.url}) → ${r.state}`);
+          if (r.state === "DEVELOPMENT") console.log(`✔ changes requested on ${r.url}: back to development`);
+          else console.log(r.onGitHub ? `✔ PR approved on GitHub (${r.url}) → ${r.state}`
+            : `✔ Approval recorded in the tickets (${r.url}) → ${r.state}. The gate is "ticket": no review was posted on GitHub.`);
+          if (r.warning) console.log(`⚠ ${r.warning}`);
         } catch (e) {
           console.error(`✘ ${(e as Error).message}`);
           process.exitCode = 1;

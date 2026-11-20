@@ -1,6 +1,20 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { toMarkdown } from "../src/connectors/markup.ts";
+import { toMarkdown, toPlain } from "../src/connectors/markup.ts";
+
+test("Jira wiki markup becomes readable plain text for Asana", () => {
+  const wiki = [
+    "h2. Analysis", "*Type:* feature, see [the spec|https://x.test/s] and {{orqen pr}}", "",
+    "*Acceptance criteria:*", "* Dado A, entonces B.", "* Dado C, entonces D.", "",
+    "# ¿Excel o CSV?", "# ¿Con estado?", "{code:sql}", "select 1;", "{code}", "2 * 3 = 6",
+  ].join("\n");
+  assert.equal(toPlain(wiki), [
+    "Analysis", "Type: feature, see the spec (https://x.test/s) and orqen pr", "",
+    "Acceptance criteria:", "• Dado A, entonces B.", "• Dado C, entonces D.", "",
+    "1. ¿Excel o CSV?", "2. ¿Con estado?", "    select 1;", "2 * 3 = 6",
+  ].join("\n"));
+  assert.equal(toPlain("Texto sin formato.\nOtra línea."), "Texto sin formato.\nOtra línea.");
+});
 
 test("Jira wiki markup becomes Markdown for GitHub: numbered lists are not headings, bold stays bold", () => {
   const wiki = [

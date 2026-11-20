@@ -28,6 +28,35 @@ export function toMarkdown(text: string): string {
   return out.join("\n");
 }
 
+/**
+ * Plain text for tools that show comments as typed (Asana's `text`): the Jira markup goes away without losing structure.
+ * `*bold*` → bold, `* item` → `• item`, `# item` → `1. item`, `h2. Title` → Title, `{{x}}` → x, `[text|url]` → text (url),
+ * `{code}` blocks keep their lines, indented. Text with no markup is returned as it is.
+ */
+export function toPlain(text: string): string {
+  const out: string[] = [];
+  let fence = false, numbered = 0;
+  for (const raw of text.replace(/\r\n/g, "\n").split("\n")) {
+    if (/^\s*\{(?:code|noformat)(?::[\w+-]+)?\}\s*$/.test(raw)) { fence = !fence; continue; }
+    if (fence) { out.push(`    ${raw}`); continue; }
+    const n = raw.match(/^#\s+(.*)$/);
+    if (n) { numbered++; out.push(`${numbered}. ${plainInline(n[1])}`); continue; }
+    numbered = 0;
+    const h = raw.match(/^h[1-6]\.\s+(.*)$/);
+    if (h) { out.push(plainInline(h[1])); continue; }
+    const b = raw.match(/^\*\s+(.*)$/);
+    out.push(b ? `• ${plainInline(b[1])}` : plainInline(raw));
+  }
+  return out.join("\n");
+}
+
+function plainInline(line: string): string {
+  return line
+    .replace(/(?<![*\w])\*(?=\S)([^*\n]+?)(?<=\S)\*(?![*\w])/g, "$1")
+    .replace(/\{\{([^}\n]+)\}\}/g, "$1")
+    .replace(/\[([^\]|\n]+)\|(https?:\/\/[^\]\s]+)\]/g, "$1 ($2)");
+}
+
 function inline(line: string): string {
   return line
     // *bold* → **bold** (not when it is already **bold**, nor a * inside a word)

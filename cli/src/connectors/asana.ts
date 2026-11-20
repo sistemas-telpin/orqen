@@ -4,6 +4,7 @@
  * of the project; "completed" marks it done. Asana tags need ids, so the state is not mirrored as a tag.
  */
 import { type AsanaSettings, idOf, keyOf } from "./config.ts";
+import { toPlain } from "./markup.ts";
 import { BOT_MARK, type Comment, type NewTicket, type Ticket, type Tracker, checkFailure } from "./types.ts";
 
 const API = "https://app.asana.com/api/1.0";
@@ -70,7 +71,7 @@ export class AsanaTracker implements Tracker {
   }
 
   async comment(key: string, text: string) {
-    await this.req("POST", `/tasks/${this.gid(key)}/stories`, { text: `${BOT_MARK} ${text}` });
+    await this.req("POST", `/tasks/${this.gid(key)}/stories`, { text: `${BOT_MARK} ${toPlain(text)}` });
   }
 
   async setStateLabel() { /* Asana tags are objects with ids: the state is shown with the section (transiciones) */ }
@@ -85,7 +86,7 @@ export class AsanaTracker implements Tracker {
   }
 
   async create(t: NewTicket) {
-    const r = await this.req("POST", "/tasks", { name: t.title.slice(0, 250), notes: t.description, projects: [this.needProject()] });
+    const r = await this.req("POST", "/tasks", { name: t.title.slice(0, 250), notes: toPlain(t.description), projects: [this.needProject()] });
     return keyOf(this.s.prefix, r.gid);
   }
 

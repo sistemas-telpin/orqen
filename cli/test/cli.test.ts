@@ -60,7 +60,7 @@ test("desktop release discovery is read-only and installs only the confirmed ver
     version: "0.1.8",
     notes: "New bot settings",
     commits: ["Fix the Worq chat"],
-    url: "https://github.com/sistemas-telpin/orqen-gui/compare/v0.1.7...v0.1.8",
+    url: "https://github.com/sistemas-telpin/orqen-studio/compare/v0.1.7...v0.1.8",
   });
   const current = orqenCon(env, repo, "desktop-release", "0.1.8");
   assert.equal(current.codigo, 0, current.salida);

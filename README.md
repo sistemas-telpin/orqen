@@ -8,7 +8,7 @@ Su arquitectura permite que múltiples agentes colaboren de manera coordinada en
 
 Uno de sus pilares es el aprendizaje continuo a partir de la experiencia: aprovechar los resultados de desarrollos anteriores para enriquecer una base de conocimiento reutilizable y mejorar progresivamente los procesos de trabajo.
 
-El flujo completo son **9 pasos**, uno por comando: `list requests` · `support` · `analyze` · `list issues` · `implement` · `pr` · `review` (QA, solo carril completo) · `list prs` · `approve` (senior). En la [app de escritorio](https://github.com/sistemas-telpin/orqen-gui), al elegir un pedido se abre una terminal para chatear con el agente con el comando que sigue ya sugerido.
+El flujo completo son **9 pasos**, uno por comando: `list requests` · `support` · `analyze` · `list issues` · `implement` · `pr` · `review` (QA, solo carril completo) · `list prs` · `approve` (senior). En la [app de escritorio](https://github.com/sistemas-telpin/orqen-studio), al elegir un pedido se abre una terminal para chatear con el agente con el comando que sigue ya sugerido.
 Cada pedido que orqen toma es un **worq**, su unidad de trabajo: el request del cliente, su issue, la rama, la spec, el PR y el registro de cada etapa,
 todo identificado por la clave del request y guardado en `orqen/worqs/<KEY>/`. `orqen worqs` los lista y `orqen worq <KEY>` muestra uno.
 El recorrido completo, con los comandos `orqen`, las skills `/orqen:*` y qué hace cada una: [docs/flujo-paso-a-paso.md](docs/flujo-paso-a-paso.md).
@@ -367,39 +367,6 @@ y la verificación; una persona de `APPROVERS_EXECUTION` autoriza y aplica, y el
 que la causa es de código, el pedido vuelve a ANALYSIS y nace un issue de desarrollo.
 
 
-## Crear un proyecto nuevo: `orqen bootstrap`
-
-Arma un repo desde cero, con el código base, los scripts que levantan sus entornos y orqen ya listo para los agentes:
-
-```sh
-orqen bootstrap "Plataforma de Pagos"                          # pregunta el stack y los datos
-orqen bootstrap "Facturación" --stack java-tomcat-sqlserver --dir ./facturacion
-orqen bootstrap --list                                                 # lista los stacks disponibles
-```
-
-1. Pide el repositorio de GitHub del equipo si todavía no está clonado, y pregunta el nombre, la carpeta y el **stack** disponible en ese catálogo.
-2. Revisa los requisitos (Node, Maven, Docker…) y pide los parámetros del stack (puertos, paquete Java); si un puerto está
-   ocupado propone el siguiente libre.
-3. Crea la carpeta y el repo git, genera el código (generadores oficiales, como `create-vue`, más un esqueleto propio con
-   health check, migraciones y tests de ejemplo) y copia a `orqen/tools/` el script de la base (`orqen/tools/db.mjs`, PostgreSQL o
-   SQL Server en Docker).
-4. Corre `orqen init` con el stack y los entornos ya definidos (sin detección ni IA): OpenSpec, conectores, `AGENTS.md`, plugin.
-5. Ofrece el commit inicial.
-
-Después: `cd <carpeta>`, `orqen env up` (base + backend + migraciones; `--all` también el front) y `orqen env test`.
-Los stacks viven en un repositorio de GitHub de cada equipo, que puede ser privado. Solo `orqen bootstrap` pide su ruta (por ejemplo `@telpin-sistemas/tools`) y se clona dentro de `cli/tools/`, junto a la instalación del CLI. El repositorio puede tener cualquier nombre; `cli/tools/` es solo el destino local del clon. Cada stack mantiene `<id>/tool.yaml` y su esqueleto; los scripts compartidos van en `_shared/`. El catálogo se reutiliza en las siguientes ejecuciones, se ignora en Git y no se incluye en el paquete npm.
-
-Quien ejecuta el comando necesita acceso al repositorio mediante sus credenciales de Git (HTTPS con un credential helper, o SSH). No se guardan tokens en la configuración. Para automatizar el primer `bootstrap`, se requiere `--tools-repo` o `ORQEN_TOOLS_REPO` si el catálogo todavía no está clonado:
-
-```sh
-orqen bootstrap "Mi proyecto" --yes --tools-repo @telpin-sistemas/stacks
-# También: ORQEN_TOOLS_REPO=@telpin-sistemas/tools
-```
-
-Para actualizar el catálogo se usa `git -C cli/tools pull --ff-only` desde la carpeta de instalación de orqen. Para cambiar de repositorio, mover el clon anterior y ejecutar con otro `--tools-repo`. Los stacks anteriores a esta separación quedan localmente en `cli/tools-backup/` (ignorado). orqen no usa esa carpeta: se puede borrar cuando sus archivos ya estén trasladados al repo privado o respaldados.
-
-`/orqen:implement DEV-32` ejecuta internamente `orqen swarm` con el contexto y el plan aprobado del ticket. Verifica el resultado y lo integra en la rama del pedido; la persona ve el avance y los resultados de la implementación sin tener que ejecutar otro comando.
-
 ## Instalación en un repo
 
 ```sh
@@ -522,8 +489,8 @@ Las credenciales de proveedores van en `~/.orqen/credentials.env`. El resto son 
 
 ## App de escritorio
 
-La app de escritorio (Rust + GPUI) es un proyecto aparte: **[orqen-gui](https://github.com/sistemas-telpin/orqen-gui)**. Este repo es solo la CLI y no depende de ella: `orqen` sin argumentos muestra la ayuda.
-La app no tiene lógica propia: usa la CLI instalada (`npm i -g @telpin-sistemas/orqen`) con sus salidas `--json` (`status`, `list requests`, `env status`, `connectors get|check|set`, `bootstrap --list|--describe`, `tutorial --step`, `usage`). Si cambiás esas salidas, avisá en orqen-gui.
+La app de escritorio (Rust + GPUI) es un proyecto aparte: **[orqen-studio](https://github.com/sistemas-telpin/orqen-studio)**. Este repo es solo la CLI y no depende de ella: `orqen` sin argumentos muestra la ayuda.
+La app no tiene lógica propia: usa la CLI instalada (`npm i -g @telpin-sistemas/orqen`) con sus salidas `--json` (`status`, `list requests`, `env status`, `connectors get|check|set`, `tutorial --step`, `usage`). Si cambiás esas salidas, avisá en orqen-studio.
 
 ## Conectores: sistema de requests y sistema de issues
 
@@ -715,12 +682,11 @@ Los pedidos nuevos no se toman solos: quedan en NEW hasta que soporte corre `sup
 ### Comandos
 
 ```text
-orqen                                  Muestra la ayuda (la app de escritorio es aparte: orqen-gui)
+orqen                                  Muestra la ayuda (la app de escritorio es aparte: orqen-studio)
 orqen init [dir]                       Inicializa un repo
 orqen update [dir]                     Actualiza la CLI y, dentro de un proyecto orqen, OpenSpec y el kit
 orqen update --desktop                 Actualiza la app de escritorio instalada globalmente con npm
 
-orqen bootstrap [nombre] [--stack <id>] [--dir <carpeta>] · orqen bootstrap --list
 orqen env setup | up [--all] | test [tipo] | status | down
 orqen tutorial [paso] [--step <n|id>] [--list] [--lang es|en]   Tutorial paso a paso · orqen lang: idioma detectado
 orqen swarm "<tarea>" [--parallel N] [--plan-only | --plan plan.json] [--small C] [--large C] [--yes]

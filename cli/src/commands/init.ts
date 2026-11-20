@@ -38,8 +38,6 @@ export interface OpcionesInit {
   agente?: string;
   sinOpenspec?: boolean;
   herramientas?: string[];
-  /** Called from `orqen bootstrap`: the logo was already shown. */
-  sinLogo?: boolean;
   /** Skip the connectors step (keep the ones the repository already has). */
   sinConectores?: boolean;
   /** Commit what init wrote (without asking). Interactively init asks; with --yes it only commits with --commit. */
@@ -66,7 +64,7 @@ const HERRAMIENTAS_OPENSPEC = [
 export async function init(o: OpcionesInit) {
   const repo = resolve(o.dir ?? process.cwd());
   let yes = !!o.yes;
-  if (!o.sinLogo) await mostrarLogo({
+  await mostrarLogo({
     animar: !o.sinAnimacion && !o.yes, esperarTecla: true,
     bienvenida: [
       "Initialization will:",
@@ -216,7 +214,6 @@ export async function init(o: OpcionesInit) {
       gris(`(type /orqen: to list them; check with /plugin → orqen@${mk})`),
     ...(!commiteado ? [`Commit the changes (orqen/, .claude/, .claude-plugin/, AGENTS.md, CLAUDE.md, openspec/) so the team gets the same commands: ${pc.cyan('git add -A && git commit -m "Install orqen"')}`] : []),
   ];
-  if (o.sinLogo) return;   // `orqen bootstrap` shows its own next steps
   p.note(pasos.map((x, i) => `${pc.bold(`${i + 1}.`)} ${x}`).join("\n"), "Next steps");
   p.outro(`${magenta("//")} ${pc.bold("From request to production.")}`);
 }

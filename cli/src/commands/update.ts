@@ -21,7 +21,7 @@ import { moveWorkToWorqs } from "../lib/worqs.ts";
 export interface OpcionesUpdate { dir?: string; yes?: boolean; sinCli?: boolean; sinOpenspec?: boolean; sinKit?: boolean; sinAnimacion?: boolean; cliOnly?: boolean; desktop?: boolean; json?: boolean; target?: string }
 
 const PAQUETES_DESKTOP = ["@telpin-sistemas/orqen-studio", "@telpin-sistemas/orqen-desktop"];
-const DESKTOP_REPO = "sistemas-telpin/orqen-gui";
+const DESKTOP_REPO = "sistemas-telpin/orqen-studio";
 
 function paqueteGlobal(gestor: string, paquete: string): string {
   const r = ejecutar(gestor, ["root", "-g"], { timeoutMs: 20_000 });

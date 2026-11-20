@@ -1,6 +1,6 @@
 /**
  * Key names of orqen/config.yaml and orqen/environment.yaml. The files use English keys; the code (and the JSON that tools
- * such as orqen-gui exchange with `orqen connectors get|set`) keeps the internal names. Files written by earlier versions,
+ * such as orqen-studio exchange with `orqen connectors get|set`) keeps the internal names. Files written by earlier versions,
  * with the keys in Spanish, are still read: each key is accepted under either name.
  */
 

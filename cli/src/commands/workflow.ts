@@ -48,7 +48,7 @@ Request commands for people:
 
 Agent-only commands (the /orqen:* commands run them) and JSON for tools: orqen help internal`;
 
-/** What only the agent runs (inside the /orqen:* commands) and the JSON commands for tools such as orqen-gui. */
+/** What only the agent runs (inside the /orqen:* commands) and the JSON commands for tools such as orqen-studio. */
 export const WORKFLOW_INTERNAL_HELP = `Agent-only commands (the /orqen:* commands run them; a person does not need them):
   support <KEY> [--person NAME]          2 · Open or resume first-line support and print the context
   analyze <KEY> [--analyst NAME]         3 · Open or resume the analysis and print the context
@@ -65,12 +65,11 @@ export const WORKFLOW_INTERNAL_HELP = `Agent-only commands (the /orqen:* command
 
 Older names (still work, with a notice): pending → list requests · qa → review
 
-JSON for tools (orqen-gui):
+JSON for tools (orqen-studio):
   status [KEY] --json · list requests|issues|prs --json · usage --json · tutorial --step <n> --json
   spec [KEY|change] --json [--dir <worktree>]   the spec in the neutral model of src/sdd (any SDD tool)
   connectors get|check <json>|set <json>|general-get|general-set [--json]
-  connectors github-choices <json|-> <requests|issues> <repositories|projects|statuses>
-  bootstrap --list --json · bootstrap --describe <stack> --json`;
+  connectors github-choices <json|-> <requests|issues> <repositories|projects|statuses>`;
 
 /** The person at this machine: Git's user.name for this repository, otherwise the system user. */
 export function quienSoy(repo: string): string | undefined {
@@ -506,7 +505,7 @@ export async function runWorkflow(cmd: string, rest: string[]) {
         return;
       }
       case "connectors": {
-        // JSON for tools such as orqen-gui: {"conectores": {...}, "env": {"JIRA_TOKEN": "..."}} on stdin or in a file
+        // JSON for tools such as orqen-studio: {"conectores": {...}, "env": {"JIRA_TOKEN": "..."}} on stdin or in a file
         const draftInput = () => JSON.parse(!rest[1] || rest[1] === "-" ? readFileSync(0, "utf8") : readFileSync(rest[1], "utf8"));
         if (rest[0] === "general-get" || rest[0] === "general-set") {
           const { leerConfig, escribirConfig } = await import("../lib/config.ts");
@@ -518,7 +517,7 @@ export async function runWorkflow(cmd: string, rest: string[]) {
           escribirConfig(cfg.repoPath, updated);
           return console.log(JSON.stringify({ general: updated.general, hasHistory }));
         }
-        // a connectors editor (orqen-gui): current values (tokens masked) and a check of a draft before saving it
+        // a connectors editor (orqen-studio): current values (tokens masked) and a check of a draft before saving it
         if (rest[0] === "get") {
           const { connectorsView } = await import("../lib/connectors-edit.ts");
           const { existeConfig, leerConfig } = await import("../lib/config.ts");

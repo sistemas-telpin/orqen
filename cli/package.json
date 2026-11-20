@@ -1,6 +1,6 @@
 {
   "name": "@telpin-sistemas/orqen",
-  "version": "0.1.8",
+  "version": "0.1.10",
   "description": "orqen multi-agent orchestration on OpenSpec, from customer request to production.",
   "type": "module",
   "bin": {
@@ -19,7 +19,7 @@
     "dev": "tsx src/index.ts",
     "build": "tsc -p tsconfig.build.json && node scripts/copy-template.mjs",
     "test": "npm run build && node --import tsx --test test/*.test.ts",
-    "test:e2e": "npm run build && node --import tsx --test test/*e2e.test.ts test/cli.test.ts test/bootstrap.test.ts test/swarm-apply.test.ts test/tools-repository.test.ts test/workflow-environment.test.ts",
+    "test:e2e": "npm run build && node --import tsx --test test/*e2e.test.ts test/cli.test.ts test/swarm-apply.test.ts test/tools-repository.test.ts test/workflow-environment.test.ts",
     "typecheck": "tsc --noEmit",
     "setup": "npm run build && npm link",
     "prepack": "npm run build",

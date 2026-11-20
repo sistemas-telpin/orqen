@@ -69,7 +69,7 @@ const tail = (s: string, n = 4000) => (s.length > n ? `…${s.slice(-n)}` : s);
 export function workerPrompt(task: string, plan: Plan, st: Subtask, o: { done: string[]; feedback?: string; tier: string }): string {
   const others = plan.subtasks.filter((x) => x.id !== st.id && !o.done.includes(x.id) && x.files.length);
   return [
-    "You are an ORQEN swarm worker. You are in a git worktree of the repository and must complete ONE small",
+    "You are an orqen swarm worker. You are in a git worktree of the repository and must complete ONE small",
     "subtask of a larger task. Other workers handle the other subtasks in parallel in their own worktrees.",
     "",
     "Overall task (context only, do not do all of it):",
@@ -96,7 +96,7 @@ export function workerPrompt(task: string, plan: Plan, st: Subtask, o: { done: s
 
 export function fixerPrompt(task: string, plan: Plan, command: string, output: string): string {
   return [
-    "You are the ORQEN swarm integrator. Several workers completed the subtasks below and their work was merged",
+    "You are the orqen swarm integrator. Several workers completed the subtasks below and their work was merged",
     "into this worktree, but the final verification fails. Fix the integration problems with minimal changes.",
     "Do not commit, create branches, or push.",
     "",

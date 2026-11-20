@@ -42,7 +42,7 @@ export const RUTA_PROPUESTA = "orqen/tmp/stack-proposal.json";
 
 export function promptExploracion(deteccion: { stack: Stack; evidencias: string[] }, errores?: string[]): string {
   return [
-    "You are the ORQEN setup agent.",
+    "You are the orqen setup agent.",
     "Inspect this repository from its root and propose its stack and environments",
     "so other agents can start it and run all tests (unit, integration,",
     "end-to-end, and visual) without manual setup. Each part runs on the host with its own command",
@@ -133,7 +133,7 @@ export function comandoRapido(comando: string): string {
 
 export function promptRapido(repo: string, deteccion: { stack: Stack; evidencias: string[] }, errores?: string[]): string {
   return [
-    "You are the ORQEN setup agent. Use only the information below. Do not call tools,",
+    "You are the orqen setup agent. Use only the information below. Do not call tools,",
     "read files, or run commands. In one response, propose a stack and environments so",
     "other agents can start the project and run its unit, integration, end-to-end, and visual tests.",
     "Each part runs on the host with its own command (npm run dev, npm start, mvn spring-boot:run…): set `comandos.dev`",

@@ -15,7 +15,7 @@ import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
 const [tier, behaviorPath] = process.argv.slice(2);
 const b = JSON.parse(readFileSync(behaviorPath, "utf8"));
 const prompt = readFileSync(0, "utf8");
-if (prompt.includes("ORQEN swarm integrator")) { if (b.fixFinal) writeFileSync("FINAL", "ok"); process.exit(0); }
+if (prompt.includes("orqen swarm integrator")) { if (b.fixFinal) writeFileSync("FINAL", "ok"); process.exit(0); }
 const id = prompt.match(/Your subtask: ([a-z0-9-]+)/)[1];
 appendFileSync(b.trace, "start " + id + " " + tier + "\\n");
 await new Promise((r) => setTimeout(r, b.sleep ?? 0));

@@ -98,7 +98,7 @@ Propose the steps, rollback, and read-only verification. A person authorized by 
 
 ### Implementation execution
 
-`/orqen:implement <KEY>` runs `orqen swarm --file <task> --yes --json --apply` internally after the person approves the implementation plan. Supply the approved analysis, scope, criteria, spec or direct plan, and feedback as task context. ORQEN integrates a verified result into the request branch. Do not ask the person to run the engine or show its worker logs; report scope, progress, decisions and results. A failed run or integration must not advance the stage. Keep the existing approval before `orqen complete`.
+`/orqen:implement <KEY>` runs `orqen swarm --file <task> --yes --json --apply` internally after the person approves the implementation plan. Supply the approved analysis, scope, criteria, spec or direct plan, and feedback as task context. orqen integrates a verified result into the request branch. Do not ask the person to run the engine or show its worker logs; report scope, progress, decisions and results. A failed run or integration must not advance the stage. Keep the existing approval before `orqen complete`.
 
 ### Integration PR, QA, and code review
 

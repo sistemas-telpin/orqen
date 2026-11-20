@@ -40,7 +40,7 @@ export function saveProviders(connectors: ConectoresYaml, draft: Record<string, 
   }
   const file = providerFile();
   mkdirSync(dirname(file), { recursive: true, mode: 0o700 });
-  writeFileSync(file + ".tmp", completarEnv("# ORQEN provider accounts for this user. Never commit this file.\n", values), { mode: 0o600 });
+  writeFileSync(file + ".tmp", completarEnv("# orqen provider accounts for this user. Never commit this file.\n", values), { mode: 0o600 });
   renameSync(file + ".tmp", file);
   chmodSync(file, 0o600);
   rmSync(legacyFile(), { force: true });   // everything it had is now in credentials.env

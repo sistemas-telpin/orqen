@@ -1,5 +1,5 @@
 /**
- * ORQEN terminal logo and animated welcome screen.
+ * orqen terminal logo and animated welcome screen.
  *
  * Draw the hexagon and wordmark on a pixel canvas using two pixels per
  * terminal cell, with foreground and background colors on the upper half block (▀).

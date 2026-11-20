@@ -356,11 +356,10 @@ Si se agotan los reintentos o hay un error, el pedido pasa a **BLOCKED**. Una pe
 (`APPROVERS_ANALYSIS` + `APPROVERS_CODE`): el pedido vuelve a la etapa en la que se bloqueó, con los contadores de reintentos en cero
 y las indicaciones como feedback para el agente.
 
-**Desarrollo interno.** El trabajo que arranca el propio equipo, sin cliente, sin request y sin issue, se hace con el mismo flujo pero sin soporte ni análisis:
-`/orqen:internal <título>` (o `orqen new "<título>" <brief.json>`) crea el worq `INT-<n>` directamente en DEVELOPMENT, carril directo, con el brief
+**Worq propio del equipo.** El trabajo que arranca el propio equipo, sin cliente ni request, se hace con el mismo flujo pero sin soporte ni análisis:
+`/orqen:new_worq <título>` (o `orqen new_worq "<título>" <brief.json>`) crea el issue en el conector que uses (el de issues, o el de requests si no hay) y el worq con esa clave directamente en DEVELOPMENT, carril directo, con el brief
 (descripción, criterios de aceptación y plan con horas) en lugar del análisis. Sigue `implement → testing → PR → review del senior`, sin QA, y
-**se cierra solo cuando una persona mergea el PR** (no hay entrega ni aceptación del cliente). Su ticket es `orqen/worqs/INT-<n>/ticket.json`, junto al resto
-del worq y viaja con la rama: no se crea nada en Jira, GitHub ni Asana.
+**se cierra solo cuando una persona mergea el PR** (no hay entrega ni aceptación del cliente). El issue se cierra junto con el worq.
 
 **Carril operativo.** Si el pedido se resuelve sin cambiar código, el flujo es
 `ANALYSIS → EXECUTION → EXECUTION_APPROVAL → APPLICATION → VERIFICATION → ACCEPTANCE → CLOSED`: el agente propone el script, el rollback
@@ -732,7 +731,7 @@ orqen status [KEY] [--json]            Dónde está un pedido, quién actúa y q
 orqen worqs [--all] [--json]           Los worqs de esta máquina (la unidad de trabajo de orqen, uno por pedido), con estado y carpeta
 orqen worq <KEY> [--json]              Un worq: estado, request, issue, rama, PR y los archivos de su registro en orqen/worqs/<KEY>/
 orqen merged <KEY> [--person NOMBRE]   Confirma el merge manual del PR cuando orqen no puede leerlo (sin gh)
-orqen new "<título>" <brief.json|-> Desarrollo interno sin request: arranca en DEVELOPMENT (INT-n), sin soporte ni análisis
+orqen new_worq "<título>" <brief.json|-> Worq propio sin request: crea el issue en el conector y arranca en DEVELOPMENT, sin soporte ni análisis
 orqen cancel <KEY> --reason <texto>    Cancela el pedido sin entregar: cierra el PR sin mergear y comenta en los tickets
 orqen release <KEY>                    Libera la reserva de un pedido
 orqen connectors [setup] [--json]      Muestra y prueba los conectores (requests e issues), o los configura

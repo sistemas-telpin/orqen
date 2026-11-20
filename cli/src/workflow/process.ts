@@ -22,7 +22,6 @@ import { Factory } from "./factory.ts";
 import { canLinkNatively, type Comment, type Connectors, isBotComment, LEGACY_STATE_LABELS, STATE_LABEL, type Tracker } from "../connectors/index.ts";
 import { type Scenario, type OpenSpecApi, type Task, hoursOf } from "./openspec.ts";
 import { reviewSql } from "./sql.ts";
-import { InternalTracker } from "../connectors/internal.ts";
 import { RoutedTracker } from "./routed.ts";
 import { type WorkItem, Store, newWorkItem } from "./store.ts";
 import { needsQa, nextSteps, returned, roleOf, workKey, type NextStep, type Role } from "./board.ts";
@@ -54,7 +53,6 @@ export class Process {
   private fac: Factory;
   /** Where the client's ticket lives. */
   private requests: Tracker;
-  private internalTracker: InternalTracker;
   /** The configured requests connector, without the routing of internal worqs (to compare it with the issues connector). */
   private realRequests: Tracker;
   /** Where the team's ticket is created (optional). */
@@ -65,8 +63,9 @@ export class Process {
   ) {
     this.fac = new Factory(cfg.factoryDir);
     this.realRequests = connectors.requests;
-    this.internalTracker = new InternalTracker(cfg.factoryDir);
-    this.requests = new RoutedTracker(connectors.requests, this.internalTracker);
+    const own = (key: string) => this.store.get(key)?.origin === "internal";
+    this.requests = new RoutedTracker(connectors.requests, connectors.issues ?? connectors.requests, own,
+      () => this.store.all().filter((i) => own(i.key) && !["CLOSED", "CANCELLED"].includes(i.state)).map((i) => i.key));
     this.issues = connectors.issues;
   }
 
@@ -366,7 +365,7 @@ export class Process {
     if (item.state === "SUPPORT" && !fromAnalyze)
       throw new Error(`Support for ${key} is driven by a person: use /orqen:support ${key} (or \`orqen support ${key}\`).`);
     if (item.origin === "internal" && item.state === "DELIVERY")
-      throw new Error(`${key} is an internal development: there is no delivery to a client. It closes by itself when its PR is merged (orqen merged ${key} if orqen cannot read it).`);
+      throw new Error(`${key} is a worq started by the team: there is no delivery to a client. It closes by itself when its PR is merged (orqen merged ${key} if orqen cannot read it).`);
     this.assertClaimable(item, agent);
     item.lock = { agent, since: new Date().toISOString() };
     this.store.save(item);
@@ -662,7 +661,7 @@ export class Process {
     item.artifacts.estimated_hours = item.change
       ? this.os.tasks(item.change).reduce((a, t) => a + (t.hours ?? 0), 0)
       : s.estimated_hours;
-    if (item.origin !== "internal") await this.createIssue(item);   // an internal development has no issue: its worq folder is the record
+    if (item.origin !== "internal") await this.createIssue(item);   // a worq of the team already has its issue (created by `orqen new_worq`)
     this.recordAnalysis(item, s);
     if (item.change) this.ws.commit(item.key, `spec OpenSpec ${item.change}`);
   }
@@ -673,7 +672,7 @@ export class Process {
     this.fac.write(item, "analysis.md",
       `# ${item.key} — analysis (round ${item.round})\n\n` +
       `- **Analyst:** ${item.analyst ?? "?"}\n- **Route:** ${s.route}\n- **Lane:** ${s.lane}\n- **Lane rationale:** ${s.lane_rationale}\n` +
-      `- **Issue:** ${item.issue ?? "—"}\n` + (item.change ? `- **OpenSpec change:** openspec/changes/${item.change}/\n` : "") +
+      `- **Issue:** ${item.issue ?? (item.origin === "internal" ? item.key : "—")}\n` + (item.change ? `- **OpenSpec change:** openspec/changes/${item.change}/\n` : "") +
       (item.artifacts.estimated_hours !== undefined ? `- **Estimate:** ${item.artifacts.estimated_hours} h\n` : "") +
       `\n## Summary\n\n${s.summary}\n\n` +
       md("Acceptance criteria", s.acceptance_criteria) +
@@ -927,41 +926,50 @@ export class Process {
     if (item.issue && this.issues) await this.attemptAsync(() => this.issues!.comment(item.issue!, text));
   }
 
-  // ================================================================ internal development
+  // ================================================================ worq started by the team
   /**
-   * `orqen new "<title>" <brief.json>`: development the team starts itself, with no client request and no issue. It skips support and
-   * analysis: the brief (summary, acceptance criteria and plan) takes the place of the analysis and the worq is born in DEVELOPMENT, direct
-   * lane (implement → testing → PR → senior). Its ticket is a file in the worq folder and it closes when its PR is merged.
+   * `orqen new_worq "<title>" <brief.json>`: work the team starts itself, with no client request. It creates the issue in the connector in
+   * use (issues, or requests when there is none) and skips support and analysis: the brief (description, acceptance criteria and plan)
+   * takes the place of the analysis and the worq, keyed by that issue, is born in DEVELOPMENT, direct lane (implement → testing → PR →
+   * senior). It closes when its PR is merged.
    */
-  async newInternal(title: string, raw: unknown, person: string) {
+  async newWorq(title: string, raw: unknown, person: string) {
     const t = title.trim();
-    if (t.length < 5) throw new Error("A title for the internal development is required (at least 5 characters).");
+    if (t.length < 5) throw new Error("A title for the worq is required (at least 5 characters).");
     const b = (raw ?? {}) as Record<string, unknown>;
     const description = typeof b.description === "string" ? b.description.trim() : "";
-    const key = await this.internalTracker.create({ title: t, description, route: "development" });
     const analysis = {
       summary: typeof b.summary === "string" && b.summary.trim() ? b.summary.trim() : description || t,
       type: "change", acceptance_criteria: b.acceptance_criteria, affected_capabilities: [], open_questions: [], risks: Array.isArray(b.risks) ? b.risks : [],
-      ready: true, analyst_ok: true, route: "development", lane: "direct", lane_rationale: "Internal development: no client request, direct lane.",
+      ready: true, analyst_ok: true, route: "development", lane: "direct", lane_rationale: "Started by the team: no client request, direct lane.",
       plan: b.plan, estimated_hours: b.estimated_hours,
     };
+    // validated before creating anything: an invalid brief must not leave an issue behind
+    const parsed = SCHEMAS.ANALYSIS.safeParse(analysis);
+    if (!parsed.success) throw new Error(`The brief is not valid:\n${parsed.error.issues.map((i) => `  ${i.path.join(".") || "(root)"}: ${i.message}`).join("\n")}`);
+    const s = parsed.data as Record<string, any>;
+    const key = await this.requests.create({
+      title: t, route: "development", labels: ["orqen", "lane-direct"],
+      description: `${description || t}\n\n*Acceptance criteria:*\n${bullets(s.acceptance_criteria)}\n\n*Plan:*\n${bullets(s.plan ?? [])}\n\n` +
+        `*Estimate:* ${s.estimated_hours ?? "?"} h\n*Started by:* ${person}\n\nCreated with orqen (no client request).`,
+    });
     const item: WorkItem = { ...newWorkItem(key), state: "ANALYSIS", origin: "internal", title: t, analyst: person, lock: { agent: "internal", since: new Date().toISOString() } };
     this.store.save(item);
     const r = await this.complete(key, analysis, "internal");
     if (!r.ok) {
-      this.store.remove(key);   // nothing was started: the ticket folder goes too, so the key is not left half-made
+      this.store.remove(key);
       rmSync(this.fac.dirOf(key), { recursive: true, force: true });
-      throw new Error(`The brief is not valid:\n${r.errors.map((e) => "  " + e).join("\n")}`);
+      throw new Error(`The issue ${key} was created, but the worq could not start:\n${r.errors.map((e) => "  " + e).join("\n")}`);
     }
     if (description) this.fac.write(item, "brief.md", `# ${key} — ${t}\n\n${description}\n`);
-    return { key, state: this.item(key)!.state, dir: this.worqRel(key) };
+    return { key, state: this.item(key)!.state, dir: this.worqRel(key), url: this.requests.url(key) };
   }
 
-  /** An internal development has nobody to deliver to: once its PR is merged it is closed. */
+  /** A worq started by the team has nobody to deliver to: once its PR is merged it is closed (and so is its issue). */
   private async closeInternal(item: WorkItem) {
     if (item.origin !== "internal" || item.state !== "DELIVERY" || !item.artifacts.devel_pr_merged) return;
-    await this.attemptAsync(() => this.requests.comment(item.key, `Internal development finished: the PR was merged into ${this.cfg.develBranch}.`));
-    await this.move(item, "CLOSED", "internal development: PR merged", "process");
+    await this.attemptAsync(() => this.requests.comment(item.key, `Finished: the PR was merged into ${this.cfg.develBranch}.`));
+    await this.move(item, "CLOSED", "PR merged", "process");
   }
 
   // ================================================================ merge (by a person)

@@ -17,7 +17,7 @@ import { Process } from "../workflow/process.ts";
 import { Store } from "../workflow/store.ts";
 import { GitWorkspace } from "../workflow/workspace.ts";
 
-export const WORKFLOW_COMMANDS = ["list", "qa", "approve", "merged", "cancel", "new", "pending", "support", "analyze", "ask", "conversation", "lane", "take", "complete", "pr", "review", "code-review", "schema", "block", "release", "search", "status", "worqs", "worq", "cycle", "connectors", "comments", "comment"];
+export const WORKFLOW_COMMANDS = ["list", "qa", "approve", "merged", "cancel", "new_worq", "pending", "support", "analyze", "ask", "conversation", "lane", "take", "complete", "pr", "review", "code-review", "schema", "block", "release", "search", "status", "worqs", "worq", "cycle", "connectors", "comments", "comment"];
 
 /** What people run: the 9 steps (as /orqen:* commands in their agent) and the CLI commands meant for a person. */
 export const WORKFLOW_HELP = `The 9 steps (run the /orqen:* commands in your agent: it calls the CLI for you):
@@ -38,7 +38,7 @@ Request commands for people:
   worqs [--all] [--json]      The worqs on this machine: orqen's unit of work, one per request (request + issue + branch + PR + record)
   worq <KEY> [--json]         One worq: state, request, issue, branch, PR and the files of its record in orqen/worqs/<KEY>/
   merged <KEY> [--person N]   Confirm the hand merge of an approved PR when orqen cannot read it from GitHub
-  new "<title>" <brief.json|->  Internal development with no request: skips support and analysis, born in DEVELOPMENT (INT-n)
+  new_worq "<title>" <brief.json|->  Worq with no request: creates its issue in the connector, skips support and analysis, born in DEVELOPMENT
   cancel <KEY> --reason T     Close the request without delivering it: closes the PR unmerged, comments both tickets (CANCELLED)
   release <KEY>               Free a request held by an agent that is no longer working on it
   comments <KEY> [--json]     Read the request and its conversation with the client
@@ -259,14 +259,14 @@ export async function runWorkflow(cmd: string, rest: string[]) {
         }
         return;
       }
-      case "new": {
+      case "new_worq": {
         try {
           const title = rest[0] ?? "";
           const src = rest[1];
-          if (!title || !src) throw new Error('Usage: orqen new "<title>" <brief.json|-> [--person NAME]   (brief: {"description", "acceptance_criteria": [...], "plan": [...], "estimated_hours"})');
+          if (!title || !src) throw new Error('Usage: orqen new_worq "<title>" <brief.json|-> [--person NAME]   (brief: {"description", "acceptance_criteria": [...], "plan": [...], "estimated_hours"})');
           const raw = JSON.parse(src === "-" ? readFileSync(0, "utf8") : readFileSync(src, "utf8"));
-          const r = await flow.newInternal(title, raw, me || agent);
-          console.log(`✔ ${r.key} created in ${r.state} (internal development, no request or issue) · worq: ${r.dir}/`);
+          const r = await flow.newWorq(title, raw, me || agent);
+          console.log(`✔ ${r.key} created in ${r.state}: issue ${r.url} (no client request) · worq: ${r.dir}/`);
           console.log(`  Next: /orqen:implement ${r.key}`);
         } catch (e) {
           console.error(`✘ ${(e as Error).message}`);

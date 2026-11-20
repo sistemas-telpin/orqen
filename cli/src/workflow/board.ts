@@ -66,7 +66,7 @@ export function nextSteps(item: WorkItem, cfg: Pick<Config, "supportStage">): Ne
       if (!item.artifacts.devel_pr) return [s(6, "developer", `/orqen:pr ${ik}`, "Explain the changes and open the PR")];
       return [s(9, "senior", `/orqen:approve ${ik}`, "Senior: approve the PR or request changes")];
     case "DELIVERY":
-      if (item.origin === "internal") return [s(0, "senior", item.artifacts.devel_pr ? `merge ${item.artifacts.devel_pr}` : `orqen status ${k}`, "Merge the approved PR by hand: orqen detects it and closes this internal development")];
+      if (item.origin === "internal") return [s(0, "senior", item.artifacts.devel_pr ? `merge ${item.artifacts.devel_pr}` : `orqen status ${k}`, "Merge the approved PR by hand: orqen detects it and closes this worq and its issue")];
       return item.artifacts.devel_pr && !item.artifacts.devel_pr_merged
       ? [s(0, "senior", `merge ${item.artifacts.devel_pr}`, "Merge the approved PR by hand; orqen detects it"), s(9, "senior", `/orqen:approve ${ik}`, "Then deliver to the client")]
       : [s(9, "senior", `/orqen:approve ${ik}`, "Deliver to the client")];

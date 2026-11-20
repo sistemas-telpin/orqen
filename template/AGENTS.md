@@ -30,6 +30,8 @@ The 9 steps, one command each (the person runs it; you follow it):
 
 ### Working with the person
 
+Development the team starts itself (no client, no request, no issue) skips support and analysis: `/orqen:internal <title>` (or `orqen new "<title>" <brief.json>`) creates the worq `INT-<n>` in DEVELOPMENT, direct lane, with the brief as its analysis. It follows implement → testing → PR → senior review, without QA, and closes by itself when a person merges the PR (there is no delivery or client acceptance). Its ticket is `orqen/worqs/INT-<n>/ticket.json`; nothing is created in Jira, GitHub or Asana.
+
 In any stage, use `/orqen:ask <KEY> <question>` to ask the requester directly on the original request. The requester can reply with an ordinary comment. To read the replies and refresh `orqen/worqs/<KEY>/conversation.json`, run `orqen conversation <KEY>`. Both commands accept the request key or its linked issue key and preserve the current stage.
 
 orqen works alongside the person; it does not replace them. While someone is on the other side (they invoked

@@ -1,5 +1,5 @@
 /** State of each request in JSON files (orqen/state/, ignored by git → survives branch checkouts). */
-import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Lane, Route, State } from "./states.ts";
 
@@ -18,6 +18,8 @@ export interface WorkItem {
   supporter?: string;            // who handled the request in SUPPORT
   analyst?: string;              // who drove the analysis
   issue?: string;                // key of the issue created when the analysis closed (issues system)
+  /** Internal development: no request and no issue, born in DEVELOPMENT; its ticket is `ticket.json` in the worq folder and it closes when its PR is merged. */
+  origin?: "internal";   // not `internal`: earlier versions used that name for the issue key
   title?: string;                // title of the client's ticket, kept the last time orqen read it (for lists and the desktop app)
   artifacts: Record<string, any>;
   feedback: Array<{ from: string; text?: string; rejection?: string }>;
@@ -46,6 +48,8 @@ export class Store {
     writeFileSync(tmp, JSON.stringify(rec, null, 2));
     renameSync(tmp, this.path(rec.key)); // atomic write
   }
+  /** Forgets a request that was never started (the log goes too). */
+  remove(key: string) { for (const f of [this.path(key), join(this.dir, `${key}.log.jsonl`)]) rmSync(f, { force: true }); }
   log(key: string, ev: Event) { appendFileSync(join(this.dir, `${key}.log.jsonl`), JSON.stringify(ev) + "\n"); }
   events(key: string): Event[] {
     const f = join(this.dir, `${key}.log.jsonl`);

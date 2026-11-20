@@ -10,6 +10,7 @@
  *
  * The request is what the client sees (requests system); the issue (optional) is the team's (issues system). Both are reached through connectors/.
  */
+import { rmSync } from "node:fs";
 import { join, relative } from "node:path";
 import { detectarIdioma } from "../lib/lang.ts";
 import type { Config } from "./config.ts";
@@ -21,6 +22,8 @@ import { Factory } from "./factory.ts";
 import { canLinkNatively, type Comment, type Connectors, isBotComment, LEGACY_STATE_LABELS, STATE_LABEL, type Tracker } from "../connectors/index.ts";
 import { type Scenario, type OpenSpecApi, type Task, hoursOf } from "./openspec.ts";
 import { reviewSql } from "./sql.ts";
+import { InternalTracker } from "../connectors/internal.ts";
+import { RoutedTracker } from "./routed.ts";
 import { type WorkItem, Store, newWorkItem } from "./store.ts";
 import { needsQa, nextSteps, returned, roleOf, workKey, type NextStep, type Role } from "./board.ts";
 import { branchFor, type EnvironmentResult, type PrChecks, type PrReview, type Workspace } from "./workspace.ts";
@@ -51,6 +54,9 @@ export class Process {
   private fac: Factory;
   /** Where the client's ticket lives. */
   private requests: Tracker;
+  private internalTracker: InternalTracker;
+  /** The configured requests connector, without the routing of internal worqs (to compare it with the issues connector). */
+  private realRequests: Tracker;
   /** Where the team's ticket is created (optional). */
   private issues?: Tracker;
   constructor(
@@ -58,7 +64,9 @@ export class Process {
     private ws: Workspace, private os: OpenSpecApi,
   ) {
     this.fac = new Factory(cfg.factoryDir);
-    this.requests = connectors.requests;
+    this.realRequests = connectors.requests;
+    this.internalTracker = new InternalTracker(cfg.factoryDir);
+    this.requests = new RoutedTracker(connectors.requests, this.internalTracker);
     this.issues = connectors.issues;
   }
 
@@ -115,6 +123,7 @@ export class Process {
       key: item.key, title: item.title ?? (item.artifacts.ANALYSIS?.summary as string | undefined)?.slice(0, 90), issue: item.issue,
       state: item.state, role: b.role, lane: item.lane, route: item.route, round: item.round, branch: item.branch || undefined,
       pr: item.artifacts.devel_pr as string | undefined, merged: item.artifacts.devel_pr_merged ? true : undefined,
+      internal: item.origin === "internal" || undefined,
       analyst: item.analyst, supporter: item.supporter, request_url: this.requests.url(item.key),
       issue_url: item.issue && this.issues ? this.issues.url(item.issue) : undefined,
       dir: this.worqRel(item.key), updated: this.store.events(item.key).at(-1)?.ts, next: b.next,
@@ -165,7 +174,7 @@ export class Process {
         if (item.recovered) continue;   // state read from the ticket's label only: shown by `board`, never advanced
         if (isGate(item.state)) await this.reviewGate(item as WorkItem & { state: keyof typeof GATES });
         else if (item.state === "BLOCKED") await this.reviewUnblock(item);
-        else if (item.state === "DELIVERY") await this.checkMerge(item);   // quiet: "unknown" just keeps waiting
+        else if (item.state === "DELIVERY") { await this.checkMerge(item); await this.closeInternal(item); }   // quiet: "unknown" just keeps waiting
         if (item.state === "NEW") pending.push({ key, state: "NEW", for: this.cfg.supportStage ? "support" : "analyst" });
         else if (isAgentState(item.state)) {
           const lock = this.activeLock(item);
@@ -356,6 +365,8 @@ export class Process {
       throw new Error(`The analysis of ${key} is driven by an analyst: use /orqen:analyze ${key} (or \`orqen analyze ${key}\`).`);
     if (item.state === "SUPPORT" && !fromAnalyze)
       throw new Error(`Support for ${key} is driven by a person: use /orqen:support ${key} (or \`orqen support ${key}\`).`);
+    if (item.origin === "internal" && item.state === "DELIVERY")
+      throw new Error(`${key} is an internal development: there is no delivery to a client. It closes by itself when its PR is merged (orqen merged ${key} if orqen cannot read it).`);
     this.assertClaimable(item, agent);
     item.lock = { agent, since: new Date().toISOString() };
     this.store.save(item);
@@ -651,7 +662,7 @@ export class Process {
     item.artifacts.estimated_hours = item.change
       ? this.os.tasks(item.change).reduce((a, t) => a + (t.hours ?? 0), 0)
       : s.estimated_hours;
-    await this.createIssue(item);
+    if (item.origin !== "internal") await this.createIssue(item);   // an internal development has no issue: its worq folder is the record
     this.recordAnalysis(item, s);
     if (item.change) this.ws.commit(item.key, `spec OpenSpec ${item.change}`);
   }
@@ -900,7 +911,7 @@ export class Process {
       this.store.save(item);
     }
     if (!item.artifacts.issue_linked) {
-      const native = canLinkNatively(this.issues, this.requests) && this.issues.link;
+      const native = canLinkNatively(this.issues, this.realRequests) && this.issues.link;
       if (native) await this.issues.link!(item.issue, item.key);
       const where = native ? item.issue : `${item.issue} (${this.issues.url(item.issue)})`;
       await this.requests.comment(item.key, `Analysis complete${item.analyst ? ` with ${item.analyst}` : ""}. Track implementation in ${where} (${lane} lane). Milestones will also be posted on this request.`);
@@ -914,6 +925,43 @@ export class Process {
   private async commentBoth(item: WorkItem, text: string) {
     await this.requests.comment(item.key, text);
     if (item.issue && this.issues) await this.attemptAsync(() => this.issues!.comment(item.issue!, text));
+  }
+
+  // ================================================================ internal development
+  /**
+   * `orqen new "<title>" <brief.json>`: development the team starts itself, with no client request and no issue. It skips support and
+   * analysis: the brief (summary, acceptance criteria and plan) takes the place of the analysis and the worq is born in DEVELOPMENT, direct
+   * lane (implement → testing → PR → senior). Its ticket is a file in the worq folder and it closes when its PR is merged.
+   */
+  async newInternal(title: string, raw: unknown, person: string) {
+    const t = title.trim();
+    if (t.length < 5) throw new Error("A title for the internal development is required (at least 5 characters).");
+    const b = (raw ?? {}) as Record<string, unknown>;
+    const description = typeof b.description === "string" ? b.description.trim() : "";
+    const key = await this.internalTracker.create({ title: t, description, route: "development" });
+    const analysis = {
+      summary: typeof b.summary === "string" && b.summary.trim() ? b.summary.trim() : description || t,
+      type: "change", acceptance_criteria: b.acceptance_criteria, affected_capabilities: [], open_questions: [], risks: Array.isArray(b.risks) ? b.risks : [],
+      ready: true, analyst_ok: true, route: "development", lane: "direct", lane_rationale: "Internal development: no client request, direct lane.",
+      plan: b.plan, estimated_hours: b.estimated_hours,
+    };
+    const item: WorkItem = { ...newWorkItem(key), state: "ANALYSIS", origin: "internal", title: t, analyst: person, lock: { agent: "internal", since: new Date().toISOString() } };
+    this.store.save(item);
+    const r = await this.complete(key, analysis, "internal");
+    if (!r.ok) {
+      this.store.remove(key);   // nothing was started: the ticket folder goes too, so the key is not left half-made
+      rmSync(this.fac.dirOf(key), { recursive: true, force: true });
+      throw new Error(`The brief is not valid:\n${r.errors.map((e) => "  " + e).join("\n")}`);
+    }
+    if (description) this.fac.write(item, "brief.md", `# ${key} — ${t}\n\n${description}\n`);
+    return { key, state: this.item(key)!.state, dir: this.worqRel(key) };
+  }
+
+  /** An internal development has nobody to deliver to: once its PR is merged it is closed. */
+  private async closeInternal(item: WorkItem) {
+    if (item.origin !== "internal" || item.state !== "DELIVERY" || !item.artifacts.devel_pr_merged) return;
+    await this.attemptAsync(() => this.requests.comment(item.key, `Internal development finished: the PR was merged into ${this.cfg.develBranch}.`));
+    await this.move(item, "CLOSED", "internal development: PR merged", "process");
   }
 
   // ================================================================ merge (by a person)
@@ -945,6 +993,7 @@ export class Process {
     if (!item.artifacts.devel_pr) throw new Error(`${key} has no PR: there is nothing to merge.`);
     if (item.artifacts.devel_pr_merged) return item.artifacts.devel_pr_merged as { at: string; by?: string };
     await this.recordMerge(item, person, undefined, true);
+    await this.closeInternal(item);
     return item.artifacts.devel_pr_merged as { at: string; by?: string };
   }
 

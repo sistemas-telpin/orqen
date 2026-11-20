@@ -6,7 +6,7 @@
  *   { key, title, description, reportedBy, status, labels, created, comments: [{id, author, authorName, body, created}], clientSeen }
  */
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import type { LocalSettings } from "./config.ts";
 import { BOT_MARK, type Comment, LEGACY_STATE_LABELS, type NewTicket, STATE_LABEL, type Ticket, type Tracker } from "./types.ts";
@@ -26,7 +26,7 @@ export class LocalTracker implements Tracker {
   constructor(private s: LocalSettings) {}
   get label() { return `tickets locales (${this.s.dir})`; }
 
-  private file(key: string) { return join(this.s.dir, `${key.toUpperCase()}.json`); }
+  protected file(key: string) { return join(this.s.dir, `${key.toUpperCase()}.json`); }
 
   read(key: string): LocalTicket {
     const f = this.file(key);
@@ -37,8 +37,8 @@ export class LocalTracker implements Tracker {
 
   /** Atomic write: the app and the CLI read the same files every few seconds. */
   write(t: LocalTicket) {
-    mkdirSync(this.s.dir, { recursive: true });
     const f = this.file(t.key);
+    mkdirSync(dirname(f), { recursive: true });
     const tmp = `${f}.${process.pid}.tmp`;
     writeFileSync(tmp, JSON.stringify(t, null, 2) + "\n");
     renameSync(tmp, f);
@@ -53,7 +53,7 @@ export class LocalTracker implements Tracker {
     return c;
   }
 
-  private keys(): string[] {
+  protected keys(): string[] {
     if (!existsSync(this.s.dir)) return [];
     return readdirSync(this.s.dir).filter((f) => /^[A-Za-z][\w]*-\d+\.json$/.test(f)).map((f) => f.replace(/\.json$/, ""))
       .sort((a, b) => Number(a.split("-")[1]) - Number(b.split("-")[1]));

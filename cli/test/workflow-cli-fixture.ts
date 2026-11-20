@@ -114,7 +114,7 @@ export async function workflowFixture(t: TestContext, deployment = "server") {
     issues: { tipo: "jira", proyecto: "DEV", tipo_ticket: "Task", vinculo: "Relates", transiciones: { DEVELOPMENT: "In Progress", CLOSED: "Done" } },
   };
   escribirConfig(repo, config);
-  git("add", "."); git("commit", "-qm", "Initialize fixture with installed ORQEN kit");
+  git("add", "."); git("commit", "-qm", "Initialize fixture with installed orqen kit");
   const remote = join(root, "remote.git");
   execFileSync("git", ["init", "--bare", "-q", remote]);
   git("remote", "add", "origin", remote); git("push", "-qu", "origin", "main");

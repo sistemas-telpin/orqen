@@ -40,7 +40,7 @@ export class FakeJira {
         const url = new URL(req.url ?? "/", "http://localhost"), path = url.pathname;
         let raw = ""; for await (const part of req) raw += part;
         const body = raw ? JSON.parse(raw) : {};
-        if (path === "/rest/api/2/myself") return send(200, { name: "orqen-eval", displayName: "ORQEN eval" });
+        if (path === "/rest/api/2/myself") return send(200, { name: "orqen-eval", displayName: "orqen eval" });
         if (path.startsWith("/rest/api/2/project/")) return send(200, { key: path.split("/").pop() });
         if (req.method === "GET" && ["/rest/api/2/search", "/rest/api/3/search/jql"].includes(path)) {
           const project = url.searchParams.get("jql")?.match(/project\s*=\s*"?([A-Z][A-Z0-9]*)/i)?.[1]?.toUpperCase();

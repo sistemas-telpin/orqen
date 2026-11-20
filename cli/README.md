@@ -9,7 +9,7 @@ orqen init               # Run from the repository you want to initialize
 
 `orqen init [dir]` runs the following setup:
 
-1. Displays the ORQEN logo and checks Node (20.12 or later), Git, and a package manager. The animation needs a terminal with at least 92 columns and 23 rows. Press Enter to continue. Non-interactive terminals, CI, `--yes`, and `--no-animation` use the static logo.
+1. Displays the orqen logo and checks Node (20.12 or later), Git, and a package manager. The animation needs a terminal with at least 92 columns and 23 rows. Press Enter to continue. Non-interactive terminals, CI, `--yes`, and `--no-animation` use the static logo.
 2. Detects components and services from manifests such as `package.json`, `pom.xml`, and `pyproject.toml`, as well as Prisma and `.env.example`, including the command that starts each part (`npm run dev`, `npm start`…).
 3. Uses an installed AI agent to review a short repository summary in the background. It validates the proposal with Zod. Use `--deep` to let the agent explore the repository or `--no-ai` to use automatic detection only.
 4. Lets you confirm or edit components, the command that starts each part, tests, migrations, and seed commands.
@@ -40,7 +40,7 @@ For non-interactive first use of `bootstrap`, pass `--tools-repo @company/tools`
 
 ## Update an installation
 
-Run `orqen update` from any directory to update the CLI. In an ORQEN project, the same command continues with OpenSpec and the kit using the newly installed CLI. Use `--cli-only` to update just the CLI from inside a project, or `orqen update --desktop` to update the global npm desktop app.
+Run `orqen update` from any directory to update the CLI. In an orqen project, the same command continues with OpenSpec and the kit using the newly installed CLI. Use `--cli-only` to update just the CLI from inside a project, or `orqen update --desktop` to update the global npm desktop app.
 
 The kit updates files that still match the manifest. For edited files, you can keep the existing version, replace it, or write a copy with the `.orqen-new` suffix.
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/** ORQEN command-line entry point. */
+/** orqen command-line entry point. */
 import { parseArgs } from "node:util";
 import { entorno } from "./commands/environment.ts";
 import { bootstrap } from "./commands/bootstrap.ts";
@@ -21,7 +21,7 @@ Usage: orqen <command> [options]
        orqen                   This help (the desktop app is a separate project: github.com/sistemas-telpin/orqen-gui)
 
 Commands:
-  init [dir]              Initialize ORQEN in a repository (default: current directory)
+  init [dir]              Initialize orqen in a repository (default: current directory)
       --yes, -y           Use defaults and write conflicts alongside the originals
       --no-ai             Use automatic detection only
       --deep              Let the agent explore the repository in depth
@@ -38,9 +38,9 @@ Commands:
       --stack <id>        Stack from your private catalog (orqen bootstrap --list lists them)
       --dir <folder>      Where to create it (default: ./<name>)
       --params '<json>'   Parameter values, e.g. '{"PORT":"8081"}' (the rest use their defaults)
-  update [dir]            Update the CLI and, in an ORQEN project, OpenSpec and the kit
+  update [dir]            Update the CLI and, in an orqen project, OpenSpec and the kit
       --cli-only         Update only the CLI
-      --desktop          Update the global npm install of ORQEN Desktop
+      --desktop          Update the global npm install of orqen Desktop
       --yes, -y  --no-cli  --no-openspec  --no-kit
   env <cmd>               setup | up [--all] | test [type...] | status | down
   tutorial [step]         Step-by-step tour for newcomers, in your system language (es/en)

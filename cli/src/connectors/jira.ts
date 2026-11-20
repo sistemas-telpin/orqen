@@ -17,7 +17,7 @@ export class JiraTracker implements Tracker {
     return `Jira${this.s.project ? ` ${this.s.project}` : ""} (${this.base.replace(/^https?:\/\//, "") || "no URL"})`;
   }
 
-  /** ORQEN role prefixes are independent of the native Jira project key. */
+  /** orqen role prefixes are independent of the native Jira project key. */
   private native(key: string): string {
     if (!this.s.prefix || !key.toUpperCase().startsWith(`${this.s.prefix}-`)) return key;
     if (!this.s.project) throw new Error("Select a Jira project before using a general prefix");

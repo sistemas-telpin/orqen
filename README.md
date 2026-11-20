@@ -391,7 +391,7 @@ orqen bootstrap "Mi proyecto" --yes --tools-repo @telpin-sistemas/stacks
 # También: ORQEN_TOOLS_REPO=@telpin-sistemas/tools
 ```
 
-Para actualizar el catálogo se usa `git -C cli/tools pull --ff-only` desde la carpeta de instalación de ORQEN. Para cambiar de repositorio, mover el clon anterior y ejecutar con otro `--tools-repo`. Los stacks anteriores a esta separación quedan localmente en `cli/tools-backup/` (ignorado). ORQEN no usa esa carpeta: se puede borrar cuando sus archivos ya estén trasladados al repo privado o respaldados.
+Para actualizar el catálogo se usa `git -C cli/tools pull --ff-only` desde la carpeta de instalación de orqen. Para cambiar de repositorio, mover el clon anterior y ejecutar con otro `--tools-repo`. Los stacks anteriores a esta separación quedan localmente en `cli/tools-backup/` (ignorado). orqen no usa esa carpeta: se puede borrar cuando sus archivos ya estén trasladados al repo privado o respaldados.
 
 `/orqen:implement DEV-32` ejecuta internamente `orqen swarm` con el contexto y el plan aprobado del ticket. Verifica el resultado y lo integra en la rama del pedido; la persona ve el avance y los resultados de la implementación sin tener que ejecutar otro comando.
 
@@ -427,9 +427,9 @@ Opciones: `--yes` (no interactivo; conserva los conectores que haya), `--commit`
 Recomendado: conectar también el MCP de la herramienta de tickets (Atlassian, GitHub o Asana) para que el grilling lea el pedido y los relacionados. Es solo lectura:
 las escrituras las hace `orqen` con el token del conector.
 
-Corré `orqen update` desde cualquier carpeta para actualizar la CLI. Si estás en un proyecto ORQEN, el mismo comando
+Corré `orqen update` desde cualquier carpeta para actualizar la CLI. Si estás en un proyecto orqen, el mismo comando
 continúa con OpenSpec y el kit usando la CLI recién instalada. Usá `--cli-only` para actualizar solo la CLI desde un proyecto.
-Para actualizar la app de escritorio instalada globalmente con npm, usá el botón **Actualizar ORQEN** o corré `orqen update --desktop`.
+Para actualizar la app de escritorio instalada globalmente con npm, usá el botón **Actualizar orqen** o corré `orqen update --desktop`.
 
 Los archivos del kit que no editaste se actualizan solos. Para los editados elegís conservarlos, reemplazarlos o dejar una copia
 `.orqen-new`. `--no-cli`, `--no-openspec` y `--no-kit` saltean pasos.
@@ -531,7 +531,7 @@ general:
     issues: ISS
 ```
 
-Los proveedores se eligen en **Configuración → Conectores**. Sus etiquetas y filtros no son prefijos. Los proyectos existentes conservan sus claves hasta guardar explícitamente General; si ya hay historial, cambiar los prefijos requiere migrar las claves registradas. En Jira hay que seleccionar un proyecto por conector: ORQEN traduce el prefijo general a la clave nativa para las consultas y los enlaces.
+Los proveedores se eligen en **Configuración → Conectores**. Sus etiquetas y filtros no son prefijos. Los proyectos existentes conservan sus claves hasta guardar explícitamente General; si ya hay historial, cambiar los prefijos requiere migrar las claves registradas. En Jira hay que seleccionar un proyecto por conector: orqen traduce el prefijo general a la clave nativa para las consultas y los enlaces.
 
 Para GitHub Projects, **Estado del tablero para Pendientes** elige la columna de entrada, por ejemplo `Backlog`. El filtro adicional admite búsquedas de issues como `is:open label:orqen`; una columna no es un filtro de texto. Las configuraciones anteriores que guardaron `Backlog` como filtro se reconocen por el nombre del estado del Project. Se muestran issues abiertos del repositorio elegido; no se incluyen borradores, pull requests ni elementos archivados.
 
@@ -712,7 +712,7 @@ Los pedidos nuevos no se toman solos: quedan en NEW hasta que soporte corre `sup
 ```text
 orqen                                  Muestra la ayuda (la app de escritorio es aparte: orqen-gui)
 orqen init [dir]                       Inicializa un repo
-orqen update [dir]                     Actualiza la CLI y, dentro de un proyecto ORQEN, OpenSpec y el kit
+orqen update [dir]                     Actualiza la CLI y, dentro de un proyecto orqen, OpenSpec y el kit
 orqen update --desktop                 Actualiza la app de escritorio instalada globalmente con npm
 
 orqen bootstrap [nombre] [--stack <id>] [--dir <carpeta>] · orqen bootstrap --list

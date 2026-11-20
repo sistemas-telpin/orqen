@@ -1,5 +1,5 @@
 /**
- * ORQEN terminal logo and animated welcome screen.
+ * orqen terminal logo and animated welcome screen.
  *
  * Draw the hexagon and wordmark on a pixel canvas using two pixels per
  * terminal cell, with foreground and background colors on the upper half block (▀).
@@ -64,7 +64,7 @@ const Y_SUBRAYADO = 19;                           // px
 const FILA_SUBTITULO = 10;
 const COL_SUBTITULO = X0 + Math.floor((ANCHO_PALABRA - SUBTITULO.length) / 2);
 
-/** Pixel font for ORQEN (10 × 12 with a 3-pixel stroke). */
+/** Pixel font for orqen (10 × 12 with a 3-pixel stroke). */
 const FUENTE = [
   ["..######..", ".########.", "##########", "###....###", "###....###", "###....###", "###....###", "###....###", "###....###", "##########", ".########.", "..######.."],
   ["########..", "#########.", "##########", "###....###", "###....###", "#########.", "########..", "###.###...", "###..###..", "###...###.", "###....###", "###....###"],
@@ -230,7 +230,7 @@ function pixeles(t?: number): Float32Array {
   }
   dibujarSatelites(true);
 
-  // ── Waves light the ORQEN letters with a chromatic shift ──
+  // ── Waves light the orqen letters with a chromatic shift ──
   for (let py = Y0 - 4; py < Y0 + LETRA_H + 4; py++) for (let px = X0 - 6; px < X0 + ANCHO_PALABRA + 6; px++) {
     if (px < 0 || px >= W || py < 0 || py >= H) continue;
     if (reposo) { if (tinta(px, py)) poner(px, py, BLANCO, 1); continue; }
@@ -379,7 +379,7 @@ function logoCompacto(color: boolean, columnas: number): string {
     const filas = LETRAS.map((l, i) => `  ${color ? pintar(i === LETRAS.length - 1 ? GRIS : mezclar(AZUL, MAGENTA, i / LETRAS.length), l) + RESET : l}`);
     return ["", ...filas, ""].join("\n");
   }
-  return color ? `\n  \x1b[1m${pintar(AZUL, "OR")}${pintar(mezclar(AZUL, MAGENTA, 0.5), "Q")}${pintar(MAGENTA, "EN")}${RESET}  ${pintar(GRIS, LEMA)}${RESET}\n` : `\n  ORQEN  ${LEMA}\n`;
+  return color ? `\n  \x1b[1m${pintar(AZUL, "OR")}${pintar(mezclar(AZUL, MAGENTA, 0.5), "Q")}${pintar(MAGENTA, "EN")}${RESET}  ${pintar(GRIS, LEMA)}${RESET}\n` : `\n  orqen  ${LEMA}\n`;
 }
 
 /* ───────────────────────── pantalla animada ───────────────────────── */

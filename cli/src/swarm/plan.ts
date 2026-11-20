@@ -95,7 +95,7 @@ export function topologicalOrder(plan: Plan): Subtask[] {
 
 export function plannerPrompt(task: string, o: { testCommand?: string; errors?: string[] } = {}): string {
   return [
-    "You are the ORQEN swarm planner. Break the task below into small subtasks that cheap, fast models",
+    "You are the orqen swarm planner. Break the task below into small subtasks that cheap, fast models",
     "(e.g. Claude Haiku) will solve in parallel, each in its own git worktree, without talking to each other.",
     "Read the repository as needed to plan well, but do not modify any file.",
     "",

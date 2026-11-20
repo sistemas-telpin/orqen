@@ -55,7 +55,7 @@ export function expandCommand(repo: string, command: string, args: string): { pr
   }
   if (cur.trim()) tools.push(cur.trim());
   return {
-    prompt: `Run the ORQEN command /orqen:${command} ${args}. Its instructions follow, with $ARGUMENTS = "${args}".\n\n${body.replaceAll("$ARGUMENTS", args).trim()}`,
+    prompt: `Run the orqen command /orqen:${command} ${args}. Its instructions follow, with $ARGUMENTS = "${args}".\n\n${body.replaceAll("$ARGUMENTS", args).trim()}`,
     tools: tools.filter((t) => t && t !== "AskUserQuestion"),
   };
 }
@@ -130,7 +130,7 @@ export async function runCase(c: EvalCase, o: EvalOptions): Promise<CaseResult> 
     // the case's project, not the one this command was run from
     for (const k of ["ORQEN_STATE_DIR", "REC_STATE_DIR", "REPO_PATH", "FACTORY_DIR", "SUPPORT_STAGE"]) delete env[k];
     const git = (...args: string[]) => execFileSync("git", args, { cwd: repo, env, stdio: ["ignore", "pipe", "pipe"], encoding: "utf8" });
-    git("init", "-qb", "main"); git("config", "user.name", "ORQEN eval"); git("config", "user.email", "eval@orqen.invalid");
+    git("init", "-qb", "main"); git("config", "user.name", "orqen eval"); git("config", "user.email", "eval@orqen.invalid");
     writeFileSync(join(repo, "README.md"), "# Test project\n\nA small business application used by `orqen eval`.\n");
     for (const [p, content] of Object.entries(c.files ?? {})) { mkdirSync(dirname(join(repo, p)), { recursive: true }); writeFileSync(join(repo, p), content); }
     const init = await ejecutarAsync(node, [script, "init", "--yes", "--no-ai", "--no-openspec", "--no-connectors", "--no-animation"], { cwd: repo, env, timeoutMs: 120_000 });
@@ -143,7 +143,7 @@ export async function runCase(c: EvalCase, o: EvalOptions): Promise<CaseResult> 
     escribirConfig(repo, cfg);
     // with the team's lessons, the cases measure the agent as the team runs it (and --no-lessons, without them)
     if (o.knowledge && existsSync(o.knowledge)) cpSync(o.knowledge, join(repo, "orqen", "knowledge"), { recursive: true });
-    git("add", "-A"); git("commit", "-qm", "Test project with ORQEN");
+    git("add", "-A"); git("commit", "-qm", "Test project with orqen");
 
     const { command } = EVAL_STEPS[c.step];
     const { prompt, tools } = expandCommand(repo, command, EVAL_KEY);

@@ -1,4 +1,4 @@
-/** Update the CLI or desktop app, and refresh OpenSpec and managed kit files in an ORQEN project. */
+/** Update the CLI or desktop app, and refresh OpenSpec and managed kit files in an orqen project. */
 import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { join, resolve } from "node:path";
 import semver from "semver";
@@ -42,17 +42,17 @@ async function actualizarPaquete(gestor: string, paquete: string, actual: string
 export async function update(o: OpcionesUpdate) {
   if (o.desktop) {
     const manifest = join(paqueteGlobal("npm", PAQUETE_DESKTOP), "package.json");
-    if (!existsSync(manifest)) throw new Error("Install ORQEN Desktop globally with npm before updating it.");
+    if (!existsSync(manifest)) throw new Error("Install orqen Desktop globally with npm before updating it.");
     const launcher = process.env.ORQEN_DESKTOP_NPM_MANIFEST;
     if (launcher && realpathSync(launcher) !== realpathSync(manifest)) {
       throw new Error("The running desktop app is outside the active global npm installation.");
     }
     const { version: actual } = JSON.parse(readFileSync(manifest, "utf8"));
     const result = await actualizarPaquete("npm", PAQUETE_DESKTOP, actual, !!o.yes || !interactivo());
-    if (result.status === "unavailable") throw new Error("Could not check npm for ORQEN Desktop updates.");
+    if (result.status === "unavailable") throw new Error("Could not check npm for orqen Desktop updates.");
     if (o.json) console.log(JSON.stringify(result));
-    else if (result.status === "installed") console.log(`ORQEN Desktop ${result.version} installed. Restart the app to use it.`);
-    else if (result.status === "current") console.log(`ORQEN Desktop ${result.version} is up to date.`);
+    else if (result.status === "installed") console.log(`orqen Desktop ${result.version} installed. Restart the app to use it.`);
+    else if (result.status === "current") console.log(`orqen Desktop ${result.version} is up to date.`);
     return;
   }
   const repo = resolve(o.dir ?? process.cwd());

@@ -30,6 +30,7 @@ export class FakeTracker implements Tracker {
     this.created.push({ key, ...t }); this.coms[key] = []; this.issues[key] = { title: t.title, labels: [...(t.labels ?? [])] };
     return key;
   }
+  async addLabel(key: string, label: string) { const t = this.issues[key]; t.labels = [...new Set([...(t.labels ?? []), label])]; }
   async labelled(label: string) {
     return Object.keys(this.issues).filter((k) => (this.issues[k].labels ?? []).includes(label) && !this.finished.some(([f]) => f === k));
   }

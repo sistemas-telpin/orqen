@@ -125,6 +125,7 @@ export class GithubTracker implements Tracker {
     return (r.items ?? []).map((i: any) => keyOf(this.s.prefix, i.number));
   }
   labelled(label: string) { return this.search(`is:open label:"${label}"`); }
+  async addLabel(key: string, label: string) { await this.req("POST", `/repos/{repo}/issues/${this.n(key)}/labels`, { labels: [label] }); }
 
   async ticket(key: string): Promise<Ticket> {
     const i = await this.req("GET", `/repos/{repo}/issues/${this.n(key)}`);

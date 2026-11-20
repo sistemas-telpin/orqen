@@ -48,6 +48,8 @@ export interface Tracker {
   search(query: string): Promise<string[]>;
   /** Open tickets that carry this label. Optional: without it, a machine with no record cannot find the team's own worqs. */
   labelled?(label: string): Promise<string[]>;
+  /** Adds a label to a ticket, keeping the others. Optional, like labelled(). */
+  addLabel?(key: string, label: string): Promise<void>;
   ticket(key: string): Promise<Ticket>;
   comments(key: string): Promise<Comment[]>;
   comment(key: string, text: string): Promise<void>;

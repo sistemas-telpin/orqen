@@ -138,6 +138,19 @@ test("another machine with no record finds the worq by its issue label and reads
   assert.deepEqual(a.jira.coms, { "REQ-1": [] }, "the requests connector is not touched");
 });
 
+test("--issue takes an issue that already exists instead of creating one", async () => {
+  const { tracker, store, flow } = setup();
+  tracker.issues["DEV-7"] = { title: "Actualizar la librería de PDF", labels: ["deuda"] };
+  tracker.coms["DEV-7"] = [];
+  const r = await flow.newWorq("", BRIEF, "Ana", "DEV-7");
+  assert.deepEqual([r.key, r.state], ["DEV-7", "DEVELOPMENT"]);
+  assert.equal(tracker.created.length, 0, "no new issue");
+  assert.equal(store.get("DEV-7")!.title, "Actualizar la librería de PDF", "the title comes from the issue");
+  assert.deepEqual(tracker.issues["DEV-7"].labels, ["deuda", "orqen-worq"], "labelled so other machines find it");
+  assert.match(tracker.coms["DEV-7"].map((c) => c.body).join("\n"), /Taken by orqen as a worq of the team[\s\S]*una sola función pública/);
+  await assert.rejects(flow.newWorq("", BRIEF, "Ana", "DEV-7"), /DEV-7 is already a worq \(DEVELOPMENT\)/);
+});
+
 test("without an issues connector the issue is created in the requests one", async () => {
   const { jira, flow } = setup({ state: "OPEN" }, false);
   const r = await flow.newWorq("Limpiar el módulo de reportes", BRIEF, "Ana");

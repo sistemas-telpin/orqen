@@ -19,7 +19,7 @@ import {
   LANES, type Lane, State, type AgentState, GATES, isAgentState, isFinal, isGate, nextStateAfterStage,
 } from "./states.ts";
 import { Factory } from "./factory.ts";
-import { canLinkNatively, type Comment, type Connectors, isBotComment, LEGACY_STATE_LABELS, STATE_LABEL, type Tracker, WORQ_LABEL } from "../connectors/index.ts";
+import { canLinkNatively, type Comment, type Connectors, isBotComment, LEGACY_STATE_LABELS, STATE_LABEL, type Ticket, type Tracker, WORQ_LABEL } from "../connectors/index.ts";
 import { type Scenario, type OpenSpecApi, type Task, hoursOf } from "./openspec.ts";
 import { reviewSql } from "./sql.ts";
 import { RoutedTracker } from "./routed.ts";
@@ -935,9 +935,19 @@ export class Process {
    * use (issues, or requests when there is none) and skips support and analysis: the brief (description, acceptance criteria and plan)
    * takes the place of the analysis and the worq, keyed by that issue, is born in DEVELOPMENT, direct lane (implement → testing → PR →
    * senior). It closes when its PR is merged.
+   * With `existing` (`--issue <KEY>`) it takes an issue that is already there (created by a person, or left by an attempt that failed)
+   * instead of creating one: the title defaults to the issue's.
    */
-  async newWorq(title: string, raw: unknown, person: string) {
-    const t = title.trim();
+  async newWorq(title: string, raw: unknown, person: string, existing?: string) {
+    const own = this.requests.ownSystem;
+    let current: Ticket | undefined;
+    if (existing) {
+      const was = this.item(existing);
+      if (was) throw new Error(`${existing} is already a worq (${was.state}): see it with orqen status ${existing}`);
+      try { current = await own.ticket(existing); }
+      catch (e) { throw new Error(`${existing} could not be read in ${own.label}: ${(e as Error).message.split("\n")[0]}`); }
+    }
+    const t = title.trim() || current?.title?.trim() || "";
     if (t.length < 5) throw new Error("A title for the worq is required (at least 5 characters).");
     const b = (raw ?? {}) as Record<string, unknown>;
     const description = typeof b.description === "string" ? b.description.trim() : "";
@@ -951,19 +961,28 @@ export class Process {
     const parsed = SCHEMAS.ANALYSIS.safeParse(analysis);
     if (!parsed.success) throw new Error(`The brief is not valid:\n${parsed.error.issues.map((i) => `  ${i.path.join(".") || "(root)"}: ${i.message}`).join("\n")}`);
     const s = parsed.data as Record<string, any>;
-    const key = await this.requests.create({
-      title: t, route: "development", labels: [WORQ_LABEL, "lane-direct"],
-      description: `${description || t}\n\n*Acceptance criteria:*\n${bullets(s.acceptance_criteria)}\n\n*Plan:*\n${bullets(s.plan ?? [])}\n\n` +
-        `*Estimate:* ${s.estimated_hours ?? "?"} h\n*Started by:* ${person}\n\nCreated with orqen (no client request).`,
-    });
+    const brief = `*Acceptance criteria:*\n${bullets(s.acceptance_criteria)}\n\n*Plan:*\n${bullets(s.plan ?? [])}\n\n*Estimate:* ${s.estimated_hours ?? "?"} h\n*Started by:* ${person}`;
+    let key: string;
+    if (existing) {
+      key = existing;
+      // the label lets any machine find it; without addLabel (Asana) only the machines that know it do
+      await this.attemptAsync(() => own.addLabel?.(key, WORQ_LABEL) ?? Promise.resolve());
+    } else {
+      key = await this.requests.create({
+        title: t, route: "development", labels: [WORQ_LABEL, "lane-direct"],
+        description: `${description || t}\n\n${brief}\n\nCreated with orqen (no client request).`,
+      });
+    }
     const item: WorkItem = { ...newWorkItem(key), state: "ANALYSIS", origin: "internal", title: t, analyst: person, lock: { agent: "internal", since: new Date().toISOString() } };
     this.store.save(item);
     const r = await this.complete(key, analysis, "internal");
     if (!r.ok) {
       this.store.remove(key);
       rmSync(this.fac.dirOf(key), { recursive: true, force: true });
-      throw new Error(`The issue ${key} was created, but the worq could not start:\n${r.errors.map((e) => "  " + e).join("\n")}`);
+      throw new Error(`The issue ${key} ${existing ? "is there" : "was created"}, but the worq could not start:\n${r.errors.map((e) => "  " + e).join("\n")}\n` +
+        `Fix it and take that issue with: orqen new_worq --issue ${key} <brief.json>`);
     }
+    if (existing) await this.attemptAsync(() => this.requests.comment(key, `Taken by orqen as a worq of the team (no client request), in development.\n\n${brief}`));
     if (description) this.fac.write(item, "brief.md", `# ${key} — ${t}\n\n${description}\n`);
     return { key, state: this.item(key)!.state, dir: this.worqRel(key), url: this.requests.url(key) };
   }

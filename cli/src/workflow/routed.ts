@@ -14,6 +14,8 @@ export class RoutedTracker implements Tracker {
 
   get kind() { return this.real.kind; }
   get label() { return this.real.label; }
+  /** Where the team's own worqs live (the issues connector, or the requests one when there is none). */
+  get ownSystem() { return this.own; }
   /** Whether the key is a worq of the team (known here or found by its label). */
   isTeamWorq(key: string) { return this.isOwn(key) || this.found.has(key); }
 

@@ -357,7 +357,7 @@ Si se agotan los reintentos o hay un error, el pedido pasa a **BLOCKED**. Una pe
 y las indicaciones como feedback para el agente.
 
 **Worq propio del equipo.** El trabajo que arranca el propio equipo, sin cliente ni request, se hace con el mismo flujo pero sin soporte ni análisis:
-`/orqen:new_worq <título>` (o `orqen new_worq "<título>" <brief.json>`) crea el issue en el conector que uses (el de issues, o el de requests si no hay) y el worq con esa clave directamente en DEVELOPMENT, carril directo, con el brief
+`/orqen:new_worq <título>` (o `orqen new_worq "<título>" <brief.json>`) crea el issue en el conector que uses (el de issues, o el de requests si no hay), o toma uno que ya existe con `--issue <KEY>`, y el worq con esa clave directamente en DEVELOPMENT, carril directo, con el brief
 (descripción, criterios de aceptación y plan con horas) en lugar del análisis. Sigue `implement → testing → PR → review del senior`, sin QA, y
 **se cierra solo cuando una persona mergea el PR** (no hay entrega ni aceptación del cliente). El issue se cierra junto con el worq.
 
@@ -732,6 +732,7 @@ orqen worqs [--all] [--json]           Los worqs de esta máquina (la unidad de 
 orqen worq <KEY> [--json]              Un worq: estado, request, issue, rama, PR y los archivos de su registro en orqen/worqs/<KEY>/
 orqen merged <KEY> [--person NOMBRE]   Confirma el merge manual del PR cuando orqen no puede leerlo (sin gh)
 orqen new_worq "<título>" <brief.json|-> Worq propio sin request: crea el issue en el conector y arranca en DEVELOPMENT, sin soporte ni análisis
+orqen new_worq --issue <KEY> <brief.json|-> Igual, pero toma un issue que ya existe (lo etiqueta orqen-worq y lo comenta)
 orqen cancel <KEY> --reason <texto>    Cancela el pedido sin entregar: cierra el PR sin mergear y comenta en los tickets
 orqen release <KEY>                    Libera la reserva de un pedido
 orqen connectors [setup] [--json]      Muestra y prueba los conectores (requests e issues), o los configura

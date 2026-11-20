@@ -84,6 +84,10 @@ export class JiraTracker implements Tracker {
     await this.req("POST", `/rest/api/2/issue/${this.native(key)}/comment`, { body: `${BOT_MARK} ${text}` });
   }
 
+  async addLabel(key: string, label: string) {
+    await this.req("PUT", `/rest/api/2/issue/${this.native(key)}`, { update: { labels: [{ add: label }] } });
+  }
+
   async setStateLabel(key: string, state: string) {
     const { labels } = await this.ticket(key);
     const next = labels.filter((l) => ![STATE_LABEL, ...LEGACY_STATE_LABELS].some((p) => l.startsWith(p))).concat(`${STATE_LABEL}${state.toLowerCase()}`);

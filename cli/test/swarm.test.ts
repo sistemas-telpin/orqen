@@ -19,6 +19,11 @@ if (prompt.includes("orqen swarm integrator")) { if (b.fixFinal) writeFileSync("
 const id = prompt.match(/Your subtask: ([a-z0-9-]+)/)[1];
 appendFileSync(b.trace, "start " + id + " " + tier + "\\n");
 await new Promise((r) => setTimeout(r, b.sleep ?? 0));
+// barrier: the listed subtasks wait until all of them started, so a sequential run times out instead of passing by luck
+if ((b.together ?? []).includes(id)) {
+  const all = () => b.together.every((t) => readFileSync(b.trace, "utf8").includes("start " + t + " "));
+  for (const until = Date.now() + 60000; !all() && Date.now() < until;) await new Promise((r) => setTimeout(r, 50));
+}
 const bad = (b.failOn?.[tier] ?? []).includes(id);
 mkdirSync("out", { recursive: true });
 writeFileSync("out/" + id + ".txt", bad ? "wrong" : "ok-" + id);
@@ -85,7 +90,7 @@ console.log(JSON.stringify({ summary: "two files", subtasks: [
 });
 
 test("runs independent subtasks in parallel, then dependents on top of the merged code", async () => {
-  const { repo, tiers, trace, worktreeRoot, stateDir } = setup({ sleep: 400 });
+  const { repo, tiers, trace, worktreeRoot, stateDir } = setup({ together: ["a", "b"] });
   const plan = Plan.parse({ summary: "abc", subtasks: [sub("a"), sub("b"), sub("c", ["a", "b"])], finalTest: "node check.mjs c a b" });
   const report = await runSwarm({ repo, task: "write a, b and c", plan, tiers, parallel: 4, worktreeRoot, stateDir });
 

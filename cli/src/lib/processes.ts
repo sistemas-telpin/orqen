@@ -60,13 +60,21 @@ function leerPuertos(repo: string): Record<string, number> {
   try { return JSON.parse(readFileSync(archivoPuertos(repo), "utf8")); } catch { return {}; }
 }
 
-/** Can this port be listened on now? */
-export function puertoLibre(puerto: number): Promise<boolean> {
+/** Can this port be listened on on that host? An IPv6 host on a machine without IPv6 does not count against it. */
+function sePuedeEscuchar(puerto: number, host: string): Promise<boolean> {
   return new Promise((ok) => {
     const s = createServer();
-    s.once("error", () => ok(false));
-    s.listen({ port: puerto, host: "127.0.0.1", exclusive: true }, () => s.close(() => ok(true)));
+    s.once("error", (e: NodeJS.ErrnoException) => ok(host === "::" && ["EAFNOSUPPORT", "EADDRNOTAVAIL"].includes(e.code ?? "")));
+    s.listen({ port: puerto, host, exclusive: true }, () => s.close(() => ok(true)));
   });
+}
+
+/**
+ * Can this port be listened on now? Checks IPv4 and IPv6 and that nothing answers on it: on Windows a server listening
+ * on `::` (Node's default) does not stop a bind on 127.0.0.1, so binding only there would hand the same port to two worktrees.
+ */
+export async function puertoLibre(puerto: number): Promise<boolean> {
+  return await sePuedeEscuchar(puerto, "127.0.0.1") && await sePuedeEscuchar(puerto, "::") && !(await puertoAbierto(puerto, 300));
 }
 
 /** The ports in use by this worktree: the assigned one of each dynamic process, the fixed one of the rest. */

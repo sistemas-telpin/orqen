@@ -43,7 +43,7 @@ Commands:
       --desktop          Update the global npm install of orqen Desktop
       --target <version> Install this exact desktop version
       --yes, -y  --no-cli  --no-openspec  --no-kit
-  env <cmd>               setup | up [--all] | test [type...] | status | down
+  env <cmd>               setup | up [--all] [name...] | restart [name...] | test [type...] | status [--json] | down [name...]
   tutorial [step]         Step-by-step tour for newcomers, in your system language (es/en)
       --step <n|id>       Print one step and exit (--json for agents) · --list · --lang es|en
   lang                    Print the detected system language (es | en); ORQEN_LANG overrides it

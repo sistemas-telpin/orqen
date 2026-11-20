@@ -1,17 +1,21 @@
 /**
  * orqen env: start the project and run its tests without a person at the keyboard (used by the workflow and agents).
  *   setup            install dependencies (entornos.preparar)
- *   up [--all]       start the processes (npm run dev, npm start…) and wait until they are ready; then migrations and seed.
- *                    --all: also the processes that are only for e2e / visual tests (e.g. the frontend)
+ *   up [--all] [name...]  start the processes (npm run dev, npm start…) and wait until they are ready; then migrations and seed.
+ *                    --all: also the processes that are only for e2e / visual tests (e.g. the frontend); names: only those
+ *   restart [name...] stop and start again
  *   test [type...]   unit / integration / e2e / visual with the variables of orqen/environment.yaml
  *                    `-- <args>`: appended to the command of the requested type (e.g. only the e2e of a change)
- *   status           which processes are running
- *   down             stop the processes orqen started
+ *   status           which processes are running (--json: with the port of this worktree and the page to open)
+ *   down [name...]   stop the processes orqen started
+ *
+ * Everything works on the current directory: in a Worq's worktree it is that Worq's environment, with its own ports
+ * (see `${port}` in lib/processes.ts) and its own orqen/state.
  */
 import { resolve } from "node:path";
 import { leerConfig, type Config } from "../lib/config.ts";
 import { ejecutarLinea } from "../lib/proc.ts";
-import { bajarProcesos, estadoProcesos, levantarProcesos } from "../lib/processes.ts";
+import { bajarProcesos, estadoProcesos, levantarProcesos, variablesConPuertos } from "../lib/processes.ts";
 import { pc } from "../ui/console.ts";
 
 const TIPOS = ["unitarios", "integracion", "e2e", "visual"] as const;
@@ -23,7 +27,7 @@ const tipoDe = (s: string) => (Object.entries(NOMBRE).find(([, en]) => en === s)
 const titulo = (s: string) => console.log(`\n${pc.bold(pc.magenta("▸"))} ${pc.bold(s)}`);
 
 async function correr(repo: string, cfg: Config, lineas: string[], etiqueta: string): Promise<boolean> {
-  const env = { ...process.env, ...cfg.entornos.variables };
+  const env = { ...process.env, ...variablesConPuertos(repo, cfg.entornos.procesos, cfg.entornos.variables) };
   for (const l of lineas) {
     titulo(`${etiqueta}: ${l}`);
     const c = await ejecutarLinea(l, { cwd: repo, env });
@@ -44,19 +48,25 @@ export async function entorno(sub: string | undefined, resto: string[], o: { dir
     case "setup":
       ok = await correr(repo, cfg, e.preparar, "install dependencies");
       break;
+    case "restart":
     case "up": {
       if (!e.procesos.length) console.log(pc.dim("No processes configured in orqen/environment.yaml (processes)."));
-      const r = await levantarProcesos(repo, e.procesos, e.variables, { todos: o.todos, alAvanzar: (m) => titulo(m) });
+      if (sub === "restart") {
+        const bajados = bajarProcesos(repo, resto);
+        if (bajados.length) titulo(`Stopped: ${bajados.join(", ")}`);
+      }
+      const r = await levantarProcesos(repo, e.procesos, e.variables, { todos: o.todos, solo: resto, alAvanzar: (m) => titulo(m) });
       if (!r.ok) {
         console.error(pc.red(`✘ ${r.detalle}`));
         if (r.salida) console.error(pc.dim(r.salida));
         ok = false;
         break;
       }
-      ok = await correr(repo, cfg, e.migrar, "run migrations") && await correr(repo, cfg, e.seed, "seed");
+      // migrations and seed only when the whole environment comes up, not when one process is (re)started
+      if (!resto.length) ok = await correr(repo, cfg, e.migrar, "run migrations") && await correr(repo, cfg, e.seed, "seed");
       if (ok) {
         console.log(pc.green(`\n✔ ${r.detalle}`));
-        const vars = Object.entries(e.variables);
+        const vars = Object.entries(variablesConPuertos(repo, e.procesos, e.variables));
         if (vars.length) console.log(pc.dim(vars.map(([k, v]) => `  ${k}=${v}`).join("\n")));
         console.log(pc.dim("  To stop them: orqen env down"));
       }
@@ -82,15 +92,15 @@ export async function entorno(sub: string | undefined, resto: string[], o: { dir
       break;
     }
     case "status": {
-      const st = await estadoProcesos(repo, e.procesos);
-      if (o.json) { console.log(JSON.stringify({ processes: st, variables: e.variables, tests: e.tests }, null, 2)); break; }
+      const st = await estadoProcesos(repo, e.procesos, e.variables);
+      if (o.json) { console.log(JSON.stringify({ dir: repo, processes: st, variables: variablesConPuertos(repo, e.procesos, e.variables), tests: e.tests }, null, 2)); break; }
       if (!st.length) console.log(pc.dim("No processes configured in orqen/environment.yaml (processes)."));
       for (const x of st)
-        console.log(`${x.corriendo ? pc.green("●") : pc.dim("○")} ${x.nombre.padEnd(16)} ${pc.dim(x.comando)}${x.puerto ? pc.dim(` :${x.puerto}`) : ""}${x.cuando === "e2e" ? pc.dim("  (e2e only)") : ""}${x.log ? pc.dim(`\n    log: ${x.log}`) : ""}`);
+        console.log(`${x.corriendo ? pc.green("●") : pc.dim("○")} ${x.nombre.padEnd(16)} ${pc.dim(x.comando)}${x.puerto ? pc.dim(` :${x.puerto}`) : ""}${x.cuando === "e2e" ? pc.dim("  (e2e only)") : ""}${x.web ? pc.dim(`\n    web: ${x.web}`) : ""}${x.log ? pc.dim(`\n    log: ${x.log}`) : ""}`);
       break;
     }
     case "down": {
-      const bajados = bajarProcesos(repo);
+      const bajados = bajarProcesos(repo, resto);
       console.log(bajados.length ? pc.green(`✔ Stopped: ${bajados.join(", ")}`) : pc.dim("No processes started by orqen are running."));
       break;
     }
@@ -98,11 +108,12 @@ export async function entorno(sub: string | undefined, resto: string[], o: { dir
       console.log([
         "Usage: orqen env <command>",
         "  setup            install dependencies (entornos.preparar)",
-        "  up [--all]       start the processes and wait until they are ready, then migrate and seed (--all: include e2e-only processes)",
+        "  up [--all] [name...]  start the processes and wait until they are ready, then migrate and seed (--all: include e2e-only processes)",
+        "  restart [name...]     stop and start again",
         "  test [type...]   unit | integration | e2e | visual (default: all configured tests)",
         "                   -- <args>: appended to that type's command, e.g. orqen env test e2e -- tests/login.spec.ts",
-        "  status           show which processes are running and where their logs are",
-        "  down             stop the processes orqen started",
+        "  status [--json]  show which processes are running, their port in this worktree, page and log",
+        "  down [name...]   stop the processes orqen started",
       ].join("\n"));
       if (sub) process.exitCode = 1;
       return;

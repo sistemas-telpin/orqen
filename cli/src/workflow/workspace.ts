@@ -2,7 +2,7 @@
 import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join, relative, resolve, sep } from "node:path";
-import { bajarProcesos, levantarProcesos } from "../lib/processes.ts";
+import { bajarProcesos, levantarProcesos, variablesConPuertos } from "../lib/processes.ts";
 import type { Config } from "./config.ts";
 
 /** Environment setup result included in the agent context. */
@@ -154,7 +154,7 @@ export class GitWorkspace implements Workspace {
     const e = this.cfg.environment;
     const p = spawnSync(cmd, {
       shell: true, cwd: this.cfg.repoPath, encoding: "utf8", timeout: timeoutMin * 60_000,
-      env: { ...process.env, ...e?.variables }, maxBuffer: 64 * 1024 * 1024,
+      env: { ...process.env, ...(e ? variablesConPuertos(this.cfg.repoPath, e.procesos, e.variables) : {}) }, maxBuffer: 64 * 1024 * 1024,
     });
     return { ok: p.status === 0, output: ((p.stdout ?? "") + (p.stderr ?? "")).slice(-15_000) };
   }
@@ -167,7 +167,7 @@ export class GitWorkspace implements Workspace {
     const commands = Object.fromEntries(Object.entries(e.tests).filter(([, v]) => v).map(([k]) => [en[k] ?? k, `orqen env test ${en[k] ?? k}`]));
     const done: string[] = [];
     const fail = (step: string, output: string): EnvironmentResult => ({
-      ok: false, variables: e.variables, commands, output: output.slice(-3000),
+      ok: false, variables: variablesConPuertos(this.cfg.repoPath, e.procesos, e.variables), commands, output: output.slice(-3000),
       detail: `Failed: "${step}". ${done.length ? `Completed: ${done.join("; ")}. ` : ""}Review entornos in orqen/config.yaml. If you cannot resolve it, ask the person (or block the request when nobody can answer).`,
     });
     for (const cmd of e.preparar) { const r = this.runCommand(cmd); if (!r.ok) return fail(cmd, r.output); }
@@ -180,7 +180,7 @@ export class GitWorkspace implements Workspace {
     for (const cmd of [...e.migrar, ...e.seed]) { const r = this.runCommand(cmd); if (!r.ok) return fail(cmd, r.output); }
     if (e.migrar.length) done.push("migrations applied");
     if (e.seed.length) done.push("test data loaded");
-    return { ok: true, detail: done.length ? `Environment ready: ${done.join("; ")}.` : "No environment setup needed.", variables: e.variables, commands };
+    return { ok: true, detail: done.length ? `Environment ready: ${done.join("; ")}.` : "No environment setup needed.", variables: variablesConPuertos(this.cfg.repoPath, e.procesos, e.variables), commands };
   }
 
   stopEnvironment() {

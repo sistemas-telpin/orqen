@@ -139,12 +139,14 @@ process that uses it. **orqen manages them on its own; never ask a person to ope
 ```sh
 orqen env test [unit|integration|e2e|visual]
 orqen env test e2e -- <files or filter>  # Only the e2e of this change
-orqen env status   # what is running and where each process log is
+orqen env status   # what is running, its port in this worktree, the page (web) and where each process log is
 orqen env up --all # only when development also needs the frontend (e2e / visual)
 ```
 
 If a process does not start, `environment.output` has the end of its log (also in `orqen/state/logs/<process>.log`).
 Fix it if it is a code problem; if it is the environment (a missing database, a busy port), **ask the person** how to proceed.
+
+Each Worq runs in its own worktree with its own environment. A process whose `command`/`url`/`web` uses `${port}` gets a port of its own in each worktree (the preferred `port` when free, else the next one), so several Worqs can be up at once; use `ORQEN_PORT_<NAME>` or `${port.<name>}` in `variables` to reach it, never a hard-coded port. The person sees the same environment in the Worq's Entorno and Web tabs of the desktop app.
 
 Stack detected during initialization:
 

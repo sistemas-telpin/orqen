@@ -26,6 +26,7 @@ function orqenCon(env: Record<string, string>, cwd: string, ...args: string[]) {
 test("desktop release discovery is read-only and installs only the confirmed version", () => {
   const repo = repoTemporal({
     "global/@telpin-sistemas/orqen-desktop/package.json": { version: "0.1.7" },
+    "global/@telpin-sistemas/orqen-studio/package.json": { version: "0.1.7" },
     "bin/npm.cmd": '@node "%~dp0npm.mjs" %*\r\n',
     "bin/npm": '#!/bin/sh\nexec node "$(dirname "$0")/npm.mjs" "$@"\n',
     "bin/npm.mjs": `
@@ -70,6 +71,14 @@ test("desktop release discovery is read-only and installs only the confirmed ver
   assert.equal(installed.codigo, 0, installed.salida);
   assert.deepEqual(JSON.parse(installed.salida), { status: "installed", version: "0.1.8" });
   assert.deepEqual(JSON.parse(readFileSync(log, "utf8")), ["install", "-g", "@telpin-sistemas/orqen-desktop@0.1.8"]);
+
+  const studio = { ...env, ORQEN_DESKTOP_NPM_MANIFEST: join(global, "@telpin-sistemas/orqen-studio/package.json") };
+  const studioCheck = orqenCon(studio, repo, "desktop-release", "0.1.7");
+  assert.equal(studioCheck.codigo, 0, studioCheck.salida);
+  assert.equal(JSON.parse(studioCheck.salida).status, "available");
+  const studioUpdate = orqenCon({ ...env, ORQEN_DESKTOP_NPM_MANIFEST: "" }, repo, "update", "--desktop", "--target", "0.1.8", "--yes", "--json");
+  assert.equal(studioUpdate.codigo, 0, studioUpdate.salida);
+  assert.deepEqual(JSON.parse(readFileSync(log, "utf8")), ["install", "-g", "@telpin-sistemas/orqen-studio@0.1.8"]);
 });
 
 test("orqen --help prints the current logo and usage without an interactive terminal", () => {

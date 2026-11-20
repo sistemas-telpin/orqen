@@ -20,7 +20,7 @@ import { moveWorkToWorqs } from "../lib/worqs.ts";
 
 export interface OpcionesUpdate { dir?: string; yes?: boolean; sinCli?: boolean; sinOpenspec?: boolean; sinKit?: boolean; sinAnimacion?: boolean; cliOnly?: boolean; desktop?: boolean; json?: boolean; target?: string }
 
-const PAQUETE_DESKTOP = "@telpin-sistemas/orqen-desktop";
+const PAQUETES_DESKTOP = ["@telpin-sistemas/orqen-studio", "@telpin-sistemas/orqen-desktop"];
 const DESKTOP_REPO = "sistemas-telpin/orqen-gui";
 
 function paqueteGlobal(gestor: string, paquete: string): string {
@@ -40,16 +40,19 @@ async function actualizarPaquete(gestor: string, paquete: string, actual: string
   return { status: "installed", version: ultima };
 }
 
-function versionDesktop(): string {
-  const manifest = join(paqueteGlobal("npm", PAQUETE_DESKTOP), "package.json");
-  if (!existsSync(manifest)) throw new Error("Install orqen Desktop globally with npm before updating it.");
+function instalacionDesktop(): { paquete: string; version: string } {
+  const scope = paqueteGlobal("npm", "@telpin-sistemas");
   const launcher = process.env.ORQEN_DESKTOP_NPM_MANIFEST;
-  if (launcher && realpathSync(launcher) !== realpathSync(manifest)) {
-    throw new Error("The running desktop app is outside the active global npm installation.");
+  const launcherPath = launcher && existsSync(launcher) ? realpathSync(launcher) : null;
+  for (const paquete of PAQUETES_DESKTOP) {
+    const manifest = join(scope, paquete.split("/")[1]!, "package.json");
+    if (!existsSync(manifest) || (launcher && launcherPath !== realpathSync(manifest))) continue;
+    const { version } = JSON.parse(readFileSync(manifest, "utf8"));
+    if (typeof version !== "string" || !semver.valid(version)) throw new Error("Invalid installed desktop version.");
+    return { paquete, version };
   }
-  const { version } = JSON.parse(readFileSync(manifest, "utf8"));
-  if (typeof version !== "string" || !semver.valid(version)) throw new Error("Invalid installed desktop version.");
-  return version;
+  if (launcher) throw new Error("The running desktop app is outside the active global npm installation.");
+  throw new Error("Install orqen Studio globally with npm before updating it.");
 }
 
 async function githubDesktop(path: string) {
@@ -71,11 +74,11 @@ async function githubDesktop(path: string) {
 /** Read-only discovery for the desktop app. Installation is a separate, pinned action. */
 export async function desktopRelease(installed: string) {
   if (!semver.valid(installed)) throw new Error("Invalid running desktop version.");
-  const actual = versionDesktop();
+  const { paquete, version: actual } = instalacionDesktop();
   if (semver.gt(actual, installed)) {
     return console.log(JSON.stringify({ status: "installed", version: actual }));
   }
-  const version = ultimaVersionPaquete("npm", PAQUETE_DESKTOP);
+  const version = ultimaVersionPaquete("npm", paquete);
   if (!version) throw new Error("Could not check npm for orqen Desktop updates.");
   if (!semver.gt(version, installed)) return console.log(JSON.stringify({ status: "current", version: installed }));
 
@@ -95,8 +98,8 @@ export async function desktopRelease(installed: string) {
 export async function update(o: OpcionesUpdate) {
   if (o.target !== undefined && (!o.desktop || !semver.valid(o.target))) throw new Error("--target requires --desktop and a valid version.");
   if (o.desktop) {
-    const actual = versionDesktop();
-    const result = await actualizarPaquete("npm", PAQUETE_DESKTOP, actual, !!o.yes || !interactivo(), o.target);
+    const { paquete, version: actual } = instalacionDesktop();
+    const result = await actualizarPaquete("npm", paquete, actual, !!o.yes || !interactivo(), o.target);
     if (result.status === "unavailable") throw new Error("Could not check npm for orqen Desktop updates.");
     if (o.json) console.log(JSON.stringify(result));
     else if (result.status === "installed") console.log(`orqen Desktop ${result.version} installed. Restart the app to use it.`);

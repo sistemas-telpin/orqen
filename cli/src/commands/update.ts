@@ -18,9 +18,10 @@ import { azul, confirmar, gris, interactivo, magenta, p, pc } from "../ui/consol
 import { resolverConflicto } from "./init.ts";
 import { moveWorkToWorqs } from "../lib/worqs.ts";
 
-export interface OpcionesUpdate { dir?: string; yes?: boolean; sinCli?: boolean; sinOpenspec?: boolean; sinKit?: boolean; sinAnimacion?: boolean; cliOnly?: boolean; desktop?: boolean; json?: boolean }
+export interface OpcionesUpdate { dir?: string; yes?: boolean; sinCli?: boolean; sinOpenspec?: boolean; sinKit?: boolean; sinAnimacion?: boolean; cliOnly?: boolean; desktop?: boolean; json?: boolean; target?: string }
 
-const PAQUETE_DESKTOP = "@telpin-sistemas/orqen-desktop";
+const PAQUETES_DESKTOP = ["@telpin-sistemas/orqen-studio", "@telpin-sistemas/orqen-desktop"];
+const DESKTOP_REPO = "sistemas-telpin/orqen-gui";
 
 function paqueteGlobal(gestor: string, paquete: string): string {
   const r = ejecutar(gestor, ["root", "-g"], { timeoutMs: 20_000 });
@@ -28,8 +29,8 @@ function paqueteGlobal(gestor: string, paquete: string): string {
   return join(r.stdout.trim(), paquete);
 }
 
-async function actualizarPaquete(gestor: string, paquete: string, actual: string, yes: boolean) {
-  const ultima = ultimaVersionPaquete(gestor, paquete);
+async function actualizarPaquete(gestor: string, paquete: string, actual: string, yes: boolean, objetivo?: string) {
+  const ultima = objetivo ?? ultimaVersionPaquete(gestor, paquete);
   if (!ultima) return { status: "unavailable", version: actual };
   if (!semver.gt(ultima, actual)) return { status: "current", version: actual };
   if (!await confirmar(`Update ${paquete} from ${actual} to ${ultima}?`, true, yes)) return { status: "skipped", version: actual };
@@ -39,16 +40,66 @@ async function actualizarPaquete(gestor: string, paquete: string, actual: string
   return { status: "installed", version: ultima };
 }
 
+function instalacionDesktop(): { paquete: string; version: string } {
+  const scope = paqueteGlobal("npm", "@telpin-sistemas");
+  const launcher = process.env.ORQEN_DESKTOP_NPM_MANIFEST;
+  const launcherPath = launcher && existsSync(launcher) ? realpathSync(launcher) : null;
+  for (const paquete of PAQUETES_DESKTOP) {
+    const manifest = join(scope, paquete.split("/")[1]!, "package.json");
+    if (!existsSync(manifest) || (launcher && launcherPath !== realpathSync(manifest))) continue;
+    const { version } = JSON.parse(readFileSync(manifest, "utf8"));
+    if (typeof version !== "string" || !semver.valid(version)) throw new Error("Invalid installed desktop version.");
+    return { paquete, version };
+  }
+  if (launcher) throw new Error("The running desktop app is outside the active global npm installation.");
+  throw new Error("Install orqen Studio globally with npm before updating it.");
+}
+
+async function githubDesktop(path: string) {
+  const api = `repos/${DESKTOP_REPO}/${path}`;
+  try {
+    const response = await fetch(`https://api.github.com/${api}`, {
+      headers: { Accept: "application/vnd.github+json" },
+      signal: AbortSignal.timeout(5_000),
+    });
+    if (response.ok) return await response.json();
+  } catch { /* Try the locally authenticated GitHub CLI. */ }
+  const authenticated = await ejecutarAsync("gh", ["api", api], {
+    timeoutMs: 5_000, env: { ...process.env, GH_PROMPT_DISABLED: "1" },
+  });
+  if (authenticated.codigo !== 0) throw new Error("Desktop release metadata is unavailable.");
+  return JSON.parse(authenticated.stdout);
+}
+
+/** Read-only discovery for the desktop app. Installation is a separate, pinned action. */
+export async function desktopRelease(installed: string) {
+  if (!semver.valid(installed)) throw new Error("Invalid running desktop version.");
+  const { paquete, version: actual } = instalacionDesktop();
+  if (semver.gt(actual, installed)) {
+    return console.log(JSON.stringify({ status: "installed", version: actual }));
+  }
+  const version = ultimaVersionPaquete("npm", paquete);
+  if (!version) throw new Error("Could not check npm for orqen Desktop updates.");
+  if (!semver.gt(version, installed)) return console.log(JSON.stringify({ status: "current", version: installed }));
+
+  const range = `v${installed}...v${version}`;
+  const [release, comparison] = await Promise.allSettled([
+    githubDesktop(`releases/tags/v${version}`), githubDesktop(`compare/${range}?per_page=100`),
+  ]);
+  const notes = release.status === "fulfilled" && typeof release.value.body === "string" ? release.value.body.trim() : "";
+  const commits = comparison.status === "fulfilled" && Array.isArray(comparison.value.commits)
+    ? comparison.value.commits.map((c: { commit?: { message?: string } }) => c.commit?.message?.split("\n")[0]).filter(Boolean)
+    : [];
+  console.log(JSON.stringify({
+    status: "available", version, notes, commits, url: `https://github.com/${DESKTOP_REPO}/compare/${range}`,
+  }));
+}
+
 export async function update(o: OpcionesUpdate) {
+  if (o.target !== undefined && (!o.desktop || !semver.valid(o.target))) throw new Error("--target requires --desktop and a valid version.");
   if (o.desktop) {
-    const manifest = join(paqueteGlobal("npm", PAQUETE_DESKTOP), "package.json");
-    if (!existsSync(manifest)) throw new Error("Install orqen Desktop globally with npm before updating it.");
-    const launcher = process.env.ORQEN_DESKTOP_NPM_MANIFEST;
-    if (launcher && realpathSync(launcher) !== realpathSync(manifest)) {
-      throw new Error("The running desktop app is outside the active global npm installation.");
-    }
-    const { version: actual } = JSON.parse(readFileSync(manifest, "utf8"));
-    const result = await actualizarPaquete("npm", PAQUETE_DESKTOP, actual, !!o.yes || !interactivo());
+    const { paquete, version: actual } = instalacionDesktop();
+    const result = await actualizarPaquete("npm", paquete, actual, !!o.yes || !interactivo(), o.target);
     if (result.status === "unavailable") throw new Error("Could not check npm for orqen Desktop updates.");
     if (o.json) console.log(JSON.stringify(result));
     else if (result.status === "installed") console.log(`orqen Desktop ${result.version} installed. Restart the app to use it.`);

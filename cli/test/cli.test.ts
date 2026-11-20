@@ -1,10 +1,10 @@
 /** CLI end-to-end tests for init and update without network access or Docker. */
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { delimiter, join } from "node:path";
 import { test } from "node:test";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { parse, stringify } from "yaml";
 import { MONOREPO, repoTemporal } from "./helpers.ts";
 
@@ -22,6 +22,64 @@ function orqenCon(env: Record<string, string>, cwd: string, ...args: string[]) {
   const r = spawnSync(process.execPath, [TSX, CLI, ...args], { cwd, encoding: "utf8", env: { ...process.env, NO_COLOR: "1", ORQEN_TOOLS_DIR: catalogo, ORQEN_TOOLS_REPO: "not-a-github-repository", ...env } });
   return { codigo: r.status, salida: r.stdout + r.stderr };
 }
+
+test("desktop release discovery is read-only and installs only the confirmed version", () => {
+  const repo = repoTemporal({
+    "global/@telpin-sistemas/orqen-desktop/package.json": { version: "0.1.7" },
+    "global/@telpin-sistemas/orqen-studio/package.json": { version: "0.1.7" },
+    "bin/npm.cmd": '@node "%~dp0npm.mjs" %*\r\n',
+    "bin/npm": '#!/bin/sh\nexec node "$(dirname "$0")/npm.mjs" "$@"\n',
+    "bin/npm.mjs": `
+      import { writeFileSync } from "node:fs";
+      const args = process.argv.slice(2);
+      if (args[0] === "root") console.log(process.env.TEST_GLOBAL);
+      else if (args[0] === "view") console.log("0.1.8");
+      else if (args[0] === "install") writeFileSync(process.env.TEST_NPM_CALL, JSON.stringify(args));
+      else process.exitCode = 2;
+    `,
+    "github.mjs": `
+      globalThis.fetch = async (url) => Response.json(String(url).includes("/compare/")
+        ? { commits: [{ commit: { message: "Fix the Worq chat" } }] }
+        : { body: "New bot settings" });
+    `,
+  }, false);
+  if (process.platform !== "win32") chmodSync(join(repo, "bin/npm"), 0o755);
+  const log = join(repo, "npm-call.json");
+  const global = join(repo, "global");
+  const env = {
+    PATH: [join(repo, "bin"), process.env.PATH].filter(Boolean).join(delimiter),
+    ORQEN_DESKTOP_NPM_MANIFEST: join(global, "@telpin-sistemas/orqen-desktop/package.json"),
+    NODE_OPTIONS: `--import=${pathToFileURL(join(repo, "github.mjs")).href}`,
+    TEST_GLOBAL: global, TEST_NPM_CALL: log,
+  };
+
+  const check = orqenCon(env, repo, "desktop-release", "0.1.7");
+  assert.equal(check.codigo, 0, check.salida);
+  assert.deepEqual(JSON.parse(check.salida), {
+    status: "available",
+    version: "0.1.8",
+    notes: "New bot settings",
+    commits: ["Fix the Worq chat"],
+    url: "https://github.com/sistemas-telpin/orqen-gui/compare/v0.1.7...v0.1.8",
+  });
+  const current = orqenCon(env, repo, "desktop-release", "0.1.8");
+  assert.equal(current.codigo, 0, current.salida);
+  assert.equal(JSON.parse(current.salida).status, "current");
+  assert.ok(!existsSync(log));
+
+  const installed = orqenCon(env, repo, "update", "--desktop", "--target", "0.1.8", "--yes", "--json");
+  assert.equal(installed.codigo, 0, installed.salida);
+  assert.deepEqual(JSON.parse(installed.salida), { status: "installed", version: "0.1.8" });
+  assert.deepEqual(JSON.parse(readFileSync(log, "utf8")), ["install", "-g", "@telpin-sistemas/orqen-desktop@0.1.8"]);
+
+  const studio = { ...env, ORQEN_DESKTOP_NPM_MANIFEST: join(global, "@telpin-sistemas/orqen-studio/package.json") };
+  const studioCheck = orqenCon(studio, repo, "desktop-release", "0.1.7");
+  assert.equal(studioCheck.codigo, 0, studioCheck.salida);
+  assert.equal(JSON.parse(studioCheck.salida).status, "available");
+  const studioUpdate = orqenCon({ ...env, ORQEN_DESKTOP_NPM_MANIFEST: "" }, repo, "update", "--desktop", "--target", "0.1.8", "--yes", "--json");
+  assert.equal(studioUpdate.codigo, 0, studioUpdate.salida);
+  assert.deepEqual(JSON.parse(readFileSync(log, "utf8")), ["install", "-g", "@telpin-sistemas/orqen-studio@0.1.8"]);
+});
 
 test("orqen --help prints the current logo and usage without an interactive terminal", () => {
   const r = orqen(process.cwd(), "--help");

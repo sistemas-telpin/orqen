@@ -5,7 +5,7 @@ import { entorno } from "./commands/environment.ts";
 import { bootstrap } from "./commands/bootstrap.ts";
 import { init } from "./commands/init.ts";
 import { WORKFLOW_HELP, WORKFLOW_INTERNAL_HELP, WORKFLOW_COMMANDS, runWorkflow } from "./commands/workflow.ts";
-import { update } from "./commands/update.ts";
+import { desktopRelease, update } from "./commands/update.ts";
 import { SWARM_HELP, swarm } from "./commands/swarm.ts";
 import { lang, tutorial } from "./commands/tutorial.ts";
 import { VERSION_CLI } from "./lib/system.ts";
@@ -41,8 +41,9 @@ Commands:
   update [dir]            Update the CLI and, in an orqen project, OpenSpec and the kit
       --cli-only         Update only the CLI
       --desktop          Update the global npm install of orqen Desktop
+      --target <version> Install this exact desktop version
       --yes, -y  --no-cli  --no-openspec  --no-kit
-  env <cmd>               setup | up [--all] | test [type...] | status | down
+  env <cmd>               setup | up [--all] [name...] | restart [name...] | test [type...] | status [--json] | down [name...]
   tutorial [step]         Step-by-step tour for newcomers, in your system language (es/en)
       --step <n|id>       Print one step and exit (--json for agents) · --list · --lang es|en
   lang                    Print the detected system language (es | en); ORQEN_LANG overrides it
@@ -71,6 +72,7 @@ async function main() {
   if (crudos[0] === "lang") return lang(crudos.slice(1));
   if (crudos[0] === "usage") return usageCommand(crudos.slice(1));
   if (crudos[0] === "eval") return evalCommand(crudos.slice(1));
+  if (crudos[0] === "desktop-release") return desktopRelease(crudos[1] ?? "");
   if (crudos[0] === "learn") return learnCommand(crudos.slice(1));
   if (crudos[0] === "spec") return specCommand(crudos.slice(1));
   if (crudos[0] === "practice") return practice(crudos.slice(1));
@@ -98,6 +100,7 @@ async function main() {
       "no-cli": { type: "boolean" },
       "cli-only": { type: "boolean" },
       desktop: { type: "boolean" },
+      target: { type: "string" },
       "no-kit": { type: "boolean" },
       all: { type: "boolean" },
       dir: { type: "string" },
@@ -144,7 +147,7 @@ async function main() {
       return update({
         dir: (v.dir as string) ?? resto[0], yes: !!v.yes, sinCli: !!v["no-cli"],
         sinOpenspec: !!v["no-openspec"], sinKit: !!v["no-kit"], sinAnimacion: !!v["no-animation"],
-        cliOnly: !!v["cli-only"], desktop: !!v.desktop, json: !!v.json,
+        cliOnly: !!v["cli-only"], desktop: !!v.desktop, json: !!v.json, target: v.target as string | undefined,
       });
     case "env":
       return entorno(resto[0], resto.slice(1), { dir: v.dir as string | undefined, todos: !!v.all, json: !!v.json, extra });

@@ -67,8 +67,10 @@ test("asking while the worq waits for the client warns that their next comment c
 
 test("a transition commits only its own worq folder, and never conversation.json (replies of the client)", () => {
   const base = realpathSync.native(mkdtempSync(join(tmpdir(), "orqen-commit-")));
-  const git = (...a: string[]) => execFileSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", ...a], { cwd: base, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
+  const git = (...a: string[]) => execFileSync("git", a, { cwd: base, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
   git("init", "-q", "-b", "main");
+  git("config", "user.name", "t");
+  git("config", "user.email", "t@t");
   writeFileSync(join(base, "a.txt"), "a");
   git("add", "-A");
   git("commit", "-qm", "init");

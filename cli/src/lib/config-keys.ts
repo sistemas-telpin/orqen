@@ -30,7 +30,7 @@ export const STACK_KEYS: Keys = {
   tests: { as: "tests", keys: TESTS }, migrations: "migraciones", seed: "seed", variables: "variables", notes: "notas",
 };
 const PROCESS: Keys = {
-  name: "nombre", command: "comando", path: "ruta", port: "puerto", url: "url", ready_when: "listo_si", stop: "detener",
+  name: "nombre", command: "comando", path: "ruta", port: "puerto", url: "url", ready_when: "listo_si", stop: "detener", web: "web",
   when: { as: "cuando", values: { always: "siempre" } }, wait_seconds: "espera_seg",
 };
 /** orqen/environment.yaml without `stack`: how the project starts and is tested (`entornos` inside). */

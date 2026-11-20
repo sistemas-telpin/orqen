@@ -44,8 +44,8 @@ export function ejecutarAsync(cmd: string, args: string[], o: OpcionesEjecutar =
       stdio: ["pipe", "pipe", "pipe"],
     });
     const timer = o.timeoutMs ? setTimeout(() => { if (!terminado) { stderr += "\n[timeout]"; hijo.kill(); } }, o.timeoutMs) : undefined;
-    hijo.stdout?.on("data", (d) => (stdout += d));
-    hijo.stderr?.on("data", (d) => (stderr += d));
+    hijo.stdout?.setEncoding("utf8").on("data", (d) => (stdout += d));
+    hijo.stderr?.setEncoding("utf8").on("data", (d) => (stderr += d));
     hijo.on("error", (error) => { terminado = true; clearTimeout(timer); resolve({ codigo: 127, stdout, stderr, error }); });
     hijo.on("close", (codigo) => { terminado = true; clearTimeout(timer); resolve({ codigo: codigo ?? 1, stdout, stderr }); });
     if (o.entrada !== undefined) hijo.stdin?.end(o.entrada); else hijo.stdin?.end();

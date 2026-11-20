@@ -29,13 +29,20 @@ function paqueteGlobal(gestor: string, paquete: string): string {
   return join(r.stdout.trim(), paquete);
 }
 
-async function actualizarPaquete(gestor: string, paquete: string, actual: string, yes: boolean, objetivo?: string) {
+async function actualizarPaquete(gestor: string, paquete: string, actual: string, yes: boolean, objetivo?: string, desktop = false) {
   const ultima = objetivo ?? ultimaVersionPaquete(gestor, paquete);
   if (!ultima) return { status: "unavailable", version: actual };
   if (!semver.gt(ultima, actual)) return { status: "current", version: actual };
   if (!await confirmar(`Update ${paquete} from ${actual} to ${ultima}?`, true, yes)) return { status: "skipped", version: actual };
 
-  const r = await ejecutarAsync(gestor, [gestor === "pnpm" ? "add" : "install", "-g", `${paquete}@${ultima}`], { timeoutMs: 10 * 60_000 });
+  const args = [gestor === "pnpm" ? "add" : "install", "-g", `${paquete}@${ultima}`];
+  if (desktop) {
+    const binario = `@telpin-sistemas/orqen-desktop-${process.platform}-${process.arch}@${ultima}`;
+    const descarga = await ejecutarAsync(gestor, ["cache", "add", binario, "--prefer-online", "--fetch-retries=0"], { timeoutMs: 60_000 });
+    if (descarga.codigo !== 0) throw new Error("The platform build is still unavailable on npm. Your current installation is intact. Try again in a few minutes.");
+    args.push("--include=optional", binario);
+  }
+  const r = await ejecutarAsync(gestor, args, { timeoutMs: 10 * 60_000 });
   if (r.codigo !== 0) throw new Error(`Update failed for ${paquete}: ${(r.stderr || r.stdout || r.error?.message || `exit code ${r.codigo}`).trim().slice(-1500)}`);
   return { status: "installed", version: ultima };
 }
@@ -99,7 +106,7 @@ export async function update(o: OpcionesUpdate) {
   if (o.target !== undefined && (!o.desktop || !semver.valid(o.target))) throw new Error("--target requires --desktop and a valid version.");
   if (o.desktop) {
     const { paquete, version: actual } = instalacionDesktop();
-    const result = await actualizarPaquete("npm", paquete, actual, !!o.yes || !interactivo(), o.target);
+    const result = await actualizarPaquete("npm", paquete, actual, !!o.yes || !interactivo(), o.target, true);
     if (result.status === "unavailable") throw new Error("Could not check npm for orqen Desktop updates.");
     if (o.json) console.log(JSON.stringify(result));
     else if (result.status === "installed") console.log(`orqen Desktop ${result.version} installed. Restart the app to use it.`);

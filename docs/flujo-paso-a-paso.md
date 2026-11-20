@@ -3,7 +3,7 @@
 Hay dos formas de recorrer el flujo, y hacen lo mismo:
 
 - **Con comandos** `orqen …` en la terminal.
-- **Con skills** `/orqen:…` en Claude Code, o en cualquier agente al que le pidas lo mismo. La skill lanza al agente, que lee el
+- **Con skills** `/orqen:…` en cualquier agente al que le pidas lo mismo. La skill lanza al agente, que lee el
   contexto, conversa con la persona y recién después ejecuta los mismos comandos `orqen` (los de las filas "CLI").
 
 Lo que el flujo lleva es un **worq**: la unidad de trabajo de orqen, uno por pedido (el request, su issue, la rama, la spec, el PR y el registro de
@@ -34,90 +34,90 @@ orqen connectors            # prueba la conexión
 
 ### Paso 1 · Ver el trabajo pendiente
 
-| | |
-|---|---|
-| **Skill** | `/orqen:list requests` |
-| **CLI** | `orqen list requests [--json] [--all]` |
+|              |                                                                                                                                                                                                                                                           |
+| ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Skill**    | `/orqen:list requests`                                                                                                                                                                                                                                    |
+| **CLI**      | `orqen list requests [--json] [--all]`                                                                                                                                                                                                                    |
 | **Qué hace** | Primero procesa lo que ya tiene decisión en los tickets (respuestas del cliente, `/approve`, reviews del PR) y después lista los pedidos por rol (soporte, analista, desarrollo, QA, senior, cliente, bloqueados) con el comando siguiente. No toma nada. |
 
 ### Paso 2 · Soporte (opcional)
 
-| | |
-|---|---|
-| **Skill** | `/orqen:support GH-4` |
-| **CLI** | `orqen support GH-4 --agent support` → `orqen complete GH-4 salida.json --agent support` |
-| **Qué hace el CLI** | `support` reserva el pedido (queda en `SUPPORT`) y muestra el contexto y el esquema (`orqen schema SUPPORT`). `complete` valida el JSON, comenta en el ticket y avanza. |
+|                        |                                                                                                                                                                                                                                                |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Skill**              | `/orqen:support GH-4`                                                                                                                                                                                                                          |
+| **CLI**                | `orqen support GH-4 --agent support` → `orqen complete GH-4 salida.json --agent support`                                                                                                                                                       |
+| **Qué hace el CLI**    | `support` reserva el pedido (queda en `SUPPORT`) y muestra el contexto y el esquema (`orqen schema SUPPORT`). `complete` valida el JSON, comenta en el ticket y avanza.                                                                        |
 | **Qué hace el agente** | Lee el pedido, busca la respuesta (pedidos parecidos, `openspec/specs/`, el código), propone `resolved` o `escalate`, redacta el texto para el cliente y se lo muestra a la persona. Solo con su aprobación explícita pone `support_ok: true`. |
-| **Resultado** | `resolved` → `ACCEPTANCE`: el cliente confirma con `/approve` o `/reject <motivo>`. `escalate` → `ANALYSIS`. |
+| **Resultado**          | `resolved` → `ACCEPTANCE`: el cliente confirma con `/approve` o `/reject <motivo>`. `escalate` → `ANALYSIS`.                                                                                                                                   |
 
 ### Paso 3 · Análisis
 
-| | |
-|---|---|
-| **Skill** | `/orqen:analyze GH-4` (usa además la skill `orqen:grilling`) |
-| **CLI** | `orqen analyze GH-4 --agent analyst` → `orqen lane GH-4 direct\|light\|full` → `orqen complete GH-4 salida.json --agent analyst` |
-| **Qué hace el CLI** | `analyze` reserva el pedido y entrega el contexto (con el resumen de soporte y el feedback del cliente, si hay). `lane` registra el carril; en light/full además crea la rama y el change de OpenSpec. `complete` valida; si el análisis queda listo, crea el issue y lo vincula. |
+|                        |                                                                                                                                                                                                                                                                                   |
+| ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Skill**              | `/orqen:analyze GH-4` (usa además la skill `orqen:grilling`)                                                                                                                                                                                                                      |
+| **CLI**                | `orqen analyze GH-4 --agent analyst` → `orqen lane GH-4 direct\|light\|full` → `orqen complete GH-4 salida.json --agent analyst`                                                                                                                                                  |
+| **Qué hace el CLI**    | `analyze` reserva el pedido y entrega el contexto (con el resumen de soporte y el feedback del cliente, si hay). `lane` registra el carril; en light/full además crea la rama y el change de OpenSpec. `complete` valida; si el análisis queda listo, crea el issue y lo vincula. |
 | **Qué hace el agente** | Lee el pedido, las specs y el código, y entrevista al analista con `grilling` (una pregunta por vez, con su recomendación). Propone el carril, escribe la spec si corresponde y arma el JSON (`orqen schema ANALYSIS`). `analyst_ok: true` solo con el OK explícito del analista. |
-| **Resultado** | Con preguntas para el cliente (`open_questions`) → `WAITING_CLIENT` (ver sección 2). Listo → `DEVELOPMENT` (o `EXECUTION` si es operativo). |
+| **Resultado**          | Con preguntas para el cliente (`open_questions`) → `WAITING_CLIENT` (ver sección 2). Listo → `DEVELOPMENT` (o `EXECUTION` si es operativo).                                                                                                                                       |
 
 Carriles: `direct` (sin spec, plan en el análisis), `light` (OpenSpec compacto), `full` (OpenSpec completo, con revisión de QA), y `operational`
 (sin código: SQL, reinicios, datos).
 
 ### Paso 4 · Cola de desarrollo
 
-| | |
-|---|---|
-| **Skill** | `/orqen:list issues` |
-| **CLI** | `orqen list issues [--json]` |
+|              |                                                                                                                        |
+| ------------ | ---------------------------------------------------------------------------------------------------------------------- |
+| **Skill**    | `/orqen:list issues`                                                                                                   |
+| **CLI**      | `orqen list issues [--json]`                                                                                           |
 | **Qué hace** | Lista los pedidos en `DEVELOPMENT`: libres o tomados, horas estimadas, y los que volvieron con cambios, con el motivo. |
 
 ### Paso 5 · Implementar (con testing automático)
 
-| | |
-|---|---|
-| **Skill** | `/orqen:implement GH-3` |
-| **CLI** | `orqen take GH-3 --agent implementer` → (implementar) → `orqen env test unit` → `orqen complete GH-3 dev.json --agent implementer` → `orqen take GH-3 --agent tester` → `orqen complete GH-3 testing.json --agent tester` |
-| **Qué hace el CLI** | El primer `take` crea la rama `orqen/gh-3`, instala dependencias y levanta los procesos de `environment.yaml`. `complete` (DEVELOPMENT) pasa a `TESTING`. El segundo `take` corre toda la suite (unit, integración y e2e) y devuelve el resultado y los escenarios o criterios a verificar. |
+|                        |                                                                                                                                                                                                                                                                                                                                                                                     |
+| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Skill**              | `/orqen:implement GH-3`                                                                                                                                                                                                                                                                                                                                                             |
+| **CLI**                | `orqen take GH-3 --agent implementer` → (implementar) → `orqen env test unit` → `orqen complete GH-3 dev.json --agent implementer` → `orqen take GH-3 --agent tester` → `orqen complete GH-3 testing.json --agent tester`                                                                                                                                                           |
+| **Qué hace el CLI**    | El primer `take` crea la rama `orqen/gh-3`, instala dependencias y levanta los procesos de `environment.yaml`. `complete` (DEVELOPMENT) pasa a `TESTING`. El segundo `take` corre toda la suite (unit, integración y e2e) y devuelve el resultado y los escenarios o criterios a verificar.                                                                                         |
 | **Qué hace el agente** | Muestra su plan y espera el OK. Implementa con `orqen swarm --file <tarea> --yes --json --apply` (planifica, reparte en worktrees y verifica) o siguiendo el plan del carril directo. Corre solo los tests de este cambio y, con el OK de la persona, cierra la etapa. Después corre `TESTING` por su cuenta, sin pedir OK: mapea cada criterio a su test y diagnostica las fallas. |
-| **Resultado** | Pasa → `QA_REVIEW` (carril completo) o `CODE_REVIEW`. Falla → vuelve a `DEVELOPMENT` con el diagnóstico (hasta 3 veces; después se bloquea). |
+| **Resultado**          | Pasa → `QA_REVIEW` (carril completo) o `CODE_REVIEW`. Falla → vuelve a `DEVELOPMENT` con el diagnóstico (hasta 3 veces; después se bloquea).                                                                                                                                                                                                                                        |
 
 ### Paso 6 · Abrir el PR
 
-| | |
-|---|---|
-| **Skill** | `/orqen:pr GH-3` |
-| **CLI** | `orqen pr GH-3` (solo informa) → `orqen pr GH-3 explicacion.md --agent pr` |
-| **Qué hace el CLI** | Sin archivo: muestra rama, base, carril y PR existente. Con archivo: commitea lo pendiente, empuja la rama y abre o actualiza el PR a la rama de integración (`workflow.devel_branch`). Necesita `gh`. |
-| **Qué hace el agente** | Lee el diff contra el análisis o la spec, escribe la explicación (resumen, cambios, desvíos, tests, riesgos) y se la pasa a `orqen pr`. |
+|                        |                                                                                                                                                                                                        |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Skill**              | `/orqen:pr GH-3`                                                                                                                                                                                       |
+| **CLI**                | `orqen pr GH-3` (solo informa) → `orqen pr GH-3 explicacion.md --agent pr`                                                                                                                             |
+| **Qué hace el CLI**    | Sin archivo: muestra rama, base, carril y PR existente. Con archivo: commitea lo pendiente, empuja la rama y abre o actualiza el PR a la rama de integración (`workflow.devel_branch`). Necesita `gh`. |
+| **Qué hace el agente** | Lee el diff contra el análisis o la spec, escribe la explicación (resumen, cambios, desvíos, tests, riesgos) y se la pasa a `orqen pr`.                                                                |
 
 ### Paso 7 · Revisión de QA (solo carril completo)
 
-| | |
-|---|---|
-| **Skill** | `/orqen:review GH-3` |
-| **CLI** | `orqen env up --all`, `orqen env test e2e -- <archivos>` → `orqen review GH-3 approve\|reject --report informe.md --person "QA" --agent qa` |
+|                        |                                                                                                                                                                                                      |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Skill**              | `/orqen:review GH-3`                                                                                                                                                                                 |
+| **CLI**                | `orqen env up --all`, `orqen env test e2e -- <archivos>` → `orqen review GH-3 approve\|reject --report informe.md --person "QA" --agent qa`                                                          |
 | **Qué hace el agente** | Levanta todo el proyecto (incluido el frontend), corre los e2e del cambio en modo visible, arma la tabla de escenarios y tests y marca lo que falta o es frágil. QA corrige directamente en la rama. |
-| **Resultado** | Aprueba → `CODE_REVIEW`. Rechaza → `DEVELOPMENT` con el motivo. |
+| **Resultado**          | Aprueba → `CODE_REVIEW`. Rechaza → `DEVELOPMENT` con el motivo.                                                                                                                                      |
 
 ### Paso 8 · Cola de PRs del senior
 
-| | |
-|---|---|
-| **Skill** | `/orqen:list prs` |
-| **CLI** | `orqen list prs [--json]` |
+|              |                                                                                                                                                       |
+| ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Skill**    | `/orqen:list prs`                                                                                                                                     |
+| **CLI**      | `orqen list prs [--json]`                                                                                                                             |
 | **Qué hace** | Muestra los PRs en revisión con el estado del CI, si hay conflictos, si el review es sobre el último commit, y los ya aprobados que esperan el merge. |
 
 ### Paso 9 · Decisión del senior, merge y entrega
 
-| | |
-|---|---|
-| **Skill** | `/orqen:approve GH-3` |
-| **CLI** | `orqen code-review` (opcional) → `orqen approve GH-3` o `orqen approve GH-3 --changes comentario.md` → (merge manual) → `orqen take GH-3 --agent delivery` → `orqen complete GH-3 entrega.json --agent delivery` |
+|                        |                                                                                                                                                                                                                                                            |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Skill**              | `/orqen:approve GH-3`                                                                                                                                                                                                                                      |
+| **CLI**                | `orqen code-review` (opcional) → `orqen approve GH-3` o `orqen approve GH-3 --changes comentario.md` → (merge manual) → `orqen take GH-3 --agent delivery` → `orqen complete GH-3 entrega.json --agent delivery`                                           |
 | **Qué hace el agente** | Si el senior quiere, revisa el PR en solo lectura y entrega un informe con veredicto y hallazgos (`file:line`, severidad, soluciones), que registra con `orqen code-review`. Después le pide la decisión. Si pide cambios, redacta con él el texto exacto. |
-| **Qué hace el CLI** | `approve` no aprueba un PR con el CI en rojo o con conflictos (salvo `--force`). Aprobar pasa a `DELIVERY`. Pedir cambios vuelve a `DEVELOPMENT`. |
-| **Merge** | **orqen nunca mergea.** Una persona mergea el PR a mano; orqen lo detecta con `gh`, o se confirma con `orqen merged GH-3`. |
-| **Entrega** | `take` archiva la spec y la empuja al PR. El agente redacta el mensaje al cliente (qué cambió y cómo validarlo), el senior lo aprueba y `complete` lo publica → `ACCEPTANCE`. |
-| **Cierre** | El cliente comenta `/approve` → `CLOSED` (se cierra el ticket). Con `/reject <motivo>` → vuelve a `ANALYSIS`, ronda 2. |
+| **Qué hace el CLI**    | `approve` no aprueba un PR con el CI en rojo o con conflictos (salvo `--force`). Aprobar pasa a `DELIVERY`. Pedir cambios vuelve a `DEVELOPMENT`.                                                                                                          |
+| **Merge**              | **orqen nunca mergea.** Una persona mergea el PR a mano; orqen lo detecta con `gh`, o se confirma con `orqen merged GH-3`.                                                                                                                                 |
+| **Entrega**            | `take` archiva la spec y la empuja al PR. El agente redacta el mensaje al cliente (qué cambió y cómo validarlo), el senior lo aprueba y `complete` lo publica → `ACCEPTANCE`.                                                                              |
+| **Cierre**             | El cliente comenta `/approve` → `CLOSED` (se cierra el ticket). Con `/reject <motivo>` → vuelve a `ANALYSIS`, ronda 2.                                                                                                                                     |
 
 ## 2. Ida y vuelta con el cliente
 
@@ -162,17 +162,17 @@ orqen cycle [--loop]            # modo desatendido: solo etapas de agente, nunca
 
 ## 4. Qué agente hace cada etapa (`--agent`)
 
-| Valor | Etapa | Comando |
-|---|---|---|
-| `support` | SUPPORT | `/orqen:support` |
-| `analyst` | ANALYSIS | `/orqen:analyze` |
-| `implementer` | DEVELOPMENT | `/orqen:implement` |
-| `tester` | TESTING (automático, dentro de `/orqen:implement`) | `/orqen:implement` |
-| `pr` | Abrir el PR | `/orqen:pr` |
-| `qa` | QA_REVIEW | `/orqen:review` |
-| `code-review` | Informe opcional del senior | `/orqen:approve` |
-| `senior` | CODE_REVIEW (la decisión) | `/orqen:approve` |
-| `delivery` | DELIVERY | `/orqen:approve` |
+| Valor         | Etapa                                              | Comando            |
+| ------------- | -------------------------------------------------- | ------------------ |
+| `support`     | SUPPORT                                            | `/orqen:support`   |
+| `analyst`     | ANALYSIS                                           | `/orqen:analyze`   |
+| `implementer` | DEVELOPMENT                                        | `/orqen:implement` |
+| `tester`      | TESTING (automático, dentro de `/orqen:implement`) | `/orqen:implement` |
+| `pr`          | Abrir el PR                                        | `/orqen:pr`        |
+| `qa`          | QA_REVIEW                                          | `/orqen:review`    |
+| `code-review` | Informe opcional del senior                        | `/orqen:approve`   |
+| `senior`      | CODE_REVIEW (la decisión)                          | `/orqen:approve`   |
+| `delivery`    | DELIVERY                                           | `/orqen:approve`   |
 
 ## 5. Qué se probó
 

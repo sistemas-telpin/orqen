@@ -468,7 +468,7 @@ export async function runWorkflow(cmd: string, rest: string[]) {
           if (json) return console.log(JSON.stringify({ ...w, files, events: events.slice(-10) }, null, 2));
           console.log(`Worq ${w.key}${w.title ? ` — ${w.title}` : ""}`);
           console.log(`  State:    ${w.state}${w.round > 1 ? ` (round ${w.round})` : ""}${w.lane ? ` · lane ${w.lane}` : ""}${w.route && w.route !== "development" ? ` · ${w.route}` : ""}`);
-          if (w.next[0]) console.log(`  Next:     ${w.next[0].command}  (${w.role}: ${w.next[0].what})`);
+          if (w.next[0]) console.log(`  Next:     ${w.next[0].command ? `${w.next[0].command}  (${w.role}: ${w.next[0].what})` : `${w.role}: ${w.next[0].what}`}`);
           console.log(`  Request:  ${w.key}  ${w.request_url}`);
           if (w.issue) console.log(`  Issue:    ${w.issue}${w.issue_url ? `  ${w.issue_url}` : ""}`);
           if (w.branch) console.log(`  Branch:   ${w.branch}`);

@@ -34,6 +34,7 @@ test("desktop release discovery is read-only and installs only the confirmed ver
       const args = process.argv.slice(2);
       if (args[0] === "root") console.log(process.env.TEST_GLOBAL);
       else if (args[0] === "view") console.log("0.1.8");
+      else if (args[0] === "cache") process.exitCode = process.env.TEST_MISSING_BINARY ? 1 : 0;
       else if (args[0] === "install") writeFileSync(process.env.TEST_NPM_CALL, JSON.stringify(args));
       else process.exitCode = 2;
     `,
@@ -60,17 +61,23 @@ test("desktop release discovery is read-only and installs only the confirmed ver
     version: "0.1.8",
     notes: "New bot settings",
     commits: ["Fix the Worq chat"],
-    url: "https://github.com/sistemas-telpin/orqen-gui/compare/v0.1.7...v0.1.8",
+    url: "https://github.com/sistemas-telpin/orqen-studio/compare/v0.1.7...v0.1.8",
   });
   const current = orqenCon(env, repo, "desktop-release", "0.1.8");
   assert.equal(current.codigo, 0, current.salida);
   assert.equal(JSON.parse(current.salida).status, "current");
   assert.ok(!existsSync(log));
 
-  const installed = orqenCon(env, repo, "update", "--desktop", "--target", "0.1.8", "--yes", "--json");
+  const opts = ["update", "--desktop", "--target", "0.1.8", "--yes", "--json"];
+  const missing = orqenCon({ ...env, TEST_MISSING_BINARY: "1" }, repo, ...opts);
+  assert.notEqual(missing.codigo, 0);
+  assert.match(missing.salida, /platform build is still unavailable/);
+  assert.ok(!existsSync(log), "a missing platform must leave the installation intact");
+  const binary = `@telpin-sistemas/orqen-desktop-${process.platform}-${process.arch}@0.1.8`;
+  const installed = orqenCon(env, repo, ...opts);
   assert.equal(installed.codigo, 0, installed.salida);
   assert.deepEqual(JSON.parse(installed.salida), { status: "installed", version: "0.1.8" });
-  assert.deepEqual(JSON.parse(readFileSync(log, "utf8")), ["install", "-g", "@telpin-sistemas/orqen-desktop@0.1.8"]);
+  assert.deepEqual(JSON.parse(readFileSync(log, "utf8")), ["install", "-g", "@telpin-sistemas/orqen-desktop@0.1.8", "--include=optional", binary]);
 
   const studio = { ...env, ORQEN_DESKTOP_NPM_MANIFEST: join(global, "@telpin-sistemas/orqen-studio/package.json") };
   const studioCheck = orqenCon(studio, repo, "desktop-release", "0.1.7");
@@ -78,7 +85,7 @@ test("desktop release discovery is read-only and installs only the confirmed ver
   assert.equal(JSON.parse(studioCheck.salida).status, "available");
   const studioUpdate = orqenCon({ ...env, ORQEN_DESKTOP_NPM_MANIFEST: "" }, repo, "update", "--desktop", "--target", "0.1.8", "--yes", "--json");
   assert.equal(studioUpdate.codigo, 0, studioUpdate.salida);
-  assert.deepEqual(JSON.parse(readFileSync(log, "utf8")), ["install", "-g", "@telpin-sistemas/orqen-studio@0.1.8"]);
+  assert.deepEqual(JSON.parse(readFileSync(log, "utf8")), ["install", "-g", "@telpin-sistemas/orqen-studio@0.1.8", "--include=optional", binary]);
 });
 
 test("orqen --help prints the current logo and usage without an interactive terminal", () => {

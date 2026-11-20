@@ -49,10 +49,6 @@ test("CLI: support resolves and the authorized client closes the request without
   await f.command(["--help"]); await f.command(["--version"]);
   assert.equal((await f.command(["lang"])).trim(), "en");
   await f.command(["tutorial", "--json"]);
-  await f.command(["bootstrap", "--list"]);
-  const created = join(f.root, "created-project");
-  await f.command(["bootstrap", "Example", "--stack", "example", "--dir", created, "--yes", "--no-openspec"]);
-  assert.ok(existsSync(join(created, "orqen/config.yaml")));
   await f.command(["update", "--yes", "--no-cli", "--no-openspec"]);
   const found = JSON.parse(await f.command(["search", "project = REQ"])); assert.equal(found[0].key, "REQ-7");
   await f.command(["status"]);

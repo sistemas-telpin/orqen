@@ -2,7 +2,6 @@
 /** orqen command-line entry point. */
 import { parseArgs } from "node:util";
 import { entorno } from "./commands/environment.ts";
-import { bootstrap } from "./commands/bootstrap.ts";
 import { init } from "./commands/init.ts";
 import { WORKFLOW_HELP, WORKFLOW_INTERNAL_HELP, WORKFLOW_COMMANDS, runWorkflow } from "./commands/workflow.ts";
 import { desktopRelease, update } from "./commands/update.ts";
@@ -18,7 +17,7 @@ import { practice } from "./practice/practice.ts";
 
 const AYUDA = `
 Usage: orqen <command> [options]
-       orqen                   This help (the desktop app is a separate project: github.com/sistemas-telpin/orqen-gui)
+       orqen                   This help (the desktop app is a separate project: github.com/sistemas-telpin/orqen-studio)
 
 Commands:
   init [dir]              Initialize orqen in a repository (default: current directory)
@@ -32,12 +31,6 @@ Commands:
       --no-connectors     Skip the connectors step (keep the current ones; set them later with \`orqen connectors setup\`)
       --commit            Commit what init wrote ("Install orqen"); interactively it asks, with --yes it only does it with this flag
       --connectors <file> Connectors as JSON ({"conectores": …, "env": …}, like \`orqen connectors set\`; "-" = stdin)
-  bootstrap [name]        Create a new project from a stack (code, tools to run it, and orqen ready)
-      --tools-repo <repo> GitHub stack catalog (any repo name), cloned inside cli/tools
-      --list              List the stacks from your catalog
-      --stack <id>        Stack from your private catalog (orqen bootstrap --list lists them)
-      --dir <folder>      Where to create it (default: ./<name>)
-      --params '<json>'   Parameter values, e.g. '{"PORT":"8081"}' (the rest use their defaults)
   update [dir]            Update the CLI and, in an orqen project, OpenSpec and the kit
       --cli-only         Update only the CLI
       --desktop          Update the global npm install of orqen Desktop
@@ -48,7 +41,7 @@ Commands:
       --step <n|id>       Print one step and exit (--json for agents) · --list · --lang es|en
   lang                    Print the detected system language (es | en); ORQEN_LANG overrides it
   usage [--json]          AI agents installed on this machine and their quota used
-  practice <cmd>          The interactive tutorial's practice project (orqen-gui): create | request <1|2> | client <KEY>
+  practice <cmd>          The interactive tutorial's practice project (orqen-studio): create | request <1|2> | client <KEY>
 ${SWARM_HELP}
 ${EVAL_HELP}
 ${SPEC_HELP}
@@ -92,7 +85,6 @@ async function main() {
       "no-animation": { type: "boolean" },
       agent: { type: "string" },
       tools: { type: "string" },
-      "tools-repo": { type: "string" },
       "no-openspec": { type: "boolean" },
       "no-connectors": { type: "boolean" },
       commit: { type: "boolean" },
@@ -104,11 +96,7 @@ async function main() {
       "no-kit": { type: "boolean" },
       all: { type: "boolean" },
       dir: { type: "string" },
-      stack: { type: "string" },
-      list: { type: "boolean" },
       json: { type: "boolean" },
-      describe: { type: "string" },
-      params: { type: "string" },
     },
   });
   const [cmd, ...resto] = positionals;
@@ -118,14 +106,12 @@ async function main() {
     console.log(AYUDA);
     return;
   }
-  // `orqen` alone: logo and help. The desktop app is a separate project (github.com/sistemas-telpin/orqen-gui).
+  // `orqen` alone: logo and help. The desktop app is a separate project (github.com/sistemas-telpin/orqen-studio).
   if (!cmd) {
     await mostrarLogo({ animar: !v["no-animation"] && !v.yes });
     console.log(AYUDA);
     return;
   }
-
-  if (v["tools-repo"] && cmd !== "bootstrap") throw new Error("--tools-repo is only supported by orqen bootstrap.");
 
   switch (cmd) {
     case "init":
@@ -133,15 +119,6 @@ async function main() {
         dir: (v.dir as string) ?? resto[0], yes: !!v.yes, sinIa: !!v["no-ai"], profundo: !!v.deep, sinAnimacion: !!v["no-animation"], agente: v.agent as string | undefined,
         sinOpenspec: !!v["no-openspec"], sinConectores: !!v["no-connectors"], commit: !!v.commit, conectores: v.connectors as string | undefined,
         herramientas: typeof v.tools === "string" ? v.tools.split(",").map((s) => s.trim()).filter(Boolean) : undefined,
-      });
-    case "bootstrap":
-      return bootstrap({
-        nombre: resto.join(" ") || undefined, listar: !!v.list, stack: v.stack as string | undefined, dir: v.dir as string | undefined,
-        yes: !!v.yes, sinAnimacion: !!v["no-animation"], sinOpenspec: !!v["no-openspec"],
-        toolsRepo: v["tools-repo"] as string | undefined,
-        json: !!v.json, describir: v.describe as string | undefined,
-        parametros: typeof v.params === "string" ? JSON.parse(v.params) : undefined,
-        herramientas: typeof v.tools === "string" ? v.tools.split(",").map((x) => x.trim()).filter(Boolean) : undefined,
       });
     case "update":
       return update({

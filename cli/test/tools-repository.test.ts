@@ -90,7 +90,7 @@ test("repositories without a stack are rejected and the temporary clone is clean
   }, empty);
 });
 
-test("only bootstrap clones the catalog, accepts any repository name and lets flags override the environment", async () => {
+test("init does not clone the catalog and bootstrap cannot create projects", async () => {
   await conRemoto(async () => {
     const { spawnSync } = await import("node:child_process");
     const { fileURLToPath } = await import("node:url");
@@ -105,8 +105,9 @@ test("only bootstrap clones the catalog, accepts any repository name and lets fl
     assert.ok(existsSync(join(parent, "orqen/config.yaml")));
     const createDir = join(parent, "new-project");
     const create = spawnSync(process.execPath, [tsx, cli, "bootstrap", "Example", "--dir", createDir, "--stack", "example", "--yes", "--no-openspec", "--tools-repo", "@example/catalog"], { env, encoding: "utf8" });
-    assert.equal(create.status, 0, create.stdout + create.stderr);
-    assert.ok(existsSync(join(catalog, "example/tool.yaml")));
-    assert.ok(existsSync(join(createDir, "orqen/config.yaml")));
+    assert.equal(create.status, 1, create.stdout + create.stderr);
+    assert.match(create.stderr, /Unknown command: bootstrap/);
+    assert.equal(existsSync(createDir), false);
+    assert.equal(existsSync(catalog), false);
   });
 });

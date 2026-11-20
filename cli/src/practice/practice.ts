@@ -1,5 +1,5 @@
 /**
- * orqen practice: the project of the interactive tutorial (orqen-gui › Tutorial interactivo).
+ * orqen practice: the project of the interactive tutorial (orqen-studio › Tutorial interactivo).
  *   orqen practice create [--dir D] [--no-openspec] [--json]   creates (or finds) <app dir>/practica/facturas-demo
  *   orqen practice request <1|2> [--json]                      the client sends request TUT-n
  *   orqen practice client <KEY> [--json]                       the client (an LLM) answers what the team wrote

@@ -8,13 +8,13 @@ npm test
 npm run typecheck
 ```
 
-Both test scripts build the CLI first. The dedicated E2E script runs the workflow journeys, existing CLI and bootstrap tests, personal catalog tests, swarm integration tests and real environment lifecycle tests. `npm test` includes the complete regression suite.
+Both test scripts build the CLI first. The dedicated E2E script runs the workflow journeys, existing CLI tests, personal catalog tests, swarm integration tests and real environment lifecycle tests. `npm test` includes the complete regression suite.
 
 `workflow-cli.e2e.test.ts` launches a fresh `node dist/index.js` process for each command. It uses the installed kit, real Git repositories and local bare remotes, the real OpenSpec CLI, actual application tests, and the real HTTP ticket client. Each journey reaches `CLOSED`.
 
 | Journey | Checks |
 | --- | --- |
-| Support resolves | Initialization, bootstrap, update, help, version, language, tutorial, search, status, schemas, locks, output validation, client authorization, configurable customer project prefixes, closure without a internal ticket |
+| Support resolves | Initialization, update, help, version, language, tutorial, search, status, schemas, locks, output validation, client authorization, configurable customer project prefixes, closure without a internal ticket |
 | Direct development | Support escalation, client questions, release, block/unblock, analyst approval and readiness validation, failed ticket link and idempotent retry, issue key resolution, failing tests returning to development, swarm planning and application, all environment commands, PR creation and update, review rejection, client rejection, a new internal ticket for round two, final closure |
 | Light development | Real OpenSpec change creation, invalid artifacts and missing estimates rejected before creating an issue, implementation, incomplete tasks rejected, tests, PR, review, archiving and closure |
 | Full development | Full planning artifacts, the same validation gates, implementation, tests, PR, review, archived specs and closure |

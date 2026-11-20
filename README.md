@@ -737,6 +737,7 @@ orqen cancel <KEY> --reason <texto>    Cancela el pedido sin entregar: cierra el
 orqen release <KEY>                    Libera la reserva de un pedido
 orqen connectors [setup] [--json]      Muestra y prueba los conectores (requests e issues), o los configura
 orqen doctor [--json]                  Chequea de una vez lo que necesita el flujo (git, gh, rama base, conectores, CI, tests, agente) y dice qué hacer
+orqen report [--since 2026-11-01|30d] [--json]  Cómo fluyó el trabajo: tiempo hasta cerrar por carril, dónde espera, vueltas a desarrollo, estimación
 orqen cycle [--loop]                   Modo desatendido
 orqen help internal                    Los comandos internos y los JSON para herramientas
 

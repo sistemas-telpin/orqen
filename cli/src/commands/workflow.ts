@@ -17,7 +17,7 @@ import { Process } from "../workflow/process.ts";
 import { Store } from "../workflow/store.ts";
 import { GitWorkspace } from "../workflow/workspace.ts";
 
-export const WORKFLOW_COMMANDS = ["list", "qa", "approve", "merged", "cancel", "new_worq", "new-worq", "pending", "support", "analyze", "ask", "conversation", "lane", "take", "complete", "pr", "review", "code-review", "schema", "block", "release", "search", "status", "worqs", "worq", "cycle", "connectors", "doctor", "comments", "comment"];
+export const WORKFLOW_COMMANDS = ["list", "qa", "approve", "merged", "cancel", "new_worq", "new-worq", "pending", "support", "analyze", "ask", "conversation", "lane", "take", "complete", "pr", "review", "code-review", "schema", "block", "release", "search", "status", "worqs", "worq", "cycle", "connectors", "doctor", "report", "comments", "comment"];
 
 /** What people run: the 9 steps (as /orqen:* commands in their agent) and the CLI commands meant for a person. */
 export const WORKFLOW_HELP = `The 9 steps (run the /orqen:* commands in your agent: it calls the CLI for you):
@@ -46,6 +46,7 @@ Request commands for people:
   comment <KEY> <file|->      Reply to the client on the request (--person NAME)
   connectors [setup]          Show and check the connectors (requests and issues), or set them up
   doctor [--json]             Check everything the flow needs at once (git, gh, base branch, connectors, CI, tests, agent), with what to do
+  report [--since YYYY-MM-DD|<n>d] [--json]   How the work flowed: time to close by lane, where it waits, returns to development, estimate
   cycle [--loop]              Unattended mode (cron/CI/server): agent stages only, never support or analysis
 
 Agent-only commands (the /orqen:* commands run them) and JSON for tools: orqen help internal`;
@@ -508,6 +509,21 @@ export async function runWorkflow(cmd: string, rest: string[]) {
           if (item?.recovered) console.log(`State read from the ticket's label: this machine has no record of ${key}. Fetch its branch (git fetch origin orqen/${key.toLowerCase()}) to recover the full record.`);
           for (const ev of store.events(key)) console.log(`  ${ev.ts}  ${ev.from} → ${ev.to}  ${ev.detail}`);
         } else for (const r of store.all()) console.log(`${r.key.padEnd(12)} ${r.state.padEnd(15)} ${(r.issue ?? "").padEnd(12)} ${r.change ?? ""}`);
+        return;
+      }
+      case "report": {
+        const { buildReport, printReport } = await import("../workflow/report.ts");
+        const json = has("json");
+        const since = flag("since");
+        let from: Date | undefined;
+        if (since) {
+          const days = /^(\d+)d$/i.exec(since);
+          from = days ? new Date(Date.now() - Number(days[1]) * 86_400_000) : new Date(since);
+          if (Number.isNaN(from.getTime())) { console.error("✘ --since takes a date (2026-11-01) or a number of days (30d)"); process.exitCode = 1; return; }
+        }
+        const r = buildReport(store.all().map((item) => ({ item, events: store.events(item.key) })), { from });
+        if (json) console.log(JSON.stringify(r, null, 2));
+        else printReport(r);
         return;
       }
       case "doctor": {

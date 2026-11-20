@@ -116,6 +116,28 @@ test("a worq of the team also closes when a person confirms the merge by hand, a
   assert.equal(c.state, "CANCELLED");
 });
 
+test("another machine with no record finds the worq by its issue label and reads it from the issues connector", async () => {
+  const a = setup();
+  await a.flow.newWorq("Limpiar el módulo de reportes", BRIEF, "Ana");
+  assert.ok(a.tracker.issues["DEV-1"].labels!.includes("orqen-worq"), "the issue carries the worq label");
+  a.tracker.issues["DEV-1"].labels!.push("orqen-state-development");   // the state label orqen mirrors on the issue
+
+  // machine B: same connectors, its own empty state and no snapshot of the branch
+  const dir = mkdtempSync(join(tmpdir(), "orqen-int-b-"));
+  const cfg = loadConfig({
+    stateDir: join(dir, "state"), factoryDir: join(dir, "worqs"), connectors: testConnectors(), codeReviewGate: "ticket",
+    approvers: { analysis: [], code: [], client: [] },
+  });
+  const ws: Workspace = { prepareBranch: () => "x", currentBranch: () => "x", commit: () => true, push: () => {}, openPr: () => "", runTests: () => ({ ok: true, output: "" }) };
+  const b = new Process(cfg, { requests: a.jira, issues: a.tracker }, new Store(cfg.stateDir), ws, os);
+  const item = (await b.board()).find((x) => x.key === "DEV-1");
+  assert.ok(item, "it is listed on machine B");
+  assert.deepEqual([item.state, item.recovered, item.title], ["DEVELOPMENT", "label", "Limpiar el módulo de reportes"], "read from the issues connector");
+  assert.match(item.next[0].command, /git fetch origin orqen\/dev-1/);
+  assert.equal((await b.peek("DEV-1"))?.origin, "internal", "known as a worq of the team");
+  assert.deepEqual(a.jira.coms, { "REQ-1": [] }, "the requests connector is not touched");
+});
+
 test("without an issues connector the issue is created in the requests one", async () => {
   const { jira, flow } = setup({ state: "OPEN" }, false);
   const r = await flow.newWorq("Limpiar el módulo de reportes", BRIEF, "Ana");

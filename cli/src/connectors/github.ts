@@ -124,6 +124,7 @@ export class GithubTracker implements Tracker {
     const r = await this.req("GET", `/search/issues?per_page=100&q=${encodeURIComponent(q)}`);
     return (r.items ?? []).map((i: any) => keyOf(this.s.prefix, i.number));
   }
+  labelled(label: string) { return this.search(`is:open label:"${label}"`); }
 
   async ticket(key: string): Promise<Ticket> {
     const i = await this.req("GET", `/repos/{repo}/issues/${this.n(key)}`);

@@ -27,8 +27,11 @@ export class FakeTracker implements Tracker {
   async transition(key: string, n: string) { (this.transitions[key] ??= []).push(n); return true; }
   async create(t: NewTicket) {
     const key = `${this.prefix}-${this.created.length + 1}`;
-    this.created.push({ key, ...t }); this.coms[key] = []; this.issues[key] = { title: t.title };
+    this.created.push({ key, ...t }); this.coms[key] = []; this.issues[key] = { title: t.title, labels: [...(t.labels ?? [])] };
     return key;
+  }
+  async labelled(label: string) {
+    return Object.keys(this.issues).filter((k) => (this.issues[k].labels ?? []).includes(label) && !this.finished.some(([f]) => f === k));
   }
   async link(a: string, b: string) { this.links.push([a, b]); }
   finished: Array<[string, string]> = [];

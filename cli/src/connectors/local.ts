@@ -65,6 +65,10 @@ export class LocalTracker implements Tracker {
     });
   }
 
+  async labelled(label: string) {
+    return (await this.pending()).filter((k) => this.read(k).labels.includes(label));
+  }
+
   async search(query: string) {
     const q = query.toLowerCase().trim();
     return this.keys().filter((k) => {

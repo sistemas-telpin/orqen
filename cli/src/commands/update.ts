@@ -188,15 +188,17 @@ export async function update(o: OpcionesUpdate) {
     const cambios = plan.filter((c) => c.accion !== "igual");
     if (!cambios.length) p.log.success(`The kit is up to date (v${VERSION_CLI})`);
     else {
-      const icono: Record<string, string> = { crear: pc.green("+"), actualizar: pc.yellow("~"), conflicto: pc.red("!") };
-      p.note(cambios.map((c) => `${icono[c.accion]} ${c.ruta}${c.accion === "conflicto" ? pc.red("  (local edits require review)") : ""}`).join("\n"),
+      const icono: Record<string, string> = { crear: pc.green("+"), actualizar: pc.yellow("~"), conflicto: pc.red("!"), borrar: pc.red("-"), obsoleto: pc.yellow("?") };
+      const nota: Record<string, string> = { conflicto: pc.red("  (local edits require review)"), borrar: pc.dim("  (no longer in the kit)"), obsoleto: pc.yellow("  (no longer in the kit, but edited: kept)") };
+      p.note(cambios.map((c) => `${icono[c.accion]} ${c.ruta}${nota[c.accion] ?? ""}`).join("\n"),
         `Kit ${manifest.kit} → ${VERSION_CLI}`);
       if (await confirmar("Apply the kit updates?", true, yes)) {
         const res = await aplicar(repo, plan, (c) => resolverConflicto(c, yes));
         actualizarVersiones(repo, { kit: VERSION_CLI, cli: VERSION_CLI });
         const n = (a: string) => res.filter((r) => r.accion === a).length;
-        p.log.success(`Kit v${VERSION_CLI}: ${n("crear")} created, ${n("actualizar")} updated, ${n("mantenido")} kept, ${n("guardado-al-lado")} to merge manually`);
+        p.log.success(`Kit v${VERSION_CLI}: ${n("crear")} created, ${n("actualizar")} updated, ${n("borrar")} deleted, ${n("mantenido")} kept, ${n("guardado-al-lado")} to merge manually`);
         for (const r of res.filter((r) => r.accion === "guardado-al-lado")) p.log.warn(`${r.ruta} → see ${r.detalle}`);
+        for (const r of res.filter((r) => r.accion === "obsoleto")) p.log.warn(`${r.ruta} is no longer part of the kit and has local edits: it was kept, delete it when you no longer need it`);
       }
     }
   }

@@ -47,6 +47,7 @@ export class JiraTracker implements Tracker {
   }
 
   pending() { return this.search(this.s.query); }
+  labelled(label: string) { return this.search(`${this.s.project ? `project = "${this.s.project}" AND ` : ""}labels = "${label}" AND statusCategory != Done`); }
 
   async search(jql: string) {
     const path = this.s.deployment === "cloud" ? "/rest/api/3/search/jql" : "/rest/api/2/search";

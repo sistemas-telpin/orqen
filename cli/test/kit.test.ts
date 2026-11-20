@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
-import { aplicar, extraerBloque, leerManifest, planificar, type Decision } from "../src/lib/kit.ts";
+import { aplicar, extraerBloque, hash, leerManifest, planificar, type Decision } from "../src/lib/kit.ts";
 import { fusionarConfigOpenSpec } from "../src/lib/openspec.ts";
 import { stageGuideFile } from "../src/lib/stage-guides.ts";
 import { completarEnv, parsearEnv } from "../src/lib/env.ts";
@@ -31,6 +31,29 @@ test("installs the kit idempotently", async () => {
 
   const otra = planificar(repo, vars);
   assert.deepEqual(otra.filter((c) => c.accion !== "igual").map((c) => c.ruta), []);
+});
+
+test("deletes the kit files the kit no longer ships, but keeps them when the team edited them", async () => {
+  const repo = repoTemporal();
+  await aplicar(repo, planificar(repo, vars), siempre("sobrescribir"));
+  // an earlier kit shipped two commands that this one no longer has: one untouched, one edited by the team
+  const viejo = "orqen/plugin/commands/old.md", editado = "orqen/plugin/commands/old-edited.md", ajeno = "docs/mine.md";
+  for (const f of [viejo, editado, ajeno]) { mkdirSync(join(repo, f, ".."), { recursive: true }); writeFileSync(join(repo, f), "kit text\n"); }
+  const m = leerManifest(repo);
+  m.archivos[viejo] = m.archivos[editado] = m.archivos[ajeno] = hash("kit text\n");
+  writeFileSync(join(repo, "orqen/manifest.json"), JSON.stringify(m));
+  writeFileSync(join(repo, editado), "kit text\nplus a note of the team\n");
+
+  const plan = planificar(repo, vars);
+  assert.deepEqual(plan.filter((c) => c.accion !== "igual").map((c) => [c.ruta, c.accion]).sort(), [[editado, "obsoleto"], [viejo, "borrar"]],
+    "outside orqen/plugin and orqen/stages nothing is touched");
+  await aplicar(repo, plan, siempre("sobrescribir"));
+  assert.ok(!existsSync(join(repo, viejo)));
+  assert.ok(existsSync(join(repo, editado)), "an edited file is kept");
+  assert.ok(existsSync(join(repo, ajeno)));
+  const after = leerManifest(repo).archivos;
+  assert.ok(!(viejo in after) && !(editado in after), "neither is managed any more");
+  assert.deepEqual(planificar(repo, vars).filter((c) => c.accion !== "igual"), [], "the next update has nothing to do");
 });
 
 test("preserves team guidance outside the managed AGENTS.md block", async () => {

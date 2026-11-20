@@ -17,7 +17,7 @@ import { Process } from "../workflow/process.ts";
 import { Store } from "../workflow/store.ts";
 import { GitWorkspace } from "../workflow/workspace.ts";
 
-export const WORKFLOW_COMMANDS = ["list", "qa", "approve", "merged", "cancel", "new_worq", "pending", "support", "analyze", "ask", "conversation", "lane", "take", "complete", "pr", "review", "code-review", "schema", "block", "release", "search", "status", "worqs", "worq", "cycle", "connectors", "comments", "comment"];
+export const WORKFLOW_COMMANDS = ["list", "qa", "approve", "merged", "cancel", "new_worq", "pending", "support", "analyze", "ask", "conversation", "lane", "take", "complete", "pr", "review", "code-review", "schema", "block", "release", "search", "status", "worqs", "worq", "cycle", "connectors", "doctor", "comments", "comment"];
 
 /** What people run: the 9 steps (as /orqen:* commands in their agent) and the CLI commands meant for a person. */
 export const WORKFLOW_HELP = `The 9 steps (run the /orqen:* commands in your agent: it calls the CLI for you):
@@ -44,6 +44,7 @@ Request commands for people:
   comments <KEY> [--json]     Read the request and its conversation with the client
   comment <KEY> <file|->      Reply to the client on the request (--person NAME)
   connectors [setup]          Show and check the connectors (requests and issues), or set them up
+  doctor [--json]             Check everything the flow needs at once (git, gh, base branch, connectors, CI, tests, agent), with what to do
   cycle [--loop]              Unattended mode (cron/CI/server): agent stages only, never support or analysis
 
 Agent-only commands (the /orqen:* commands run them) and JSON for tools: orqen help internal`;
@@ -503,6 +504,14 @@ export async function runWorkflow(cmd: string, rest: string[]) {
           if (item?.recovered) console.log(`State read from the ticket's label: this machine has no record of ${key}. Fetch its branch (git fetch origin orqen/${key.toLowerCase()}) to recover the full record.`);
           for (const ev of store.events(key)) console.log(`  ${ev.ts}  ${ev.from} → ${ev.to}  ${ev.detail}`);
         } else for (const r of store.all()) console.log(`${r.key.padEnd(12)} ${r.state.padEnd(15)} ${(r.issue ?? "").padEnd(12)} ${r.change ?? ""}`);
+        return;
+      }
+      case "doctor": {
+        const { diagnose, printChecks } = await import("./doctor.ts");
+        const checks = await diagnose(cfg, connectors);
+        if (has("json")) console.log(JSON.stringify({ checks }, null, 2));
+        else printChecks(checks);
+        if (checks.some((c) => c.status === "fail")) process.exitCode = 1;
         return;
       }
       case "connectors": {

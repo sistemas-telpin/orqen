@@ -360,7 +360,7 @@ async function prepararOpenSpec(repo: string, agentes: string[], herramientasPed
 }
 
 function resumenPlan(plan: Cambio[], config: Config): string {
-  const icono: Record<string, string> = { crear: pc.green("+"), actualizar: pc.yellow("~"), igual: gris("="), conflicto: pc.red("!") };
+  const icono: Record<string, string> = { crear: pc.green("+"), actualizar: pc.yellow("~"), igual: gris("="), conflicto: pc.red("!"), borrar: pc.red("-"), obsoleto: pc.yellow("?") };
   const filas = [
     `${pc.green("+")} ${ARCHIVO_CONFIG} ${gris("(the flow: project, connectors, workflow)")}`,
     `${pc.green("+")} ${ARCHIVO_ENTORNO} ${gris("(stack, how each part starts, tests)")}`,

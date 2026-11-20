@@ -735,6 +735,7 @@ orqen new_worq "<título>" <brief.json|-> Worq propio sin request: crea el issue
 orqen cancel <KEY> --reason <texto>    Cancela el pedido sin entregar: cierra el PR sin mergear y comenta en los tickets
 orqen release <KEY>                    Libera la reserva de un pedido
 orqen connectors [setup] [--json]      Muestra y prueba los conectores (requests e issues), o los configura
+orqen doctor [--json]                  Chequea de una vez lo que necesita el flujo (git, gh, rama base, conectores, CI, tests, agente) y dice qué hacer
 orqen cycle [--loop]                   Modo desatendido
 orqen help internal                    Los comandos internos y los JSON para herramientas
 

@@ -19,7 +19,7 @@ import {
   LANES, type Lane, State, type AgentState, GATES, isAgentState, isFinal, isGate, nextStateAfterStage,
 } from "./states.ts";
 import { Factory } from "./factory.ts";
-import { canLinkNatively, type Comment, type Connectors, isBotComment, LEGACY_STATE_LABELS, STATE_LABEL, type Tracker } from "../connectors/index.ts";
+import { canLinkNatively, type Comment, type Connectors, isBotComment, LEGACY_STATE_LABELS, STATE_LABEL, type Tracker, WORQ_LABEL } from "../connectors/index.ts";
 import { type Scenario, type OpenSpecApi, type Task, hoursOf } from "./openspec.ts";
 import { reviewSql } from "./sql.ts";
 import { RoutedTracker } from "./routed.ts";
@@ -52,7 +52,7 @@ export type CompleteResult = { ok: true; next: State } | { ok: false; errors: st
 export class Process {
   private fac: Factory;
   /** Where the client's ticket lives. */
-  private requests: Tracker;
+  private requests: RoutedTracker;
   /** The configured requests connector, without the routing of internal worqs (to compare it with the issues connector). */
   private realRequests: Tracker;
   /** Where the team's ticket is created (optional). */
@@ -110,7 +110,10 @@ export class Process {
     const label = prefix ? ticket.labels.find((l) => l.startsWith(prefix))! : undefined;
     const state = label ? label.slice(prefix!.length).toUpperCase() : "";
     if (!(state in State) || state === "NEW") return newWorkItem(key);
-    const item: WorkItem = { ...newWorkItem(key), state: state as State, title: ticket.title, recovered: "label" };
+    const item: WorkItem = {
+      ...newWorkItem(key), state: state as State, title: ticket.title, recovered: "label",
+      ...(ticket.labels.includes(WORQ_LABEL) || this.requests.isTeamWorq(key) ? { origin: "internal" as const } : {}),
+    };
     this.fromLabels.set(key, item);
     return item;
   }
@@ -949,7 +952,7 @@ export class Process {
     if (!parsed.success) throw new Error(`The brief is not valid:\n${parsed.error.issues.map((i) => `  ${i.path.join(".") || "(root)"}: ${i.message}`).join("\n")}`);
     const s = parsed.data as Record<string, any>;
     const key = await this.requests.create({
-      title: t, route: "development", labels: ["orqen", "lane-direct"],
+      title: t, route: "development", labels: [WORQ_LABEL, "lane-direct"],
       description: `${description || t}\n\n*Acceptance criteria:*\n${bullets(s.acceptance_criteria)}\n\n*Plan:*\n${bullets(s.plan ?? [])}\n\n` +
         `*Estimate:* ${s.estimated_hours ?? "?"} h\n*Started by:* ${person}\n\nCreated with orqen (no client request).`,
     });

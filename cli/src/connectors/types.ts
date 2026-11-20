@@ -17,6 +17,8 @@ export const isBotComment = (body: string) => [BOT_MARK, ...LEGACY_BOT_MARKS].so
 /** Prefix of the label that mirrors the orqen state on the ticket (e.g. orqen-state-development). */
 export const STATE_LABEL = "orqen-state-";
 export const LEGACY_STATE_LABELS = ["rec-state-"];
+/** Label of the issue of a worq started by the team (`orqen new_worq`): any machine finds it and knows it has no client request. */
+export const WORQ_LABEL = "orqen-worq";
 
 export type ConnectorKind = "jira" | "github" | "asana" | "local";
 export type Role = "requests" | "issues";
@@ -44,6 +46,8 @@ export interface Tracker {
   pending(): Promise<string[]>;
   /** Free search in the tool's own syntax (JQL, GitHub search, Asana text). */
   search(query: string): Promise<string[]>;
+  /** Open tickets that carry this label. Optional: without it, a machine with no record cannot find the team's own worqs. */
+  labelled?(label: string): Promise<string[]>;
   ticket(key: string): Promise<Ticket>;
   comments(key: string): Promise<Comment[]>;
   comment(key: string, text: string): Promise<void>;

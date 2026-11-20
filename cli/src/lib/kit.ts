@@ -7,11 +7,12 @@
  *  - Skip files already up to date.
  *  - Replace files that match the saved hash.
  *  - Ask the user how to handle local edits.
+ *  - Delete the kit files that the kit no longer ships (a command that was renamed or removed), unless the team edited them.
  * Manage only the marked AGENTS.md block.
  * Merge additions into OpenSpec config, CLAUDE.md, .gitignore, and marketplace.json.
  */
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { VERSION_CLI } from "./system.ts";
 import { TEMPLATES_DIR } from "./template-assets.ts";
@@ -27,7 +28,8 @@ export const IGNORAR_GIT = ["orqen/state/", "orqen/tmp/", "orqen/.env", "orqen/w
 export interface Manifest { kit: string; archivos: Record<string, string> }
 export interface VariablesKit { RESUMEN_STACK: string; BASE_BRANCH: string; AGENT_CMD: string }
 
-export type Accion = "crear" | "actualizar" | "igual" | "conflicto";
+/** borrar: an unedited file the kit no longer ships; obsoleto: the same, but the team edited it (it is kept and no longer managed). */
+export type Accion = "crear" | "actualizar" | "igual" | "conflicto" | "borrar" | "obsoleto";
 export type Modo = "archivo" | "bloque" | "fusion";
 export interface Cambio {
   ruta: string;            // Repository-relative path with forward slashes.
@@ -156,6 +158,9 @@ export interface OpcionesPlan {
   fusiones?: boolean;
 }
 
+/** Folders whose files belong to the kit: what it stops shipping there can be deleted. */
+const KIT_OWNED = /^orqen\/(plugin|stages)\//;
+
 export function planificar(repo: string, vars: VariablesKit, o: OpcionesPlan = {}): Cambio[] {
   const manifest = leerManifest(repo);
   const cambios: Cambio[] = [];
@@ -170,6 +175,14 @@ export function planificar(repo: string, vars: VariablesKit, o: OpcionesPlan = {
     else if (manifest.archivos[ruta] === hash(actual)) accion = "actualizar";
     else accion = "conflicto";
     cambios.push({ ruta, modo: "archivo", accion, nuevo, actual, hashNuevo: h });
+  }
+
+  // Files of an earlier kit that this one no longer ships, only inside the folders the kit owns.
+  for (const ruta of Object.keys(manifest.archivos)) {
+    if (ruta in archivos || !KIT_OWNED.test(ruta)) continue;
+    const actual = leer(join(repo, ruta));
+    const editado = actual !== undefined && manifest.archivos[ruta] !== hash(actual);
+    cambios.push({ ruta, modo: "archivo", accion: editado ? "obsoleto" : "borrar", nuevo: "", actual });
   }
 
   // Managed AGENTS.md block
@@ -223,6 +236,12 @@ export async function aplicar(
     if (c.accion === "igual") {
       if (c.hashNuevo) manifest.archivos[clave] = c.hashNuevo;
       out.push({ ruta: c.ruta, accion: "igual" });
+      continue;
+    }
+    if (c.accion === "borrar" || c.accion === "obsoleto") {
+      if (c.accion === "borrar") rmSync(join(repo, c.ruta), { force: true });
+      delete manifest.archivos[clave];
+      out.push({ ruta: c.ruta, accion: c.accion });
       continue;
     }
     if (c.accion === "conflicto") {

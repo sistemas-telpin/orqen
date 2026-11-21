@@ -2,7 +2,7 @@
 # Tokens never go here: they live in ~/.orqen/credentials.env. How the project starts is in orqen/environment.yaml.
 version: 1
 orqen:
-  cli: 0.1.11
+  cli: 0.1.12
   kit: 0.1.8
 project:
   name: orqen

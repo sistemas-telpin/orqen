@@ -6,7 +6,7 @@ import test from "node:test";
 import { connectorSettings, type AsanaSettings, type GithubSettings } from "../src/connectors/config.ts";
 import { legacyConnectors, legacyToYaml } from "../src/connectors/legacy.ts";
 import { AsanaTracker } from "../src/connectors/asana.ts";
-import { GithubTracker } from "../src/connectors/github.ts";
+import { GithubTracker, listFilter } from "../src/connectors/github.ts";
 import { JiraTracker } from "../src/connectors/jira.ts";
 import { canLinkNatively, trackerFor } from "../src/connectors/index.ts";
 import { isBotComment } from "../src/connectors/types.ts";
@@ -65,6 +65,7 @@ test("GitHub: issues as tickets, comments, labels, and the Status field of a pro
   const s = await server((req, body) => {
     const u = req.url!;
     if (u.startsWith("/search/issues")) return [200, { items: [{ number: 4 }, { number: 9 }] }];
+    if (u.startsWith("/repos/acme/app/issues?")) return [200, [{ number: 4 }, { number: 9 }, { number: 20, pull_request: {} }]];
     if (u === "/repos/acme/app/issues/4" && req.method === "PATCH") return [200, {}];
     if (u === "/repos/acme/app/issues/4" && req.method === "GET") return [200, { number: 4, node_id: "I_4", title: "Export", body: "CSV", state: "open", user: { login: "client" }, labels: labels.map((name) => ({ name })), html_url: "https://github.com/acme/app/issues/4" }];
     if (u.startsWith("/repos/acme/app/issues/4/comments") && req.method === "GET") return [200, [{ id: 1, user: { login: "client" }, body: "/approve", created_at: "x" }]];
@@ -83,7 +84,14 @@ test("GitHub: issues as tickets, comments, labels, and the Status field of a pro
   // Project + search qualifiers: the project's issues that also match the search (#11 has no label).
   const gh = new GithubTracker(connectorSettings({ tipo: "github", repo: "acme/app", proyecto: 3, filtro: "is:open label:orqen" }, { GITHUB_TOKEN: "tk" }) as GithubSettings, s.url);
   assert.deepEqual(await gh.pending(), ["GH-4", "GH-9"]);
-  assert.match(decodeURIComponent(s.calls.find((c) => c.path.startsWith("/search/issues"))!.path), /q=repo:acme\/app is:issue is:open label:orqen/);
+  // the filter only has list qualifiers: read from the list of issues (paginated, higher rate limit), not from the search; PRs are left out
+  const list = new URL(s.calls.find((c) => c.path.startsWith("/repos/acme/app/issues?"))!.path, "http://x").searchParams;
+  assert.deepEqual([list.get("state"), list.get("labels")], ["open", "orqen"]);
+  assert.equal(s.calls.some((c) => c.path.startsWith("/search/issues")), false);
+  // free text needs the search
+  const text = new GithubTracker(connectorSettings({ tipo: "github", repo: "acme/app", filtro: "is:open exportar" }, { GITHUB_TOKEN: "tk" }) as GithubSettings, s.url);
+  assert.deepEqual(await text.pending(), ["GH-4", "GH-9"]);
+  assert.match(decodeURIComponent(s.calls.at(-1)!.path), /^\/search\/issues\?.*q=repo:acme\/app is:issue is:open exportar/);
   const tk = await gh.ticket("GH-4");
   assert.deepEqual([tk.title, tk.description, tk.reportedBy, tk.url], ["Export", "CSV", "client", "https://github.com/acme/app/issues/4"]);
   assert.equal((await gh.comments("GH-4"))[0].body, "/approve");
@@ -104,6 +112,15 @@ test("GitHub: issues as tickets, comments, labels, and the Status field of a pro
   await gh.finish("GH-4", "not_planned");
   const closing = s.calls.at(-1)!;
   assert.deepEqual([closing.method, closing.path, closing.body], ["PATCH", "/repos/acme/app/issues/4", { state: "closed", state_reason: "not_planned" }]);
+});
+
+test("GitHub filters the list of issues can express, and the ones that need the search", () => {
+  assert.deepEqual(listFilter("is:open label:orqen-prueba"), { state: "open", labels: ["orqen-prueba"] });
+  assert.deepEqual(listFilter('is:issue is:open label:"needs triage" label:orqen assignee:ana author:bob'),
+    { state: "open", labels: ["needs triage", "orqen"], assignee: "ana", creator: "bob" });
+  assert.deepEqual(listFilter(""), { state: "all", labels: [] }, "like the search: open and closed");
+  for (const q of ["is:open exportar", "is:open -label:wip", "label:a,b", "is:pr", "milestone:v1", "assignee:a assignee:b", "sort:created-asc"])
+    assert.equal(listFilter(q), undefined, q);
 });
 
 test("GitHub choices: token-visible repositories and owner projects are paginated without requiring a repo", async (t) => {

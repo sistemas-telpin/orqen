@@ -10,6 +10,32 @@ import { BOT_MARK, type Comment, LEGACY_STATE_LABELS, type NewTicket, STATE_LABE
 
 const API = "https://api.github.com";
 
+/**
+ * A search filter as parameters of the list of issues, or undefined when the list cannot express it. Without is:open/closed
+ * the search returns both, and so does the list (state=all). `label:a,b` means "a or b" in search but "a and b" in the list,
+ * so it is searched.
+ */
+export function listFilter(query: string): { state: "open" | "closed" | "all"; labels: string[]; assignee?: string; creator?: string } | undefined {
+  const f: { state: "open" | "closed" | "all"; labels: string[]; assignee?: string; creator?: string } = { state: "all", labels: [] };
+  for (const token of query.match(/(?:[^\s"]+|"[^"]*")+/g) ?? []) {
+    const m = token.match(/^([a-z]+):(.+)$/i);
+    if (!m) return undefined;
+    const v = m[2].replace(/"/g, "");
+    if (!v || v.includes(",")) return undefined;
+    switch (m[1].toLowerCase()) {
+      case "is": case "state":
+        if (v === "issue") break;
+        if (v === "open" || v === "closed") { f.state = v; break; }
+        return undefined;
+      case "label": f.labels.push(v); break;
+      case "assignee": if (f.assignee) return undefined; f.assignee = v; break;
+      case "author": if (f.creator) return undefined; f.creator = v; break;
+      default: return undefined;
+    }
+  }
+  return f;
+}
+
 export class GithubTracker implements Tracker {
   readonly kind = "github" as const;
   private token?: string;
@@ -81,7 +107,7 @@ export class GithubTracker implements Tracker {
   async pending() {
     if (!this.s.project) {
       if (this.s.status) throw new Error("Select a GitHub Project before choosing a pending status");
-      return this.search(this.s.query);
+      return this.find(this.s.query);
     }
     // The project's issues (in one status, or in any status when none is chosen), narrowed by the search qualifiers if there are any.
     const project = await this.project();
@@ -106,7 +132,7 @@ export class GithubTracker implements Tracker {
     } while (cursor);
     // Preserve explicitly configured issue qualifiers as an additional filter.
     if (!oldColumn && this.s.query.trim() && this.s.query.trim() !== "is:open") {
-      const matching = new Set(await this.search(this.s.query));
+      const matching = new Set(await this.find(this.s.query));
       return [...new Set(keys)].filter((key) => matching.has(key));
     }
     return [...new Set(keys)];
@@ -124,7 +150,30 @@ export class GithubTracker implements Tracker {
     const r = await this.req("GET", `/search/issues?per_page=100&q=${encodeURIComponent(q)}`);
     return (r.items ?? []).map((i: any) => keyOf(this.s.prefix, i.number));
   }
-  labelled(label: string) { return this.search(`is:open label:"${label}"`); }
+
+  /**
+   * The issues a filter selects. When the filter only has qualifiers the list of issues understands (is:open|closed, state:,
+   * label:, assignee:, author:) the list is read instead of the search: the search allows 30 requests per minute (the list,
+   * 5000 per hour, which matters for an unattended `orqen cycle`) and returns a single page of 100 (the list is paginated).
+   * Anything else (free text, OR, negations) is searched. Neither shows an issue created a few seconds ago: GitHub takes a
+   * moment to list it either way, so it shows up on the next run.
+   */
+  async find(query: string): Promise<string[]> {
+    const f = listFilter(query);
+    if (!f) return this.search(query);
+    const keys: string[] = [];
+    for (let page = 1; page <= 10; page++) {
+      const p = new URLSearchParams({ state: f.state, per_page: "100", page: String(page) });
+      if (f.labels.length) p.set("labels", f.labels.join(","));
+      if (f.assignee) p.set("assignee", f.assignee);
+      if (f.creator) p.set("creator", f.creator);
+      const rows: any[] = await this.req("GET", `/repos/{repo}/issues?${p}`);
+      keys.push(...rows.filter((i) => !i.pull_request).map((i) => keyOf(this.s.prefix, i.number)));   // the list also has PRs
+      if (rows.length < 100) break;
+    }
+    return keys;
+  }
+  labelled(label: string) { return this.find(`is:open label:"${label}"`); }
   async addLabel(key: string, label: string) { await this.req("POST", `/repos/{repo}/issues/${this.n(key)}/labels`, { labels: [label] }); }
 
   async ticket(key: string): Promise<Ticket> {
